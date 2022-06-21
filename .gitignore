@@ -1,6 +1,5 @@
 .idea
-control-plane/target
-data-plane/target
+*/target
 tests/node_modules
 tests/customer-process/node_modules
 
