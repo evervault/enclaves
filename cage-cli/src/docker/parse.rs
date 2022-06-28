@@ -9,6 +9,16 @@ pub enum Mode {
     Shell
 }
 
+impl Mode {
+    pub fn is_shell(&self) -> bool {
+        matches!(self, Self::Shell)
+    }
+
+    pub fn is_exec(&self) -> bool {
+        matches!(self, Self::Exec)
+    }
+}
+
 impl From<u8> for Mode {
     fn from(byte: u8) -> Self {
         if byte == b'[' {
@@ -84,16 +94,6 @@ pub struct Instruction {
     mode: Option<Mode>
 }
 
-impl std::fmt::Debug for Instruction {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if let Ok(content) = std::str::from_utf8(self.content.as_ref()) {
-            write!(f, "*Begin Instruction*\nDirective: {}\nContent: {}\nMode: {:?}\n*End Instruction*", self.directive, content, self.mode)
-        } else {
-            write!(f, "*Begin Instruction*\nDirective: {}\nContent: [invalid utf8 in content]\nMode: {:?}\n*End Instruction*", self.directive, self.mode)
-        }
-    }
-}
-
 impl Instruction {
     pub fn is_entrypoint(&self) -> bool {
         self.directive.is_entrypoint()
@@ -106,7 +106,22 @@ impl Instruction {
     pub fn is_expose(&self) -> bool {
         self.directive.is_expose()
     }
+
+    pub fn mode(&self) -> Option<&Mode> {
+        self.mode.as_ref()
+    }
 }
+
+impl std::fmt::Debug for Instruction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if let Ok(content) = std::str::from_utf8(self.content.as_ref()) {
+            write!(f, "*Begin Instruction*\nDirective: {}\nContent: {}\nMode: {:?}\n*End Instruction*", self.directive, content, self.mode)
+        } else {
+            write!(f, "*Begin Instruction*\nDirective: {}\nContent: [invalid utf8 in content]\nMode: {:?}\n*End Instruction*", self.directive, self.mode)
+        }
+    }
+}
+
 
 impl std::fmt::Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

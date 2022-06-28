@@ -95,7 +95,17 @@ async fn main() {
         }
     }
 
+    if last_entrypoint.is_none() && last_cmd.is_none() {
+        eprintln!("Invalid dockerfile — no entrypoint or CMD found");
+        return;
+    }
+
+    let entrypoint = docker::create_combined_docker_entrypoint(last_entrypoint, last_cmd);
+
     instruction_set.iter().for_each(|instruction| {
         println!("{}", instruction)
     });
+    println!("{}", entrypoint);
 }
+
+
