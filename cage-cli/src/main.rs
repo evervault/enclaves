@@ -3,6 +3,7 @@ use clap::Parser;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio_util::codec::Decoder;
+use crate::docker::parse::Instruction;
 
 mod docker;
 
@@ -35,6 +36,24 @@ async fn main() {
     let mut eof = false;
     let mut dockerfile_decoder = docker::parse::DockerfileDecoder::new();
     let mut instruction_set = Vec::new();
+    let mut last_cmd = None;
+    let mut last_entrypoint = None;
+
+    let handle_emitted_instructions = |
+        instruction_set: &mut Vec<Instruction>,
+        instruction: Instruction,
+        last_cmd: &mut Option<Instruction>,
+        last_entrypoint: &mut Option<Instruction>
+    | {
+        if instruction.is_cmd() {
+            *last_cmd = Some(instruction);
+        } else if instruction.is_entrypoint() {
+            *last_entrypoint = Some(instruction);
+        } else if !instruction.is_expose() {
+            instruction_set.push(instruction);
+        }
+    };
+
     'outer: loop {
         if !eof {
             match dockerfile.read_buf(&mut buf).await {
@@ -49,17 +68,18 @@ async fn main() {
             };
         }
         'inner: loop {
-            if !buf.has_remaining() {
+            if !buf.has_remaining() && eof {
+                if let Some(final_instruction) = dockerfile_decoder.flush() {
+                    handle_emitted_instructions(&mut instruction_set, final_instruction, &mut last_cmd, &mut last_entrypoint);
+                }
                 break 'outer;
             }
             match dockerfile_decoder.decode(&mut buf) {
                 Ok(Some(instruction)) => {
-                    instruction_set.push(instruction);
+                    handle_emitted_instructions(&mut instruction_set, instruction, &mut last_cmd, &mut last_entrypoint);
                     continue;
                 },
-                Ok(None) if eof && !buf.has_remaining() => {
-                    break 'outer;
-                },
+                Ok(None) if dockerfile_decoder.eof() && !buf.has_remaining() => break 'outer,
                 Ok(None) => break 'inner,
                 Err(e) => {
                     eprintln!("Error parsing dockerfile - {:?}", e);

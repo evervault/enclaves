@@ -1,9 +1,9 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use tokio_util::codec::Decoder;
-use std::convert::{From,TryFrom};
+use std::convert::{From,TryFrom,TryInto};
 use std::fmt::Formatter;
 
-#[derive(Debug)]
+#[derive(Clone,Debug)]
 pub enum Mode {
     Exec,
     Shell
@@ -19,6 +19,7 @@ impl From<u8> for Mode {
     }
 }
 
+#[derive(Clone, Debug)]
 pub enum Directive {
     Comment,
     Entrypoint,
@@ -35,6 +36,10 @@ impl Directive {
 
     pub fn is_entrypoint(&self) -> bool {
         matches!(self, Self::Entrypoint)
+    }
+
+    pub fn is_expose(&self) -> bool {
+        matches!(self, Self::Expose)
     }
 }
 
@@ -72,10 +77,35 @@ impl TryFrom<&[u8]> for Directive {
     }
 }
 
+#[derive(Clone)]
 pub struct Instruction {
     directive: Directive,
     content: Bytes,
     mode: Option<Mode>
+}
+
+impl std::fmt::Debug for Instruction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if let Ok(content) = std::str::from_utf8(self.content.as_ref()) {
+            write!(f, "*Begin Instruction*\nDirective: {}\nContent: {}\nMode: {:?}\n*End Instruction*", self.directive, content, self.mode)
+        } else {
+            write!(f, "*Begin Instruction*\nDirective: {}\nContent: [invalid utf8 in content]\nMode: {:?}\n*End Instruction*", self.directive, self.mode)
+        }
+    }
+}
+
+impl Instruction {
+    pub fn is_entrypoint(&self) -> bool {
+        self.directive.is_entrypoint()
+    }
+
+    pub fn is_cmd(&self) -> bool {
+        self.directive.is_cmd()
+    }
+
+    pub fn is_expose(&self) -> bool {
+        self.directive.is_expose()
+    }
 }
 
 impl std::fmt::Display for Instruction {
@@ -110,21 +140,99 @@ impl NewLineBehaviour {
     }
 }
 
+#[derive(Debug, PartialEq)]
+enum StringToken {
+    SingleQuote,
+    DoubleQuote
+}
+
+impl TryFrom<u8> for StringToken {
+    type Error = DecodeError;
+
+    fn try_from(token: u8) -> Result<Self, Self::Error> {
+        let matched_token = match token {
+            b'\'' => StringToken::SingleQuote,
+            b'"' => StringToken::DoubleQuote,
+            _ => return Err(DecodeError::UnexpectedToken)
+        };
+        Ok(matched_token)
+    }
+}
+
+struct StringStack {
+    inner: Vec<StringToken>
+}
+
+impl StringStack {
+    fn new() -> Self {
+        Self {
+            inner: Vec::new()
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.inner.len() == 0
+    }
+
+    fn peek_top(&self) -> Option<&StringToken> {
+        self.inner.iter().last()
+    }
+
+    fn pop(&mut self) -> Option<StringToken> {
+        self.inner.pop()
+    }
+
+    fn push(&mut self, token: StringToken) {
+        self.inner.push(token);
+    }
+}
+
+impl std::fmt::Display for StringStack {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.inner)
+    }
+}
+
 enum DecoderState {
     ReadingDirective(BytesMut),
     ReadingDirectiveArguments {
         directive: Directive,
         arguments: Option<BytesMut>,
         new_line_behaviour: NewLineBehaviour,
-        directive_mode: Option<Mode>
+        directive_mode: Option<Mode>,
+        string_stack: StringStack,
     },
-    ReadingComment(BytesMut),
+    ReadingComment {
+        content: BytesMut,
+    },
     ReadingWhitespace
 }
 
-impl DecoderState {
-    fn is_reading_whitespace(&self) -> bool {
-        matches!(self, Self::ReadingWhitespace)
+impl std::convert::TryInto<Option<Instruction>> for DecoderState {
+    type Error = DecodeError;
+
+    fn try_into(self) -> Result<Option<Instruction>, Self::Error> {
+        match self {
+            Self::ReadingComment { content } => Ok(Some(Instruction {
+                directive: Directive::Comment,
+                content: Bytes::from(content),
+                mode: None
+            })),
+            Self::ReadingDirectiveArguments {
+                directive,
+                directive_mode,
+                arguments,
+                ..
+            } => {
+                let arguments = arguments.ok_or(DecodeError::IncompleteInstruction)?;
+                Ok(Some(Instruction {
+                    directive,
+                    content: Bytes::from(arguments),
+                    mode: directive_mode,
+                }))
+            },
+            _ => Ok(None)
+        }
     }
 }
 
@@ -132,7 +240,8 @@ impl DecoderState {
 pub enum DecodeError {
     IoError(tokio::io::Error),
     UnexpectedToken,
-    NonUtf8Directive(std::str::Utf8Error)
+    NonUtf8Directive(std::str::Utf8Error),
+    IncompleteInstruction
 }
 
 impl From<std::io::Error> for DecodeError {
@@ -152,7 +261,9 @@ impl std::convert::TryFrom<u8> for DecoderState {
             bytes.put_u8(value);
             Ok(Self::ReadingDirective(bytes))
         } else if value == b'#' {
-            Ok(Self::ReadingComment(BytesMut::new()))
+            Ok(Self::ReadingComment {
+                content: BytesMut::new(),
+            })
         } else {
             Err(DecodeError::UnexpectedToken)
         }
@@ -161,13 +272,27 @@ impl std::convert::TryFrom<u8> for DecoderState {
 
 pub struct DockerfileDecoder {
     current_state: Option<DecoderState>,
+    eof_reached: bool
 }
 
 impl DockerfileDecoder {
     pub fn new() -> Self {
         Self {
-            current_state: None
+            current_state: None,
+            eof_reached: false
         }
+    }
+
+    pub fn set_eof(&mut self, eof: bool) {
+        self.eof_reached = eof;
+    }
+
+    pub fn eof(&self) -> bool {
+        self.eof_reached
+    }
+
+    pub fn flush(self) -> Option<Instruction> {
+        self.current_state?.try_into().unwrap_or(None)
     }
 
     fn read_u8(&mut self, src: &mut BytesMut) -> Option<u8> {
@@ -186,12 +311,168 @@ impl DockerfileDecoder {
             bytes.put_u8(first_byte);
             DecoderState::ReadingDirective(bytes)
         } else if first_byte == b'#' {
-            DecoderState::ReadingComment(BytesMut::with_capacity(1))
+            DecoderState::ReadingComment {
+                content: BytesMut::with_capacity(1),
+            }
         } else {
             return Err(DecodeError::UnexpectedToken);
         };
 
         Ok(Some(initial_state))
+    }
+
+    fn decode_whitespace(&mut self, src: &mut BytesMut) -> Result<Option<DecoderState>, DecodeError> {
+        // Read until end of whitespace
+        let new_char = loop {
+            match self.read_u8(src) {
+                Some(byte) if byte.is_ascii_whitespace() => continue,
+                Some(byte) => break byte,
+                None => return Ok(None)
+            }
+        };
+
+        self.derive_new_line_state(new_char)
+    }
+
+    fn decode_comment(&mut self, src: &mut BytesMut, content: &mut BytesMut) -> Result<Option<Instruction>, DecodeError> {
+        loop {
+            match self.read_u8(src) {
+                Some(next_byte) if next_byte == b'\n' => {
+                    return Ok(Some(Instruction {
+                        directive: Directive::Comment,
+                        content: Bytes::from(content.to_vec()),
+                        mode: None
+                    }));
+                },
+                Some(next_byte) => {
+                    content.put_u8(next_byte);
+                },
+                None => {
+                    return Ok(None);
+                }
+            };
+        }
+    }
+
+    fn decode_directive(&mut self, src: &mut BytesMut, directive: &mut BytesMut) -> Result<Option<DecoderState>, DecodeError> {
+        loop {
+            match self.read_u8(src) {
+                Some(byte) if byte == b' ' => {
+                    return Ok(Some(DecoderState::ReadingDirectiveArguments {
+                        directive: Directive::try_from(directive.as_ref())?,
+                        directive_mode: None,
+                        arguments: None,
+                        new_line_behaviour: NewLineBehaviour::Observe,
+                        string_stack: StringStack::new(),
+                    }));
+                }
+                Some(byte) if byte.is_ascii() => {
+                    directive.put_u8(byte);
+                    continue;
+                },
+                Some(_) => return Err(DecodeError::UnexpectedToken),
+                None => return Ok(None)
+            }
+        }
+    }
+
+    fn decode_directive_arguments(
+        &mut self,
+        src: &mut BytesMut,
+        directive: &Directive,
+        arguments: &mut Option<BytesMut>,
+        new_line_behaviour: &mut NewLineBehaviour,
+        directive_mode: &mut Option<Mode>,
+        string_stack: &mut StringStack
+    ) -> Result<Option<Instruction>, DecodeError> {
+        // read until new line, not preceded by '\'
+        loop {
+            match self.read_u8(src) {
+                Some(next_byte) if (next_byte == b'\n' || next_byte == b'\\') && arguments.is_none() => {
+                    return Err(DecodeError::UnexpectedToken)
+                },
+                Some(next_byte) => {
+                    // ignore backslash in the middle of arguments
+                    if arguments.is_none() {
+                        if next_byte == b' ' {
+                            continue;
+                        }
+                    }
+                    match next_byte {
+                        b'\\' => {
+                            if new_line_behaviour.is_escaped() {
+                                *new_line_behaviour = NewLineBehaviour::Observe;
+                            } else if new_line_behaviour.is_observe() {
+                                *new_line_behaviour = NewLineBehaviour::Escaped;
+                            }
+                            arguments.as_mut().unwrap().put_u8(next_byte);
+                            continue;
+                        },
+                        b'\n' if new_line_behaviour.is_escaped() || new_line_behaviour.is_ignore_line() => {
+                            if arguments.is_none() {
+                                *arguments = Some(BytesMut::new());
+                            }
+                            let argument_mut = arguments.as_mut().unwrap();
+                            argument_mut.put_u8(next_byte);
+                            continue;
+                        },
+                        b'\n' => {
+                            self.current_state = None;
+                            let content = arguments.as_ref().unwrap().to_vec(); // TODO: potential panic
+                            return Ok(Some(Instruction {
+                                directive: directive.clone(),
+                                content: Bytes::from(content),
+                                mode: directive_mode.clone()
+                            }));
+                        },
+                        b'#' => {
+                            // if comment is not part of a string
+                            if string_stack.is_empty() {
+                                let is_newline_comment = arguments.as_ref()
+                                    .map(|bytes| bytes.ends_with(b"\\\n"))
+                                    .unwrap_or(false);
+                                if is_newline_comment {
+                                    *new_line_behaviour = NewLineBehaviour::IgnoreLine;
+                                } else {
+                                    *new_line_behaviour = NewLineBehaviour::Observe;
+                                }
+                            }
+                            if arguments.is_none() {
+                                *arguments = Some(BytesMut::new());
+                            }
+                            let argument_mut = arguments.as_mut().unwrap();
+                            argument_mut.put_u8(next_byte);
+                        },
+                        char => {
+                            if arguments.is_none() {
+                                // first char determines shell vs exec
+                                if directive.is_cmd() || directive.is_entrypoint() {
+                                    *directive_mode = Some(Mode::from(char));
+                                }
+                                *arguments = Some(BytesMut::new());
+                            }
+                            let argument_mut = arguments.as_mut().unwrap();
+                            argument_mut.put_u8(char);
+
+                            if new_line_behaviour.is_escaped() {
+                                *new_line_behaviour = NewLineBehaviour::Observe;
+                            }
+
+                            if char == b'\'' || char == b'"' {
+                                let token = StringToken::try_from(char).unwrap();
+                                if string_stack.peek_top() == Some(&token) {
+                                    string_stack.pop();
+                                } else {
+                                    string_stack.push(token);
+                                }
+                            }
+                            continue;
+                        }
+                    }
+                }
+                None => return Ok(None)
+            }
+        }
     }
 }
 
@@ -200,7 +481,6 @@ impl Decoder for DockerfileDecoder {
     type Error = DecodeError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-
         let mut decode_state = if self.current_state.is_none() {
             let first_byte = match self.read_u8(src) {
                 Some(byte) => byte,
@@ -211,158 +491,94 @@ impl Decoder for DockerfileDecoder {
                 None => return Ok(None)
             }
         } else {
-          self.current_state.take().unwrap()
+            self.current_state.take().unwrap()
         };
 
-        if decode_state.is_reading_whitespace() {
-            // Read until end of whitespace
-            let new_char = loop {
-                match self.read_u8(src) {
-                    Some(byte) if byte.is_ascii_whitespace() => continue,
-                    Some(byte) => break byte,
-                    None => return Ok(None)
-                }
+        loop {
+            let next_state = match decode_state {
+                DecoderState::ReadingWhitespace => self.decode_whitespace(src)?,
+                DecoderState::ReadingComment {
+                    mut content
+                } => {
+                    return match self.decode_comment(src, &mut content)? {
+                        Some(instruction) => Ok(Some(instruction)),
+                        None => {
+                            self.current_state = Some(DecoderState::ReadingComment {
+                                content
+                            });
+                            Ok(None)
+                        }
+                    };
+                },
+                DecoderState::ReadingDirective(mut directive) => {
+                    let next_state = self.decode_directive(src, &mut directive)?;
+                    if next_state.is_none() {
+                        self.current_state = Some(DecoderState::ReadingDirective(directive));
+                    }
+                    next_state
+                },
+                DecoderState::ReadingDirectiveArguments {
+                    directive,
+                    mut arguments,
+                    mut new_line_behaviour,
+                    mut directive_mode,
+                    mut string_stack
+                } => {
+                    return match self.decode_directive_arguments(
+                        src,
+                        &directive,
+                        &mut arguments,
+                        &mut new_line_behaviour,
+                        &mut directive_mode,
+                        &mut string_stack
+                    )? {
+                        Some(instruction) => Ok(Some(instruction)),
+                        None => {
+                            self.current_state = Some(DecoderState::ReadingDirectiveArguments {
+                                directive,
+                                arguments,
+                                new_line_behaviour,
+                                directive_mode,
+                                string_stack
+                            });
+                            Ok(None)
+                        }
+                    };
+                },
             };
 
-            match self.derive_new_line_state(new_char)? {
-                Some(new_line_state) => {
-                    decode_state = new_line_state;
+            match next_state {
+                Some(next_state) => {
+                    decode_state = next_state;
                 },
                 None => return Ok(None)
             }
-        };
-
-        match decode_state {
-            DecoderState::ReadingDirective(mut directive) => {
-                loop {
-                    match self.read_u8(src) {
-                        Some(byte) => {
-                            if byte == b' ' {
-                                self.current_state = Some(DecoderState::ReadingDirectiveArguments {
-                                    directive: Directive::try_from(directive.as_ref())?,
-                                    directive_mode: None,
-                                    arguments: None,
-                                    new_line_behaviour: NewLineBehaviour::Observe,
-                                });
-                                return Ok(None);
-                            } else if byte.is_ascii() {
-                                directive.put_u8(byte);
-                                continue;
-                            } else {
-                                return Err(DecodeError::UnexpectedToken);
-                            }
-                        },
-                        None => {
-                            self.current_state = Some(DecoderState::ReadingDirective(directive));
-                            return Ok(None);
-                        }
-                    }
-                }
-                // Read until space
-            },
-            DecoderState::ReadingDirectiveArguments {
-                mut arguments,
-                mut new_line_behaviour,
-                directive,
-                mut directive_mode
-            } => {
-                // read until new line, not preceded by '\'
-                loop {
-                    match self.read_u8(src) {
-                        Some(next_byte) if (next_byte == b'\n' || next_byte == b'\\') && arguments.is_none() => {
-                            return Err(DecodeError::UnexpectedToken)
-                        },
-                        Some(next_byte) => {
-                            // ignore backslash in the middle of arguments
-                            if arguments.is_none() {
-                                if next_byte == b' ' {
-                                    continue;
-                                }
-                            }
-                            match next_byte {
-                                b'\\' => {
-                                    if new_line_behaviour.is_escaped() {
-                                        new_line_behaviour = NewLineBehaviour::Observe;
-                                    } else if new_line_behaviour.is_observe() {
-                                        new_line_behaviour = NewLineBehaviour::Escaped;
-                                    }
-                                    arguments.as_mut().unwrap().put_u8(next_byte);
-                                    continue;
-                                },
-                                b'\n' if new_line_behaviour.is_escaped() || new_line_behaviour.is_ignore_line() => {
-                                    if arguments.is_none() {
-                                        arguments = Some(BytesMut::new());
-                                    }
-                                    let argument_mut = arguments.as_mut().unwrap();
-                                    argument_mut.put_u8(next_byte);
-                                    continue;
-                                },
-                                b'\n' => {
-                                    self.current_state = None;
-                                    return Ok(Some(Instruction {
-                                        directive,
-                                        content: Bytes::from(arguments.unwrap()),
-                                        mode: directive_mode
-                                    }));
-                                },
-                                b'#' => {
-                                    // comment embedded in a directive
-                                    // TODO: account for comments embedded in strings
-                                    new_line_behaviour = NewLineBehaviour::IgnoreLine;
-                                    if arguments.is_none() {
-                                        arguments = Some(BytesMut::new());
-                                    }
-                                    let argument_mut = arguments.as_mut().unwrap();
-                                    argument_mut.put_u8(next_byte);
-                                    println!("Comment in directive");
-                                },
-                                char => {
-                                    if arguments.is_none() {
-                                        // first char
-                                        if directive.is_cmd() || directive.is_entrypoint() {
-                                            directive_mode = Some(Mode::from(char));
-                                        }
-                                        arguments = Some(BytesMut::new());
-                                    }
-                                    let argument_mut = arguments.as_mut().unwrap();
-                                    new_line_behaviour = NewLineBehaviour::Observe;
-                                    argument_mut.put_u8(char);
-                                    continue;
-                                }
-                            }
-                        }
-                        None => {
-                            self.current_state = Some(DecoderState::ReadingDirectiveArguments {
-                                arguments,
-                                new_line_behaviour,
-                                directive,
-                                directive_mode
-                            });
-                            return Ok(None);
-                        }
-                    }
-                }
-            },
-            DecoderState::ReadingComment(mut comment_bytes) => {
-                // read until new line
-                loop {
-                    match self.read_u8(src) {
-                        Some(next_byte) if next_byte == b'\n' => {
-                            self.current_state = None;
-                            return Ok(Some(Instruction {
-                                directive: Directive::Comment,
-                                content: Bytes::from(comment_bytes),
-                                mode: None
-                            }));
-                        },
-                        Some(next_byte) => {
-                            comment_bytes.put_u8(next_byte);
-                        },
-                        None => return Ok(None)
-                    };
-                }
-            },
-            _ => Ok(None)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_decoding_of_directive_with_comments() {
+        let mut decoder = DockerfileDecoder::new();
+        let test_directive = "ENTRYPOINT echo 'Test' # emits Test";
+        let directive_with_new_line = format!("{}\n", test_directive);
+        let mut dockerfile_content = BytesMut::from(directive_with_new_line.as_str());
+        let mut instructions = Vec::new();
+        loop {
+            let emitted_instruction = decoder.decode(&mut dockerfile_content);
+            assert_eq!(emitted_instruction.is_ok(), true); // expect no errors
+            match emitted_instruction.unwrap() {
+                Some(instruction) => instructions.push(instruction),
+                None => break
+            }
+        }
+        assert_eq!(instructions.len(), 1);
+        let instruction = instructions.pop().unwrap();
+        assert_eq!(instruction.is_entrypoint(), true);
+        assert_eq!(instruction.to_string(), String::from(test_directive));
     }
 }
