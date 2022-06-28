@@ -69,8 +69,14 @@ async fn main() {
         }
         'inner: loop {
             if !buf.has_remaining() && eof {
-                if let Some(final_instruction) = dockerfile_decoder.flush() {
-                    handle_emitted_instructions(&mut instruction_set, final_instruction, &mut last_cmd, &mut last_entrypoint);
+                match dockerfile_decoder.flush() {
+                    Ok(Some(final_instruction)) => {
+                        handle_emitted_instructions(&mut instruction_set, final_instruction, &mut last_cmd, &mut last_entrypoint)
+                    },
+                    Err(e) => {
+                        eprintln!("Error parsing dockerfile — {:?}", e);
+                    },
+                    _ => {}
                 }
                 break 'outer;
             }
@@ -79,7 +85,7 @@ async fn main() {
                     handle_emitted_instructions(&mut instruction_set, instruction, &mut last_cmd, &mut last_entrypoint);
                     continue;
                 },
-                Ok(None) if dockerfile_decoder.eof() && !buf.has_remaining() => break 'outer,
+                Ok(None) if eof && !buf.has_remaining() => break 'outer,
                 Ok(None) => break 'inner,
                 Err(e) => {
                     eprintln!("Error parsing dockerfile - {:?}", e);

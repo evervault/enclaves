@@ -3,7 +3,7 @@ use tokio_util::codec::Decoder;
 use std::convert::{From,TryFrom,TryInto};
 use std::fmt::Formatter;
 
-#[derive(Clone,Debug)]
+#[derive(Clone,Debug,PartialEq)]
 pub enum Mode {
     Exec,
     Shell
@@ -111,12 +111,7 @@ impl Instruction {
 impl std::fmt::Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let content_str = std::str::from_utf8(self.content.as_ref()).expect("Non utf8 content");
-        match self.directive {
-            Directive::Expose | Directive::Cmd if self.mode.is_some() => {
-                write!(f, "{} {} # {:?}", self.directive, content_str, self.mode.as_ref().unwrap())
-            },
-            _ => write!(f, "{} {}", self.directive, content_str)
-        }
+        write!(f, "{} {}", self.directive, content_str)
     }
 }
 
@@ -133,10 +128,6 @@ impl NewLineBehaviour {
 
     pub fn is_observe(&self) -> bool {
         matches!(self, Self::Observe)
-    }
-
-    pub fn is_ignore_line(&self) -> bool {
-        matches!(self, Self::IgnoreLine)
     }
 }
 
@@ -272,27 +263,21 @@ impl std::convert::TryFrom<u8> for DecoderState {
 
 pub struct DockerfileDecoder {
     current_state: Option<DecoderState>,
-    eof_reached: bool
 }
 
 impl DockerfileDecoder {
     pub fn new() -> Self {
         Self {
             current_state: None,
-            eof_reached: false
         }
     }
 
-    pub fn set_eof(&mut self, eof: bool) {
-        self.eof_reached = eof;
-    }
-
-    pub fn eof(&self) -> bool {
-        self.eof_reached
-    }
-
-    pub fn flush(self) -> Option<Instruction> {
-        self.current_state?.try_into().unwrap_or(None)
+    pub fn flush(self) -> Result<Option<Instruction>,DecodeError> {
+        if self.current_state.is_none() {
+            Ok(None)
+        } else {
+            self.current_state.unwrap().try_into()
+        }
     }
 
     fn read_u8(&mut self, src: &mut BytesMut) -> Option<u8> {
@@ -391,82 +376,72 @@ impl DockerfileDecoder {
                 Some(next_byte) if (next_byte == b'\n' || next_byte == b'\\') && arguments.is_none() => {
                     return Err(DecodeError::UnexpectedToken)
                 },
-                Some(next_byte) => {
-                    // ignore backslash in the middle of arguments
+                Some(next_byte) if next_byte == b'\n' && !new_line_behaviour.is_observe() => {
                     if arguments.is_none() {
-                        if next_byte == b' ' {
-                            continue;
+                        *arguments = Some(BytesMut::new());
+                    }
+                    let argument_mut = arguments.as_mut().unwrap();
+                    argument_mut.put_u8(next_byte);
+                },
+                Some(next_byte) if next_byte == b'\n' => {
+                    // safety: first arm will be matched if next_byte is a newline and arguments is None
+                    let content = arguments.as_ref().unwrap().to_vec();
+                    return Ok(Some(Instruction {
+                        directive: directive.clone(),
+                        content: Bytes::from(content),
+                        mode: directive_mode.clone()
+                    }));
+                },
+                Some(next_byte) if next_byte == b'\\' => {
+                    if new_line_behaviour.is_escaped() {
+                        *new_line_behaviour = NewLineBehaviour::Observe;
+                    } else if new_line_behaviour.is_observe() {
+                        *new_line_behaviour = NewLineBehaviour::Escaped;
+                    }
+                    arguments.as_mut().unwrap().put_u8(next_byte);
+                },
+                // ignore leading space on directive arguments
+                Some(next_byte) if next_byte == b' ' && arguments.is_none() => continue,
+                Some(next_byte) if next_byte == b'#' => {
+                    // check if # signifies a comment or is embedded within an instruction
+                    if string_stack.is_empty() {
+                        let is_newline_comment = arguments.as_ref()
+                            .map(|bytes| bytes.ends_with(b"\\\n"))
+                            .unwrap_or(false);
+                        if is_newline_comment {
+                            // ignore next newline — will terminate comment, not directive args
+                            *new_line_behaviour = NewLineBehaviour::IgnoreLine;
+                        } else {
+                            *new_line_behaviour = NewLineBehaviour::Observe;
                         }
                     }
-                    match next_byte {
-                        b'\\' => {
-                            if new_line_behaviour.is_escaped() {
-                                *new_line_behaviour = NewLineBehaviour::Observe;
-                            } else if new_line_behaviour.is_observe() {
-                                *new_line_behaviour = NewLineBehaviour::Escaped;
-                            }
-                            arguments.as_mut().unwrap().put_u8(next_byte);
-                            continue;
-                        },
-                        b'\n' if new_line_behaviour.is_escaped() || new_line_behaviour.is_ignore_line() => {
-                            if arguments.is_none() {
-                                *arguments = Some(BytesMut::new());
-                            }
-                            let argument_mut = arguments.as_mut().unwrap();
-                            argument_mut.put_u8(next_byte);
-                            continue;
-                        },
-                        b'\n' => {
-                            self.current_state = None;
-                            let content = arguments.as_ref().unwrap().to_vec(); // TODO: potential panic
-                            return Ok(Some(Instruction {
-                                directive: directive.clone(),
-                                content: Bytes::from(content),
-                                mode: directive_mode.clone()
-                            }));
-                        },
-                        b'#' => {
-                            // if comment is not part of a string
-                            if string_stack.is_empty() {
-                                let is_newline_comment = arguments.as_ref()
-                                    .map(|bytes| bytes.ends_with(b"\\\n"))
-                                    .unwrap_or(false);
-                                if is_newline_comment {
-                                    *new_line_behaviour = NewLineBehaviour::IgnoreLine;
-                                } else {
-                                    *new_line_behaviour = NewLineBehaviour::Observe;
-                                }
-                            }
-                            if arguments.is_none() {
-                                *arguments = Some(BytesMut::new());
-                            }
-                            let argument_mut = arguments.as_mut().unwrap();
-                            argument_mut.put_u8(next_byte);
-                        },
-                        char => {
-                            if arguments.is_none() {
-                                // first char determines shell vs exec
-                                if directive.is_cmd() || directive.is_entrypoint() {
-                                    *directive_mode = Some(Mode::from(char));
-                                }
-                                *arguments = Some(BytesMut::new());
-                            }
-                            let argument_mut = arguments.as_mut().unwrap();
-                            argument_mut.put_u8(char);
+                    if arguments.is_none() {
+                        *arguments = Some(BytesMut::new());
+                    }
+                    let argument_mut = arguments.as_mut().unwrap();
+                    argument_mut.put_u8(next_byte);
+                }
+                Some(next_byte) => {
+                    if arguments.is_none() {
+                        // first char determines shell vs exec
+                        if directive.is_cmd() || directive.is_entrypoint() {
+                            *directive_mode = Some(Mode::from(next_byte));
+                        }
+                        *arguments = Some(BytesMut::new());
+                    }
+                    let argument_mut = arguments.as_mut().unwrap();
+                    argument_mut.put_u8(next_byte);
 
-                            if new_line_behaviour.is_escaped() {
-                                *new_line_behaviour = NewLineBehaviour::Observe;
-                            }
+                    if new_line_behaviour.is_escaped() {
+                        *new_line_behaviour = NewLineBehaviour::Observe;
+                    }
 
-                            if char == b'\'' || char == b'"' {
-                                let token = StringToken::try_from(char).unwrap();
-                                if string_stack.peek_top() == Some(&token) {
-                                    string_stack.pop();
-                                } else {
-                                    string_stack.push(token);
-                                }
-                            }
-                            continue;
+                    if next_byte == b'\'' || next_byte == b'"' {
+                        let token = StringToken::try_from(next_byte).unwrap();
+                        if string_stack.peek_top() == Some(&token) {
+                            string_stack.pop();
+                        } else {
+                            string_stack.push(token);
                         }
                     }
                 }
@@ -561,24 +536,148 @@ impl Decoder for DockerfileDecoder {
 mod tests {
     use super::*;
 
+    fn assert_instruction_has_been_parsed(parsed_instruction: Result<Option<Instruction>, DecodeError>) -> Instruction {
+        assert_eq!(parsed_instruction.is_ok(), true);
+        let instruction = parsed_instruction.unwrap();
+        assert_eq!(instruction.is_some(), true);
+        instruction.unwrap()
+    }
+
+    fn assert_instruction_has_not_been_parsed(parsed_instruction: Result<Option<Instruction>, DecodeError>) {
+        assert_eq!(parsed_instruction.is_ok(), true);
+        let instruction = parsed_instruction.unwrap();
+        assert_eq!(instruction.is_none(), true);
+    }
+
     #[test]
     fn test_decoding_of_directive_with_comments() {
         let mut decoder = DockerfileDecoder::new();
         let test_directive = "ENTRYPOINT echo 'Test' # emits Test";
         let directive_with_new_line = format!("{}\n", test_directive);
         let mut dockerfile_content = BytesMut::from(directive_with_new_line.as_str());
-        let mut instructions = Vec::new();
-        loop {
-            let emitted_instruction = decoder.decode(&mut dockerfile_content);
-            assert_eq!(emitted_instruction.is_ok(), true); // expect no errors
-            match emitted_instruction.unwrap() {
-                Some(instruction) => instructions.push(instruction),
-                None => break
-            }
-        }
-        assert_eq!(instructions.len(), 1);
-        let instruction = instructions.pop().unwrap();
+        let emitted_instruction = decoder.decode(&mut dockerfile_content);
+        let instruction = assert_instruction_has_been_parsed(emitted_instruction);
         assert_eq!(instruction.is_entrypoint(), true);
         assert_eq!(instruction.to_string(), String::from(test_directive));
+    }
+
+    #[test]
+    fn test_flush_on_file_without_final_newline() {
+        let mut decoder = DockerfileDecoder::new();
+        let test_directive = "ENTRYPOINT echo 'Test' # emits Test";
+        let mut dockerfile_content = BytesMut::from(test_directive);
+        let emitted_instruction = decoder.decode(&mut dockerfile_content);
+        assert_instruction_has_not_been_parsed(emitted_instruction);
+        let flushed_instruction = decoder.flush();
+        let instruction = assert_instruction_has_been_parsed(flushed_instruction);
+        assert_eq!(instruction.is_entrypoint(), true);
+        assert_eq!(instruction.to_string(), String::from(test_directive));
+    }
+
+    #[test]
+    fn test_flush_on_incomplete_state() {
+        let mut decoder = DockerfileDecoder::new();
+        let test_directive = "ENTRYPOINT ";
+        let mut dockerfile_content = BytesMut::from(test_directive);
+        let emitted_instruction = decoder.decode(&mut dockerfile_content);
+        assert_instruction_has_not_been_parsed(emitted_instruction);
+        let flushed_state = decoder.flush();
+        assert_eq!(flushed_state.is_err(), true);
+    }
+
+    #[test]
+    fn test_multiline_directive_with_embedded_comments() {
+        let mut decoder = DockerfileDecoder::new();
+        // using entrypoint for apk updates doesn't really make sense, purely for testing
+        let test_dockerfile = r#"
+FROM node:16-alpine3.14
+ENTRYPOINT apk update && apk add python3 glib make g++ gcc libc-dev &&\
+# clean apk cache
+    rm -rf /var/cache/apk/* # testing"#;
+        let mut dockerfile_content = BytesMut::from(test_dockerfile);
+        let from_instruction = decoder.decode(&mut dockerfile_content);
+        assert_instruction_has_been_parsed(from_instruction);
+        let emitted_instruction = decoder.decode(&mut dockerfile_content);
+        assert_instruction_has_not_been_parsed(emitted_instruction);
+        let flushed_state = decoder.flush();
+        let instruction = assert_instruction_has_been_parsed(flushed_state);
+        assert_eq!(instruction.is_entrypoint(), true);
+        assert_eq!(instruction.to_string(), String::from(r#"ENTRYPOINT apk update && apk add python3 glib make g++ gcc libc-dev &&\
+# clean apk cache
+    rm -rf /var/cache/apk/* # testing"#));
+    }
+
+    #[test]
+    fn test_parsing_of_command_with_hashbang() {
+        let mut decoder = DockerfileDecoder::new();
+        let test_dockerfile = r#"RUN /bin/sh -c "echo -e '"'#!/bin/sh\necho "Hello, World!"'"' > /etc/service/hello_world/run""#;
+        let dockerfile_contents = format!("{}\n", test_dockerfile);
+        let mut buffer = BytesMut::from(dockerfile_contents.as_str());
+        let run_instruction = decoder.decode(&mut buffer);
+        let instruction = assert_instruction_has_been_parsed(run_instruction);
+        assert_eq!(instruction.to_string(),test_dockerfile.to_string());
+    }
+
+    #[test]
+    fn test_parsing_of_command_with_uneven_apostrophes() {
+        let mut decoder = DockerfileDecoder::new();
+        let test_dockerfile = r#"RUN /bin/sh -c "echo -e '"'#!/bin/sh\necho "'"\n'"' > /etc/service/apostrophe/run""#;
+        let dockerfile_contents = format!("{}\n", test_dockerfile);
+        let mut buffer = BytesMut::from(dockerfile_contents.as_str());
+        let run_instruction = decoder.decode(&mut buffer);
+        let instruction = assert_instruction_has_been_parsed(run_instruction);
+        assert_eq!(instruction.to_string(),test_dockerfile.to_string());
+    }
+
+    #[test]
+    fn test_parsing_of_entrypoint_exec_mode() {
+        let mut decoder = DockerfileDecoder::new();
+        let test_dockerfile = r#"ENTRYPOINT ["node","server.js"]"#;
+        let dockerfile_contents = format!("{}\n", test_dockerfile);
+        let mut buffer = BytesMut::from(dockerfile_contents.as_str());
+        let run_instruction = decoder.decode(&mut buffer);
+        let instruction = assert_instruction_has_been_parsed(run_instruction);
+        assert_eq!(instruction.to_string(),test_dockerfile.to_string());
+        assert_eq!(instruction.is_entrypoint(),true);
+        assert_eq!(instruction.mode.unwrap(),Mode::Exec);
+    }
+
+    #[test]
+    fn test_parsing_of_entrypoint_shell_mode() {
+        let mut decoder = DockerfileDecoder::new();
+        let test_dockerfile = r#"ENTRYPOINT node server.js"#;
+        let dockerfile_contents = format!("{}\n", test_dockerfile);
+        let mut buffer = BytesMut::from(dockerfile_contents.as_str());
+        let run_instruction = decoder.decode(&mut buffer);
+        let instruction = assert_instruction_has_been_parsed(run_instruction);
+        assert_eq!(instruction.to_string(),test_dockerfile.to_string());
+        assert_eq!(instruction.is_entrypoint(),true);
+        assert_eq!(instruction.mode.unwrap(),Mode::Shell);
+    }
+
+    #[test]
+    fn test_parsing_of_cmd_exec_mode() {
+        let mut decoder = DockerfileDecoder::new();
+        let test_dockerfile = r#"CMD ["node","server.js"]"#;
+        let dockerfile_contents = format!("{}\n", test_dockerfile);
+        let mut buffer = BytesMut::from(dockerfile_contents.as_str());
+        let run_instruction = decoder.decode(&mut buffer);
+        let instruction = assert_instruction_has_been_parsed(run_instruction);
+        assert_eq!(instruction.to_string(),test_dockerfile.to_string());
+        assert_eq!(instruction.is_cmd(),true);
+        assert_eq!(instruction.mode.unwrap(),Mode::Exec);
+    }
+
+    #[test]
+    fn test_parsing_of_cmd_shell_mode() {
+        let mut decoder = DockerfileDecoder::new();
+        let test_dockerfile = r#"CMD node server.js"#;
+        let dockerfile_contents = format!("{}\n", test_dockerfile);
+        let mut buffer = BytesMut::from(dockerfile_contents.as_str());
+        let run_instruction = decoder.decode(&mut buffer);
+        let instruction = assert_instruction_has_been_parsed(run_instruction);
+        assert_eq!(instruction.to_string(),test_dockerfile.to_string());
+        assert_eq!(instruction.is_cmd(),true);
+        assert_eq!(instruction.mode.unwrap(),Mode::Shell);
     }
 }
