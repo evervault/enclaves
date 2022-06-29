@@ -1,5 +1,5 @@
 pub mod parse;
-use parse::Instruction;
+use parse::Directive;
 use itertools::join;
 
 /*
@@ -17,7 +17,7 @@ use itertools::join;
 +----------------------------+----------------------------+--------------------------------+------------------------------------------------+
 */
 
-pub fn create_combined_docker_entrypoint(entrypoint: Option<Instruction>, cmd: Option<Instruction>) -> String {
+pub fn create_combined_docker_entrypoint(entrypoint: Option<Directive>, cmd: Option<Directive>) -> String {
     let format_tokens = |tokens: &[String]| -> String {
         join(tokens, " ")
     };
@@ -28,7 +28,6 @@ pub fn create_combined_docker_entrypoint(entrypoint: Option<Instruction>, cmd: O
             if entrypoint.mode().unwrap().is_shell() {
                 format_tokens(entrypoint.tokens().unwrap())
             } else {
-                // TODO: this should be composing terms, not full directives
                 format!("{} {}", format_tokens(entrypoint.tokens().unwrap()), format_tokens(cmd.tokens().unwrap()))
             }
         },

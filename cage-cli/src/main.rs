@@ -5,7 +5,7 @@ use clap::Parser;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio_util::codec::Decoder;
-use crate::docker::parse::Instruction;
+use crate::docker::parse::Directive;
 
 mod docker;
 
@@ -42,10 +42,10 @@ async fn main() {
     let mut last_entrypoint = None;
 
     let handle_emitted_instructions = |
-        instruction_set: &mut Vec<Instruction>,
-        instruction: Instruction,
-        last_cmd: &mut Option<Instruction>,
-        last_entrypoint: &mut Option<Instruction>
+        instruction_set: &mut Vec<Directive>,
+        instruction: Directive,
+        last_cmd: &mut Option<Directive>,
+        last_entrypoint: &mut Option<Directive>
     | {
         if instruction.is_cmd() {
             *last_cmd = Some(instruction);

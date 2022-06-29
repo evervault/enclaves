@@ -172,52 +172,6 @@ impl TryFrom<&[u8]> for Directive {
     }
 }
 
-#[derive(Clone)]
-pub struct Instruction {
-    directive: Directive,
-    content: Bytes,
-    mode: Option<Mode>
-}
-
-impl Instruction {
-    pub fn is_entrypoint(&self) -> bool {
-        self.directive.is_entrypoint()
-    }
-
-    pub fn is_cmd(&self) -> bool {
-        self.directive.is_cmd()
-    }
-
-    pub fn is_expose(&self) -> bool {
-        self.directive.is_expose()
-    }
-
-    pub fn mode(&self) -> Option<&Mode> {
-        self.directive.mode()
-    }
-
-    pub fn tokens(&self) -> Option<&[String]> {
-        self.directive.tokens()
-    }
-}
-
-impl std::fmt::Debug for Instruction {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if let Ok(content) = std::str::from_utf8(self.content.as_ref()) {
-            write!(f, "*Begin Instruction*\nDirective: {}\nContent: {}\nMode: {:?}\n*End Instruction*", self.directive, content, self.mode)
-        } else {
-            write!(f, "*Begin Instruction*\nDirective: {}\nContent: [invalid utf8 in content]\nMode: {:?}\n*End Instruction*", self.directive, self.mode)
-        }
-    }
-}
-
-
-impl std::fmt::Display for Instruction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.directive)
-    }
-}
-
 enum NewLineBehaviour {
     Escaped,
     IgnoreLine, // handle embedded comments
@@ -293,7 +247,6 @@ enum DecoderState {
         directive: Directive,
         arguments: Option<BytesMut>,
         new_line_behaviour: NewLineBehaviour,
-        directive_mode: Option<Mode>,
         string_stack: StringStack,
     },
     ReadingComment {
@@ -302,29 +255,20 @@ enum DecoderState {
     ReadingWhitespace
 }
 
-impl std::convert::TryInto<Option<Instruction>> for DecoderState {
+impl std::convert::TryInto<Option<Directive>> for DecoderState {
     type Error = DecodeError;
 
-    fn try_into(self) -> Result<Option<Instruction>, Self::Error> {
+    fn try_into(self) -> Result<Option<Directive>, Self::Error> {
         match self {
-            Self::ReadingComment { content } => Ok(Some(Instruction {
-                directive: Directive::Comment(Bytes::from(content)),
-                content: Bytes::new(),
-                mode: None
-            })),
+            Self::ReadingComment { content } => Ok(Some(Directive::Comment(Bytes::from(content)))),
             Self::ReadingDirectiveArguments {
                 mut directive,
-                directive_mode,
                 arguments,
                 ..
             } => {
                 let arguments = arguments.ok_or(DecodeError::IncompleteInstruction)?;
                 directive.set_arguments(arguments.to_vec());
-                Ok(Some(Instruction {
-                    directive,
-                    content: Bytes::from(arguments),
-                    mode: directive_mode,
-                }))
+                Ok(Some(directive))
             },
             _ => Ok(None)
         }
@@ -376,7 +320,7 @@ impl DockerfileDecoder {
         }
     }
 
-    pub fn flush(self) -> Result<Option<Instruction>,DecodeError> {
+    pub fn flush(self) -> Result<Option<Directive>,DecodeError> {
         if self.current_state.is_none() {
             Ok(None)
         } else {
@@ -423,16 +367,12 @@ impl DockerfileDecoder {
         self.derive_new_line_state(new_char)
     }
 
-    fn decode_comment(&mut self, src: &mut BytesMut, content: &mut BytesMut) -> Result<Option<Instruction>, DecodeError> {
+    fn decode_comment(&mut self, src: &mut BytesMut, content: &mut BytesMut) -> Result<Option<Directive>, DecodeError> {
         loop {
             match self.read_u8(src) {
                 Some(next_byte) if next_byte == b'\n' => {
-                    let comment_bytes = content.to_vec();
-                    return Ok(Some(Instruction {
-                        directive: Directive::Comment(Bytes::from(comment_bytes.clone())),
-                        content: Bytes::from(comment_bytes),
-                        mode: None
-                    }));
+                    let comment_bytes = Bytes::from(content.to_vec());
+                    return Ok(Some(Directive::Comment(comment_bytes)));
                 },
                 Some(next_byte) => {
                     content.put_u8(next_byte);
@@ -450,7 +390,6 @@ impl DockerfileDecoder {
                 Some(byte) if byte == b' ' => {
                     return Ok(Some(DecoderState::ReadingDirectiveArguments {
                         directive: Directive::try_from(directive.as_ref())?,
-                        directive_mode: None,
                         arguments: None,
                         new_line_behaviour: NewLineBehaviour::Observe,
                         string_stack: StringStack::new(),
@@ -472,9 +411,8 @@ impl DockerfileDecoder {
         directive: &mut Directive,
         arguments: &mut Option<BytesMut>,
         new_line_behaviour: &mut NewLineBehaviour,
-        directive_mode: &mut Option<Mode>,
         string_stack: &mut StringStack
-    ) -> Result<Option<Instruction>, DecodeError> {
+    ) -> Result<Option<Directive>, DecodeError> {
         // read until new line, not preceded by '\'
         loop {
             match self.read_u8(src) {
@@ -492,12 +430,7 @@ impl DockerfileDecoder {
                     // safety: first arm will be matched if next_byte is a newline and arguments is None
                     let content = arguments.as_ref().unwrap().to_vec();
                     directive.set_arguments(content.clone());
-                    println!("Directive arguments set from content: {}", std::str::from_utf8(content.as_slice()).unwrap());
-                    return Ok(Some(Instruction {
-                        directive: directive.clone(),
-                        content: Bytes::from(content),
-                        mode: directive_mode.clone()
-                    }));
+                    return Ok(Some(directive.clone()));
                 },
                 Some(next_byte) if next_byte == b'\\' => {
                     if new_line_behaviour.is_escaped() {
@@ -559,7 +492,7 @@ impl DockerfileDecoder {
 }
 
 impl Decoder for DockerfileDecoder {
-    type Item = Instruction;
+    type Item = Directive;
     type Error = DecodeError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
@@ -583,7 +516,7 @@ impl Decoder for DockerfileDecoder {
                     mut content
                 } => {
                     return match self.decode_comment(src, &mut content)? {
-                        Some(instruction) => Ok(Some(instruction)),
+                        Some(directive) => Ok(Some(directive)),
                         None => {
                             self.current_state = Some(DecoderState::ReadingComment {
                                 content
@@ -603,7 +536,6 @@ impl Decoder for DockerfileDecoder {
                     mut directive,
                     mut arguments,
                     mut new_line_behaviour,
-                    mut directive_mode,
                     mut string_stack
                 } => {
                     return match self.decode_directive_arguments(
@@ -611,7 +543,6 @@ impl Decoder for DockerfileDecoder {
                         &mut directive,
                         &mut arguments,
                         &mut new_line_behaviour,
-                        &mut directive_mode,
                         &mut string_stack
                     )? {
                         Some(instruction) => Ok(Some(instruction)),
@@ -620,7 +551,6 @@ impl Decoder for DockerfileDecoder {
                                 directive,
                                 arguments,
                                 new_line_behaviour,
-                                directive_mode,
                                 string_stack
                             });
                             Ok(None)
@@ -643,17 +573,17 @@ impl Decoder for DockerfileDecoder {
 mod tests {
     use super::*;
 
-    fn assert_instruction_has_been_parsed(parsed_instruction: Result<Option<Instruction>, DecodeError>) -> Instruction {
-        assert_eq!(parsed_instruction.is_ok(), true);
-        let instruction = parsed_instruction.unwrap();
-        assert_eq!(instruction.is_some(), true);
-        instruction.unwrap()
+    fn assert_directive_has_been_parsed(parsed_directive: Result<Option<Directive>, DecodeError>) -> Directive {
+        assert_eq!(parsed_directive.is_ok(), true);
+        let directive = parsed_directive.unwrap();
+        assert_eq!(directive.is_some(), true);
+        directive.unwrap()
     }
 
-    fn assert_instruction_has_not_been_parsed(parsed_instruction: Result<Option<Instruction>, DecodeError>) {
-        assert_eq!(parsed_instruction.is_ok(), true);
-        let instruction = parsed_instruction.unwrap();
-        assert_eq!(instruction.is_none(), true);
+    fn assert_directive_has_not_been_parsed(parsed_directive: Result<Option<Directive>, DecodeError>) {
+        assert_eq!(parsed_directive.is_ok(), true);
+        let directive = parsed_directive.unwrap();
+        assert_eq!(directive.is_none(), true);
     }
 
     #[test]
@@ -662,10 +592,10 @@ mod tests {
         let test_directive = "ENTRYPOINT echo 'Test' # emits Test";
         let directive_with_new_line = format!("{}\n", test_directive);
         let mut dockerfile_content = BytesMut::from(directive_with_new_line.as_str());
-        let emitted_instruction = decoder.decode(&mut dockerfile_content);
-        let instruction = assert_instruction_has_been_parsed(emitted_instruction);
-        assert_eq!(instruction.is_entrypoint(), true);
-        assert_eq!(instruction.to_string(), String::from(test_directive));
+        let emitted_directive = decoder.decode(&mut dockerfile_content);
+        let directive = assert_directive_has_been_parsed(emitted_directive);
+        assert_eq!(directive.is_entrypoint(), true);
+        assert_eq!(directive.to_string(), String::from(test_directive));
     }
 
     #[test]
@@ -673,12 +603,12 @@ mod tests {
         let mut decoder = DockerfileDecoder::new();
         let test_directive = "ENTRYPOINT echo 'Test' # emits Test";
         let mut dockerfile_content = BytesMut::from(test_directive);
-        let emitted_instruction = decoder.decode(&mut dockerfile_content);
-        assert_instruction_has_not_been_parsed(emitted_instruction);
-        let flushed_instruction = decoder.flush();
-        let instruction = assert_instruction_has_been_parsed(flushed_instruction);
-        assert_eq!(instruction.is_entrypoint(), true);
-        assert_eq!(instruction.to_string(), String::from(test_directive));
+        let emitted_directive = decoder.decode(&mut dockerfile_content);
+        assert_directive_has_not_been_parsed(emitted_directive);
+        let flushed_directive = decoder.flush();
+        let directive = assert_directive_has_been_parsed(flushed_directive);
+        assert_eq!(directive.is_entrypoint(), true);
+        assert_eq!(directive.to_string(), String::from(test_directive));
     }
 
     #[test]
@@ -686,8 +616,8 @@ mod tests {
         let mut decoder = DockerfileDecoder::new();
         let test_directive = "ENTRYPOINT ";
         let mut dockerfile_content = BytesMut::from(test_directive);
-        let emitted_instruction = decoder.decode(&mut dockerfile_content);
-        assert_instruction_has_not_been_parsed(emitted_instruction);
+        let emitted_directive = decoder.decode(&mut dockerfile_content);
+        assert_directive_has_not_been_parsed(emitted_directive);
         let flushed_state = decoder.flush();
         assert_eq!(flushed_state.is_err(), true);
     }
@@ -702,14 +632,14 @@ ENTRYPOINT apk update && apk add python3 glib make g++ gcc libc-dev &&\
 # clean apk cache
     rm -rf /var/cache/apk/* # testing"#;
         let mut dockerfile_content = BytesMut::from(test_dockerfile);
-        let from_instruction = decoder.decode(&mut dockerfile_content);
-        assert_instruction_has_been_parsed(from_instruction);
-        let emitted_instruction = decoder.decode(&mut dockerfile_content);
-        assert_instruction_has_not_been_parsed(emitted_instruction);
+        let from_directive = decoder.decode(&mut dockerfile_content);
+        assert_directive_has_been_parsed(from_directive);
+        let emitted_directive = decoder.decode(&mut dockerfile_content);
+        assert_directive_has_not_been_parsed(emitted_directive);
         let flushed_state = decoder.flush();
-        let instruction = assert_instruction_has_been_parsed(flushed_state);
-        assert_eq!(instruction.is_entrypoint(), true);
-        assert_eq!(instruction.to_string(), String::from(r#"ENTRYPOINT apk update && apk add python3 glib make g++ gcc libc-dev &&\
+        let directive = assert_directive_has_been_parsed(flushed_state);
+        assert_eq!(directive.is_entrypoint(), true);
+        assert_eq!(directive.to_string(), String::from(r#"ENTRYPOINT apk update && apk add python3 glib make g++ gcc libc-dev &&\
 # clean apk cache
     rm -rf /var/cache/apk/* # testing"#));
     }
@@ -720,9 +650,9 @@ ENTRYPOINT apk update && apk add python3 glib make g++ gcc libc-dev &&\
         let test_dockerfile = r#"RUN /bin/sh -c "echo -e '"'#!/bin/sh\necho "Hello, World!"'"' > /etc/service/hello_world/run""#;
         let dockerfile_contents = format!("{}\n", test_dockerfile);
         let mut buffer = BytesMut::from(dockerfile_contents.as_str());
-        let run_instruction = decoder.decode(&mut buffer);
-        let instruction = assert_instruction_has_been_parsed(run_instruction);
-        assert_eq!(instruction.to_string(),test_dockerfile.to_string());
+        let run_directive = decoder.decode(&mut buffer);
+        let directive = assert_directive_has_been_parsed(run_directive);
+        assert_eq!(directive.to_string(),test_dockerfile.to_string());
     }
 
     #[test]
@@ -731,9 +661,9 @@ ENTRYPOINT apk update && apk add python3 glib make g++ gcc libc-dev &&\
         let test_dockerfile = r#"RUN /bin/sh -c "echo -e '"'#!/bin/sh\necho "'"\n'"' > /etc/service/apostrophe/run""#;
         let dockerfile_contents = format!("{}\n", test_dockerfile);
         let mut buffer = BytesMut::from(dockerfile_contents.as_str());
-        let run_instruction = decoder.decode(&mut buffer);
-        let instruction = assert_instruction_has_been_parsed(run_instruction);
-        assert_eq!(instruction.to_string(),test_dockerfile.to_string());
+        let run_directive = decoder.decode(&mut buffer);
+        let directive = assert_directive_has_been_parsed(run_directive);
+        assert_eq!(directive.to_string(),test_dockerfile.to_string());
     }
 
     #[test]
@@ -742,11 +672,11 @@ ENTRYPOINT apk update && apk add python3 glib make g++ gcc libc-dev &&\
         let test_dockerfile = r#"ENTRYPOINT ["node", "server.js"]"#;
         let dockerfile_contents = format!("{}\n", test_dockerfile);
         let mut buffer = BytesMut::from(dockerfile_contents.as_str());
-        let run_instruction = decoder.decode(&mut buffer);
-        let instruction = assert_instruction_has_been_parsed(run_instruction);
-        assert_eq!(instruction.to_string(),test_dockerfile.to_string());
-        assert_eq!(instruction.is_entrypoint(),true);
-        assert_eq!(instruction.mode().unwrap(),&Mode::Exec);
+        let run_directive = decoder.decode(&mut buffer);
+        let directive = assert_directive_has_been_parsed(run_directive);
+        assert_eq!(directive.to_string(),test_dockerfile.to_string());
+        assert_eq!(directive.is_entrypoint(),true);
+        assert_eq!(directive.mode().unwrap(),&Mode::Exec);
     }
 
     #[test]
@@ -755,11 +685,11 @@ ENTRYPOINT apk update && apk add python3 glib make g++ gcc libc-dev &&\
         let test_dockerfile = r#"ENTRYPOINT node server.js"#;
         let dockerfile_contents = format!("{}\n", test_dockerfile);
         let mut buffer = BytesMut::from(dockerfile_contents.as_str());
-        let run_instruction = decoder.decode(&mut buffer);
-        let instruction = assert_instruction_has_been_parsed(run_instruction);
-        assert_eq!(instruction.to_string(),test_dockerfile.to_string());
-        assert_eq!(instruction.is_entrypoint(),true);
-        assert_eq!(instruction.mode().unwrap(),&Mode::Shell);
+        let run_directive = decoder.decode(&mut buffer);
+        let directive = assert_directive_has_been_parsed(run_directive);
+        assert_eq!(directive.to_string(),test_dockerfile.to_string());
+        assert_eq!(directive.is_entrypoint(),true);
+        assert_eq!(directive.mode().unwrap(),&Mode::Shell);
     }
 
     #[test]
@@ -768,11 +698,11 @@ ENTRYPOINT apk update && apk add python3 glib make g++ gcc libc-dev &&\
         let test_dockerfile = r#"CMD ["node", "server.js"]"#;
         let dockerfile_contents = format!("{}\n", test_dockerfile);
         let mut buffer = BytesMut::from(dockerfile_contents.as_str());
-        let run_instruction = decoder.decode(&mut buffer);
-        let instruction = assert_instruction_has_been_parsed(run_instruction);
-        assert_eq!(instruction.to_string(),test_dockerfile.to_string());
-        assert_eq!(instruction.is_cmd(),true);
-        assert_eq!(instruction.mode().unwrap(),&Mode::Exec);
+        let run_directive = decoder.decode(&mut buffer);
+        let directive = assert_directive_has_been_parsed(run_directive);
+        assert_eq!(directive.to_string(),test_dockerfile.to_string());
+        assert_eq!(directive.is_cmd(),true);
+        assert_eq!(directive.mode().unwrap(),&Mode::Exec);
     }
 
     #[test]
@@ -781,10 +711,10 @@ ENTRYPOINT apk update && apk add python3 glib make g++ gcc libc-dev &&\
         let test_dockerfile = r#"CMD node server.js"#;
         let dockerfile_contents = format!("{}\n", test_dockerfile);
         let mut buffer = BytesMut::from(dockerfile_contents.as_str());
-        let run_instruction = decoder.decode(&mut buffer);
-        let instruction = assert_instruction_has_been_parsed(run_instruction);
-        assert_eq!(instruction.to_string(),test_dockerfile.to_string());
-        assert_eq!(instruction.is_cmd(),true);
-        assert_eq!(instruction.mode().unwrap(),&Mode::Shell);
+        let run_directive = decoder.decode(&mut buffer);
+        let directive = assert_directive_has_been_parsed(run_directive);
+        assert_eq!(directive.to_string(),test_dockerfile.to_string());
+        assert_eq!(directive.is_cmd(),true);
+        assert_eq!(directive.mode().unwrap(),&Mode::Shell);
     }
 }
