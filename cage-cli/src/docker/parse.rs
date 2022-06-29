@@ -42,7 +42,8 @@ pub enum Directive {
         tokens: Vec<String>
     },
     Expose(Bytes),
-    // we only need to care about entrypoint, cmd and expose for cages
+    Run(Bytes),
+    // we only need to care about entrypoint, cmd, expose and run for cages
     Other {
         directive: String,
         arguments: Bytes
@@ -60,6 +61,10 @@ impl Directive {
 
     pub fn is_expose(&self) -> bool {
         matches!(self, Self::Expose(_))
+    }
+
+    pub fn is_run(&self) -> bool {
+        matches!(self, Self::Run(_))
     }
 
     pub fn set_mode(&mut self, new_mode: Mode) {
@@ -108,7 +113,7 @@ impl Directive {
                         .collect();
                 }
             },
-            Self::Expose(arguments) | Self::Other { arguments, .. } | Self::Comment(arguments) => {
+            Self::Expose(arguments) | Self::Other { arguments, .. } | Self::Comment(arguments) | Self::Run(arguments) => {
                 *arguments = Bytes::from(given_arguments)
             }
         }
@@ -116,7 +121,7 @@ impl Directive {
 
     fn arguments(&self) -> String {
         match self {
-            Self::Comment(bytes) | Self::Expose(bytes) | Self::Other{ arguments: bytes, .. }=> {
+            Self::Comment(bytes) | Self::Expose(bytes) | Self::Run(bytes) | Self::Other{ arguments: bytes, .. }=> {
                 std::str::from_utf8(bytes.as_ref()).unwrap_or("[Invalid utf8 arguments]").to_string()
             },
             Self::Entrypoint { mode, tokens } | Self::Cmd { mode, tokens } => {
@@ -137,6 +142,26 @@ impl Directive {
             _ => None
         }
     }
+
+    pub fn new_entrypoint<T: Into<Vec<String>>>(mode: Mode, tokens: T) -> Self {
+        Self::Entrypoint {
+            mode: Some(mode),
+            tokens: tokens.into()
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn new_cmd<T: Into<Vec<String>>>(mode: Mode, tokens: T) -> Self {
+        Self::Cmd {
+            mode: Some(mode),
+            tokens: tokens.into()
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn new_run<B: Into<Bytes>>(arguments: B) -> Self {
+        Self::Run(arguments.into())
+    }
 }
 
 impl std::fmt::Display for Directive {
@@ -146,6 +171,7 @@ impl std::fmt::Display for Directive {
             Self::Entrypoint { .. } => "ENTRYPOINT",
             Self::Cmd { .. } => "CMD",
             Self::Expose(_) => "EXPOSE",
+            Self::Run(_) => "RUN",
             Self::Other { directive, .. } => directive.as_str()
         };
         write!(f, "{} {}", prefix, self.arguments())
@@ -173,6 +199,7 @@ impl TryFrom<&[u8]> for Directive {
                 tokens: Vec::new()
             },
             "EXPOSE" => Self::Expose(Bytes::new()),
+            "RUN" => Self::Run(Bytes::new()),
             _ => Self::Other { directive: directive_str.to_string(), arguments: Bytes::new() }
         };
 
@@ -728,5 +755,28 @@ ENTRYPOINT apk update && apk add python3 glib make g++ gcc libc-dev &&\
         assert_eq!(directive.to_string(),test_dockerfile.to_string());
         assert_eq!(directive.is_cmd(),true);
         assert_eq!(directive.mode().unwrap(),&Mode::Shell);
+    }
+
+    #[test]
+    fn test_constructor_for_run_commands() {
+        let run_directive = Directive::new_run("echo 'Test'".to_string());
+        assert_eq!(run_directive.is_run(), true);
+        assert_eq!(run_directive.to_string(), String::from("RUN echo 'Test'"))
+    }
+
+    #[test]
+    fn test_constructor_for_entrypoint_commands() {
+        let entrypoint_directive = Directive::new_entrypoint(Mode::Shell, vec!["echo 'Test'".to_string()]);
+        assert_eq!(entrypoint_directive.is_entrypoint(), true);
+        assert_eq!(entrypoint_directive.mode().unwrap(), &Mode::Shell);
+        assert_eq!(entrypoint_directive.to_string(), String::from("ENTRYPOINT echo 'Test'"))
+    }
+
+    #[test]
+    fn test_constructor_for_cmd_commands() {
+        let entrypoint_directive = Directive::new_cmd(Mode::Shell, vec!["echo 'Test'".to_string()]);
+        assert_eq!(entrypoint_directive.is_cmd(), true);
+        assert_eq!(entrypoint_directive.mode().unwrap(), &Mode::Shell);
+        assert_eq!(entrypoint_directive.to_string(), String::from("CMD echo 'Test'"))
     }
 }

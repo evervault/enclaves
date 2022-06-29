@@ -5,9 +5,9 @@ use clap::Parser;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tokio_util::codec::Decoder;
-use crate::docker::parse::Directive;
 
 mod docker;
+use docker::parse::{Directive, Mode};
 
 #[derive(Parser,Debug)]
 #[clap(name = "build")]
@@ -102,12 +102,13 @@ async fn main() {
         return;
     }
 
-    let entrypoint = docker::create_combined_docker_entrypoint(last_entrypoint, last_cmd);
-
+    // TODO: Add entrypoint as exec command to runit service
+    let _entrypoint = docker::create_combined_docker_entrypoint(last_entrypoint, last_cmd);
+    let new_entrypoint = Directive::new_entrypoint(Mode::Exec, vec!["runsvdir".to_string(), "/etc/service".to_string()]);
+    instruction_set.push(new_entrypoint);
     instruction_set.iter().for_each(|instruction| {
         println!("{}", instruction)
     });
-    println!("Composed entrypoint: {}", entrypoint);
 }
 
 
