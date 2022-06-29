@@ -1,0 +1,27 @@
+on:
+  push:
+    paths:
+      - control-plane/**
+      - .github/workflows/lint-and-test-control-plane.yml
+name: Lint and Test
+jobs:
+  clippy_check_control_plane:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: rustup component add clippy
+      - name: navigate to control-plane
+        run: cd control-plane
+      - name: add clippy
+        run: rustup component add clippy
+      - uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Compile project
+        run: cargo build --all-features
+      - name: Test project
+        run: cargo test

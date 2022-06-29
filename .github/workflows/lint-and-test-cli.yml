@@ -1,0 +1,25 @@
+on:
+  push:
+    paths:
+      - cage-cli/**
+      - .github/workflows/lint-and-test-cli.yml
+name: Lint and Test
+jobs:
+  clippy_check_cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: rustup component add clippy
+      - name: navigate to cli
+        run: cd cage-cli
+      - uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Compile project
+        run: cargo build --all-features
+      - name: Test project
+        run: cargo test
