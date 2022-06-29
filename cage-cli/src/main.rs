@@ -7,6 +7,7 @@ use tokio::io::AsyncReadExt;
 use tokio_util::codec::Decoder;
 
 mod docker;
+use docker::enclave_builder;
 use docker::parse::{Directive, Mode};
 
 #[derive(Parser,Debug)]
@@ -18,7 +19,8 @@ struct BuildArgs {
 
 #[tokio::main]
 async fn main() {
-    let build_args = BuildArgs::parse();
+    // using this as it's a Dockerfile currently in the repo
+    let build_args = BuildArgs{ dockerfile: "./nitro-cli-image.Dockerfile".to_string() };
     // read dockerfile
     let dockerfile_path = std::path::Path::new(build_args.dockerfile.as_str());
     if !dockerfile_path.exists() {
@@ -109,6 +111,11 @@ async fn main() {
     instruction_set.iter().for_each(|instruction| {
         println!("{}", instruction)
     });
+
+    // build enclave, and also output in current directory. Mainly here just to avoid "unused" warnings
+    let user_context_path = "..";
+    let user_dockerfile_path = "../runtime/Dockerfile";
+    let _temp_output_dir = enclave_builder::build_enclave(user_dockerfile_path, user_context_path, true, false).unwrap();
 }
 
 

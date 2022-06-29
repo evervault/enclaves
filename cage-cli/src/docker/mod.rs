@@ -1,4 +1,5 @@
 pub mod parse;
+pub mod enclave_builder;
 use parse::Directive;
 use itertools::join;
 
