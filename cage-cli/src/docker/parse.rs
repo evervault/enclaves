@@ -137,6 +137,21 @@ impl Directive {
             _ => None
         }
     }
+
+    pub fn new_entrypoint<T: Into<Vec<String>>>(mode: Mode, tokens: T) -> Self {
+        Self::Entrypoint {
+            mode: Some(mode),
+            tokens: tokens.into()
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn new_cmd<T: Into<Vec<String>>>(mode: Mode, tokens: T) -> Self {
+        Self::Cmd {
+            mode: Some(mode),
+            tokens: tokens.into()
+        }
+    }
 }
 
 impl std::fmt::Display for Directive {
