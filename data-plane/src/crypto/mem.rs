@@ -1,12 +1,13 @@
 //! At rest encryption of sensitive data.
 //!
 //! This implementation is based heavily on sequoia's implementation of protected memory. See
-//! [here](https://gitlab.com/sequoia-pgp/sequoia/openpgp/src/crypto/mem.rs).
+//! [here](https://gitlab.com/sequoia-pgp/sequoia/-/blob/28639cf97fe3e526c6ace7499a3117d87bc1bd8f/openpgp/src/crypto/mem.rs).
 
 use std::cmp::min;
 use std::fmt;
 use std::ops::{Deref, DerefMut};
 use crate::error::Error;
+use crate::crypto::rand;
 
 pub struct Protected {
     data: *mut [u8]
@@ -100,7 +101,7 @@ lazy_static::lazy_static! {
         let mut pages = Vec::new();
         for _ in 0..ENCRYPTED_MEMORY_PREKEY_PAGES {
 	    let mut page = vec![0; ENCRYPTED_MEMORY_PAGE_SIZE];
-	    openssl::rand::rand_bytes(&mut page).unwrap();
+	    rand::rand_bytes(&mut page).unwrap();
 	    pages.push(page.into());
         }
         pages.into()
@@ -177,7 +178,7 @@ fn derive_private_key(salt: &[u8]) -> Protected {
 
 fn random_salt() -> [u8; 32] {
     let mut salt = [0; 32];
-    openssl::rand::rand_bytes(&mut salt).unwrap();
+    rand::rand_bytes(&mut salt).unwrap();
     salt
 }
 

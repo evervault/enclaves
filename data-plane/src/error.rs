@@ -17,3 +17,5 @@ impl fmt::Debug for Error {
 	write!(f, "{}", self)
     }
 }
+
+pub type Result<T> = std::result::Result<T, Error>;
