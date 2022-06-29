@@ -1,3 +1,5 @@
+extern crate core;
+
 use bytes::{Buf, BytesMut};
 use clap::Parser;
 use tokio::fs::File;
@@ -105,7 +107,7 @@ async fn main() {
     instruction_set.iter().for_each(|instruction| {
         println!("{}", instruction)
     });
-    println!("{}", entrypoint);
+    println!("Composed entrypoint: {}", entrypoint);
 }
 
 

@@ -1,3 +1,4 @@
+use itertools::{join};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use tokio_util::codec::Decoder;
 use std::convert::{From,TryFrom,TryInto};
@@ -31,37 +32,115 @@ impl From<u8> for Mode {
 
 #[derive(Clone, Debug)]
 pub enum Directive {
-    Comment,
-    Entrypoint,
-    Cmd,
-    Expose,
+    Comment(Bytes),
+    Entrypoint {
+        mode: Option<Mode>,
+        tokens: Vec<String>
+    },
+    Cmd {
+        mode: Option<Mode>,
+        tokens: Vec<String>
+    },
+    Expose(Bytes),
     // we only need to care about entrypoint, cmd and expose for cages
-    Other(String)
+    Other {
+        directive: String,
+        arguments: Bytes
+    }
 }
 
 impl Directive {
     pub fn is_cmd(&self) -> bool {
-        matches!(self, Self::Cmd)
+        matches!(self, Self::Cmd{ .. })
     }
 
     pub fn is_entrypoint(&self) -> bool {
-        matches!(self, Self::Entrypoint)
+        matches!(self, Self::Entrypoint{ .. })
     }
 
     pub fn is_expose(&self) -> bool {
-        matches!(self, Self::Expose)
+        matches!(self, Self::Expose(_))
+    }
+
+    pub fn set_mode(&mut self, new_mode: Mode) {
+        match self {
+            Self::Entrypoint { mode, .. } | Self::Cmd { mode, .. } => {
+                *mode = Some(new_mode);
+            },
+            _ => panic!("Attempt to set mode on directive which is not Entrypoint or Cmd")
+        }
+    }
+
+    pub fn mode(&self) -> Option<&Mode> {
+        match self {
+            Self::Entrypoint { mode, .. } | Self::Cmd { mode, .. } => mode.as_ref(),
+            _ => None
+        }
+    }
+
+    pub fn set_arguments(&mut self, given_arguments: Vec<u8>) {
+        match self {
+            Self::Entrypoint { mode, tokens } | Self::Cmd { mode, tokens } => {
+                let mode = mode.as_ref().unwrap();
+                if mode.is_exec() {
+                    let terms = &given_arguments[1..given_arguments.len()-1]; // remove square brackets
+                    let parsed_tokens: Vec<String> = terms.split(|byte| &[*byte] == b",")
+                        .filter_map(|token_slice| std::str::from_utf8(token_slice).ok())
+                        .map(|token| {
+                            let trimmed_token = token.trim();
+                            let token_without_leading_quote = trimmed_token.strip_prefix("\"").unwrap_or(trimmed_token);
+                            token_without_leading_quote.strip_suffix("\"").unwrap_or(token_without_leading_quote).to_string()
+                        })
+                        .collect();
+                    *tokens = parsed_tokens;
+                } else {
+                    *tokens = given_arguments.as_slice()
+                        .split(|byte| &[*byte] == b" ")
+                        .filter_map(|token_slice| std::str::from_utf8(token_slice).ok())
+                        .map(|token_str| token_str.to_string())
+                        .collect();
+                }
+            },
+            Self::Expose(arguments) | Self::Other { arguments, .. } | Self::Comment(arguments) => {
+                *arguments = Bytes::from(given_arguments)
+            }
+        }
+    }
+
+    fn arguments(&self) -> String {
+        match self {
+            Self::Comment(bytes) | Self::Expose(bytes) | Self::Other{ arguments: bytes, .. }=> {
+                std::str::from_utf8(bytes.as_ref()).unwrap_or("[Invalid utf8 arguments]").to_string()
+            },
+            Self::Entrypoint { mode, tokens } | Self::Cmd { mode, tokens } => {
+                if mode.as_ref().map(|mode| mode.is_exec()).unwrap_or(false) {
+                    let exec_args = tokens.iter().map(|token| format!("\"{}\"", token));
+                    format!("[{}]", join(exec_args, ", "))
+                } else {
+                    join(tokens.as_slice(), " ")
+                }
+            }
+        }
+    }
+
+    pub fn tokens(&self) -> Option<&[String]> {
+        match self {
+            Self::Entrypoint { tokens, .. } | Self::Cmd { tokens, .. } => Some(tokens.as_slice()),
+            _ => None
+        }
     }
 }
 
 impl std::fmt::Display for Directive {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Comment => write!(f, "#"),
-            Self::Entrypoint => write!(f, "ENTRYPOINT"),
-            Self::Cmd => write!(f, "CMD"),
-            Self::Expose => write!(f, "EXPOSE"),
-            Self::Other(directive) => write!(f, "{}", directive)
-        }
+        let prefix = match self {
+            Self::Comment(_) => "#",
+            Self::Entrypoint { .. } => "ENTRYPOINT",
+            Self::Cmd { .. } => "CMD",
+            Self::Expose(_) => "EXPOSE",
+            Self::Other { directive, .. } => directive.as_str()
+        };
+        write!(f, "{} {}", prefix, self.arguments())
     }
 }
 
@@ -73,14 +152,20 @@ impl TryFrom<&[u8]> for Directive {
             .map_err(|err| DecodeError::NonUtf8Directive(err))?;
 
         if directive_str.starts_with("#") {
-            return Ok(Self::Comment);
+            return Ok(Self::Comment(Bytes::new()));
         }
 
         let directive = match directive_str.to_ascii_uppercase().as_str() {
-            "ENTRYPOINT" => Self::Entrypoint,
-            "CMD" => Self::Cmd,
-            "EXPOSE" => Self::Expose,
-            _ => Self::Other(directive_str.to_string())
+            "ENTRYPOINT" => Self::Entrypoint {
+                mode: None,
+                tokens: Vec::new()
+            },
+            "CMD" => Self::Cmd {
+                mode: None,
+                tokens: Vec::new()
+            },
+            "EXPOSE" => Self::Expose(Bytes::new()),
+            _ => Self::Other { directive: directive_str.to_string(), arguments: Bytes::new() }
         };
 
         Ok(directive)
@@ -108,7 +193,11 @@ impl Instruction {
     }
 
     pub fn mode(&self) -> Option<&Mode> {
-        self.mode.as_ref()
+        self.directive.mode()
+    }
+
+    pub fn tokens(&self) -> Option<&[String]> {
+        self.directive.tokens()
     }
 }
 
@@ -125,8 +214,7 @@ impl std::fmt::Debug for Instruction {
 
 impl std::fmt::Display for Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let content_str = std::str::from_utf8(self.content.as_ref()).expect("Non utf8 content");
-        write!(f, "{} {}", self.directive, content_str)
+        write!(f, "{}", self.directive)
     }
 }
 
@@ -220,17 +308,18 @@ impl std::convert::TryInto<Option<Instruction>> for DecoderState {
     fn try_into(self) -> Result<Option<Instruction>, Self::Error> {
         match self {
             Self::ReadingComment { content } => Ok(Some(Instruction {
-                directive: Directive::Comment,
-                content: Bytes::from(content),
+                directive: Directive::Comment(Bytes::from(content)),
+                content: Bytes::new(),
                 mode: None
             })),
             Self::ReadingDirectiveArguments {
-                directive,
+                mut directive,
                 directive_mode,
                 arguments,
                 ..
             } => {
                 let arguments = arguments.ok_or(DecodeError::IncompleteInstruction)?;
+                directive.set_arguments(arguments.to_vec());
                 Ok(Some(Instruction {
                     directive,
                     content: Bytes::from(arguments),
@@ -338,9 +427,10 @@ impl DockerfileDecoder {
         loop {
             match self.read_u8(src) {
                 Some(next_byte) if next_byte == b'\n' => {
+                    let comment_bytes = content.to_vec();
                     return Ok(Some(Instruction {
-                        directive: Directive::Comment,
-                        content: Bytes::from(content.to_vec()),
+                        directive: Directive::Comment(Bytes::from(comment_bytes.clone())),
+                        content: Bytes::from(comment_bytes),
                         mode: None
                     }));
                 },
@@ -379,7 +469,7 @@ impl DockerfileDecoder {
     fn decode_directive_arguments(
         &mut self,
         src: &mut BytesMut,
-        directive: &Directive,
+        directive: &mut Directive,
         arguments: &mut Option<BytesMut>,
         new_line_behaviour: &mut NewLineBehaviour,
         directive_mode: &mut Option<Mode>,
@@ -401,6 +491,8 @@ impl DockerfileDecoder {
                 Some(next_byte) if next_byte == b'\n' => {
                     // safety: first arm will be matched if next_byte is a newline and arguments is None
                     let content = arguments.as_ref().unwrap().to_vec();
+                    directive.set_arguments(content.clone());
+                    println!("Directive arguments set from content: {}", std::str::from_utf8(content.as_slice()).unwrap());
                     return Ok(Some(Instruction {
                         directive: directive.clone(),
                         content: Bytes::from(content),
@@ -440,7 +532,7 @@ impl DockerfileDecoder {
                     if arguments.is_none() {
                         // first char determines shell vs exec
                         if directive.is_cmd() || directive.is_entrypoint() {
-                            *directive_mode = Some(Mode::from(next_byte));
+                            directive.set_mode(Mode::from(next_byte));
                         }
                         *arguments = Some(BytesMut::new());
                     }
@@ -508,7 +600,7 @@ impl Decoder for DockerfileDecoder {
                     next_state
                 },
                 DecoderState::ReadingDirectiveArguments {
-                    directive,
+                    mut directive,
                     mut arguments,
                     mut new_line_behaviour,
                     mut directive_mode,
@@ -516,7 +608,7 @@ impl Decoder for DockerfileDecoder {
                 } => {
                     return match self.decode_directive_arguments(
                         src,
-                        &directive,
+                        &mut directive,
                         &mut arguments,
                         &mut new_line_behaviour,
                         &mut directive_mode,
@@ -647,14 +739,14 @@ ENTRYPOINT apk update && apk add python3 glib make g++ gcc libc-dev &&\
     #[test]
     fn test_parsing_of_entrypoint_exec_mode() {
         let mut decoder = DockerfileDecoder::new();
-        let test_dockerfile = r#"ENTRYPOINT ["node","server.js"]"#;
+        let test_dockerfile = r#"ENTRYPOINT ["node", "server.js"]"#;
         let dockerfile_contents = format!("{}\n", test_dockerfile);
         let mut buffer = BytesMut::from(dockerfile_contents.as_str());
         let run_instruction = decoder.decode(&mut buffer);
         let instruction = assert_instruction_has_been_parsed(run_instruction);
         assert_eq!(instruction.to_string(),test_dockerfile.to_string());
         assert_eq!(instruction.is_entrypoint(),true);
-        assert_eq!(instruction.mode.unwrap(),Mode::Exec);
+        assert_eq!(instruction.mode().unwrap(),&Mode::Exec);
     }
 
     #[test]
@@ -667,20 +759,20 @@ ENTRYPOINT apk update && apk add python3 glib make g++ gcc libc-dev &&\
         let instruction = assert_instruction_has_been_parsed(run_instruction);
         assert_eq!(instruction.to_string(),test_dockerfile.to_string());
         assert_eq!(instruction.is_entrypoint(),true);
-        assert_eq!(instruction.mode.unwrap(),Mode::Shell);
+        assert_eq!(instruction.mode().unwrap(),&Mode::Shell);
     }
 
     #[test]
     fn test_parsing_of_cmd_exec_mode() {
         let mut decoder = DockerfileDecoder::new();
-        let test_dockerfile = r#"CMD ["node","server.js"]"#;
+        let test_dockerfile = r#"CMD ["node", "server.js"]"#;
         let dockerfile_contents = format!("{}\n", test_dockerfile);
         let mut buffer = BytesMut::from(dockerfile_contents.as_str());
         let run_instruction = decoder.decode(&mut buffer);
         let instruction = assert_instruction_has_been_parsed(run_instruction);
         assert_eq!(instruction.to_string(),test_dockerfile.to_string());
         assert_eq!(instruction.is_cmd(),true);
-        assert_eq!(instruction.mode.unwrap(),Mode::Exec);
+        assert_eq!(instruction.mode().unwrap(),&Mode::Exec);
     }
 
     #[test]
@@ -693,6 +785,6 @@ ENTRYPOINT apk update && apk add python3 glib make g++ gcc libc-dev &&\
         let instruction = assert_instruction_has_been_parsed(run_instruction);
         assert_eq!(instruction.to_string(),test_dockerfile.to_string());
         assert_eq!(instruction.is_cmd(),true);
-        assert_eq!(instruction.mode.unwrap(),Mode::Shell);
+        assert_eq!(instruction.mode().unwrap(),&Mode::Shell);
     }
 }

@@ -1,5 +1,6 @@
 pub mod parse;
 use parse::Instruction;
+use itertools::join;
 
 /*
  Expected behaviour of various ENTRYPOINT/CMD combos in dockerfiles.
@@ -17,15 +18,18 @@ use parse::Instruction;
 */
 
 pub fn create_combined_docker_entrypoint(entrypoint: Option<Instruction>, cmd: Option<Instruction>) -> String {
+    let format_tokens = |tokens: &[String]| -> String {
+        join(tokens, " ")
+    };
     match (entrypoint.as_ref(), cmd.as_ref()) {
-        (Some(entrypoint), None) => entrypoint.to_string(),
-        (None, Some(cmd)) => cmd.to_string(),
+        (Some(entrypoint), None) => format_tokens(entrypoint.tokens().unwrap()),
+        (None, Some(cmd)) => format_tokens(cmd.tokens().unwrap()),
         (Some(entrypoint), Some(cmd)) => {
             if entrypoint.mode().unwrap().is_shell() {
-                entrypoint.to_string()
+                format_tokens(entrypoint.tokens().unwrap())
             } else {
                 // TODO: this should be composing terms, not full directives
-                format!("{} {}", entrypoint.to_string(), cmd.to_string())
+                format!("{} {}", format_tokens(entrypoint.tokens().unwrap()), format_tokens(cmd.tokens().unwrap()))
             }
         },
         (None, None) => panic!("Either entrypoint or cmd must be specified")
