@@ -1,3 +1,8 @@
+//! At rest encryption of sensitive data.
+//!
+//! This implementation is based heavily on sequoia's implementation of protected memory. See
+//! [here](https://gitlab.com/sequoia-pgp/sequoia/openpgp/src/crypto/mem.rs).
+
 use std::cmp::min;
 use std::fmt;
 use std::ops::{Deref, DerefMut};
@@ -189,7 +194,7 @@ mod tests {
     }
 
     #[test]
-    fn encryption_works () {
+    fn encryption_and_decryption_work () {
 	let encrypted = Encrypted::new([1,2,3], random_salt());
 	println!("Encrypted data: {:?}", encrypted);
 	encrypted.map_cipher(|ciphertext| assert_ne!(ciphertext, [1,2,3]));
