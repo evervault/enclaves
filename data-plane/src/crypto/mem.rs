@@ -12,9 +12,7 @@ unsafe impl Sync for Protected {}
 
 impl Clone for Protected {
     fn clone (&self) -> Protected {
-	self.as_ref()
-	    .to_vec()
-	    .into()
+	self.as_ref().to_vec().into()
     }
 }
 
@@ -63,11 +61,7 @@ impl Drop for Protected {
 impl PartialEq for Protected {
     fn eq(&self, other: &Protected) -> bool {
 	unsafe {
-	    memsec::memcmp(
-		self.as_ptr(),
-		other.as_ptr(),
-		min(self.len(), other.len())
-	    ) == 0
+	    memsec::memcmp(self.as_ptr(), other.as_ptr(), min(self.len(), other.len())) == 0
 	}
     }
 }
@@ -86,12 +80,8 @@ impl fmt::Debug for Protected {
     }
 }
 
-impl fmt::Debug for Encrypted {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-	write!(f, "{{data: {:?}, salt: {:?}}}", self.data, self.salt)
-    }
-}
-
+#[derive(Debug)]
+#[derive(Clone)]
 pub struct Encrypted {
     data: Protected,
     salt: Protected
@@ -166,6 +156,12 @@ impl Encrypted {
     }
 }
 
+impl PartialEq for Encrypted {
+    fn eq(&self, other: &Encrypted) -> bool {
+	self.data == other.data
+    }
+}
+
 fn derive_private_key(salt: &[u8]) -> Protected {
     let mut hasher = openssl::sha::Sha256::new();
     hasher.update(&salt[..]);
@@ -173,22 +169,23 @@ fn derive_private_key(salt: &[u8]) -> Protected {
     hasher.finish().into()
 }
 
+
+fn random_salt() -> [u8; 32] {
+    let mut salt = [0; 32];
+    openssl::rand::rand_bytes(&mut salt).unwrap();
+    salt
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn random_salt() -> [u8; 32] {
-	let mut salt = [0; 32];
-	openssl::rand::rand_bytes(&mut salt).unwrap();
-	salt
-    }
-    
     #[test]
     fn comparison_of_protected_data () {
 	assert_eq!(Protected::from([1,2,3]),
 		   Protected::from([1,2,3]));
-	assert_ne!(Protected::from([1,2,3]),
-		   Protected::from([3,2,1]));		   
+	assert_ne!(Protected::from([4,5,6]),
+		   Protected::from([7,8,9]));
     }
 
     #[test]

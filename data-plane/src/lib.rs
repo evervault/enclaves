@@ -1,2 +1,2 @@
-pub mod protect;
+pub mod crypto;
 pub mod error;
