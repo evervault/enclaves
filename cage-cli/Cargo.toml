@@ -7,12 +7,7 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "3.1.18", features = ["derive"] }
-tokio = { version = "1.18.2", features = ["rt","macros","fs"] }
+tokio = { version = "1.18.2", features = ["rt","rt-multi-thread","macros","fs"] }
 tokio-util = { version = "0.6", features = ["full"] }
-bollard = "0.12"
-futures-util = "0.3.21"
-flate2 = "1.0.24"
-tar = "0.4.38"
-hyper = "0.14.19"
 bytes = "1"
 itertools = "0.10.3"
