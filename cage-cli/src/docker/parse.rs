@@ -83,6 +83,11 @@ impl Directive {
             Self::Entrypoint { mode, tokens } | Self::Cmd { mode, tokens } => {
                 let mode = mode.as_ref().unwrap();
                 if mode.is_exec() {
+                    // docker exec commands are given in the form of: ["exec_cmd", "arg1", "arg2"]
+                    // so to isolate the individual tokens we need to:
+                    // - remove the first and last characters ('[', ']')
+                    // - split on "," to get individual terms
+                    // - trim each term and remove first and last ('"', '"')
                     let terms = &given_arguments[1..given_arguments.len()-1]; // remove square brackets
                     let parsed_tokens: Vec<String> = terms.split(|byte| &[*byte] == b",")
                         .filter_map(|token_slice| std::str::from_utf8(token_slice).ok())
@@ -94,6 +99,8 @@ impl Directive {
                         .collect();
                     *tokens = parsed_tokens;
                 } else {
+                    // docker shell commands are given in the form of: exec_cmd arg1 arg2
+                    // so we need to split on space and convert to strings
                     *tokens = given_arguments.as_slice()
                         .split(|byte| &[*byte] == b" ")
                         .filter_map(|token_slice| std::str::from_utf8(token_slice).ok())
@@ -114,6 +121,7 @@ impl Directive {
             },
             Self::Entrypoint { mode, tokens } | Self::Cmd { mode, tokens } => {
                 if mode.as_ref().map(|mode| mode.is_exec()).unwrap_or(false) {
+                    // Recreate an exec mode command — wrap tokens in quotes, and join with ", "
                     let exec_args = tokens.iter().map(|token| format!("\"{}\"", token));
                     format!("[{}]", join(exec_args, ", "))
                 } else {
@@ -207,6 +215,8 @@ impl TryFrom<u8> for StringToken {
     }
 }
 
+// tiny stack which is used to track if we are inside/outside of a string
+// which helps with incorrectly treating # in strings as a comment
 struct StringStack {
     inner: Vec<StringToken>
 }
@@ -241,6 +251,7 @@ impl std::fmt::Display for StringStack {
     }
 }
 
+// States for the Dockerfile decoder's internal state management
 enum DecoderState {
     ReadingDirective(BytesMut),
     ReadingDirectiveArguments {
@@ -249,18 +260,18 @@ enum DecoderState {
         new_line_behaviour: NewLineBehaviour,
         string_stack: StringStack,
     },
-    ReadingComment {
-        content: BytesMut,
-    },
+    ReadingComment(BytesMut),
     ReadingWhitespace
 }
 
+// Helper function to clear out any lingering state in the Decoder on eof
+// Mainly used to prevent failed parsing when the final directive in a fail doesn't have a newline
 impl std::convert::TryInto<Option<Directive>> for DecoderState {
     type Error = DecodeError;
 
     fn try_into(self) -> Result<Option<Directive>, Self::Error> {
         match self {
-            Self::ReadingComment { content } => Ok(Some(Directive::Comment(Bytes::from(content)))),
+            Self::ReadingComment(content) => Ok(Some(Directive::Comment(Bytes::from(content)))),
             Self::ReadingDirectiveArguments {
                 mut directive,
                 arguments,
@@ -300,9 +311,7 @@ impl std::convert::TryFrom<u8> for DecoderState {
             bytes.put_u8(value);
             Ok(Self::ReadingDirective(bytes))
         } else if value == b'#' {
-            Ok(Self::ReadingComment {
-                content: BytesMut::new(),
-            })
+            Ok(Self::ReadingComment(BytesMut::new()))
         } else {
             Err(DecodeError::UnexpectedToken)
         }
@@ -344,9 +353,7 @@ impl DockerfileDecoder {
             bytes.put_u8(first_byte);
             DecoderState::ReadingDirective(bytes)
         } else if first_byte == b'#' {
-            DecoderState::ReadingComment {
-                content: BytesMut::with_capacity(1),
-            }
+            DecoderState::ReadingComment(BytesMut::with_capacity(1))
         } else {
             return Err(DecodeError::UnexpectedToken);
         };
@@ -416,9 +423,12 @@ impl DockerfileDecoder {
         // read until new line, not preceded by '\'
         loop {
             match self.read_u8(src) {
+                // if we see a newline character or backslash as the first character for a directives argument
+                // return an error
                 Some(next_byte) if (next_byte == b'\n' || next_byte == b'\\') && arguments.is_none() => {
                     return Err(DecodeError::UnexpectedToken)
                 },
+                // newline is either escaped or we are reading an embedded comment
                 Some(next_byte) if next_byte == b'\n' && !new_line_behaviour.is_observe() => {
                     if arguments.is_none() {
                         *arguments = Some(BytesMut::new());
@@ -426,12 +436,14 @@ impl DockerfileDecoder {
                     let argument_mut = arguments.as_mut().unwrap();
                     argument_mut.put_u8(next_byte);
                 },
+                // new line signifies end of directive if unescaped
                 Some(next_byte) if next_byte == b'\n' => {
                     // safety: first arm will be matched if next_byte is a newline and arguments is None
                     let content = arguments.as_ref().unwrap().to_vec();
                     directive.set_arguments(content.clone());
                     return Ok(Some(directive.clone()));
                 },
+                // if a newline character is next, escape it, if already escaped then observe (\\)
                 Some(next_byte) if next_byte == b'\\' => {
                     if new_line_behaviour.is_escaped() {
                         *new_line_behaviour = NewLineBehaviour::Observe;
@@ -460,10 +472,11 @@ impl DockerfileDecoder {
                     }
                     let argument_mut = arguments.as_mut().unwrap();
                     argument_mut.put_u8(next_byte);
-                }
+                },
+                // nothing special about this byte, so add to arguments buffer
                 Some(next_byte) => {
                     if arguments.is_none() {
-                        // first char determines shell vs exec
+                        // first char for CMD & EXEC determines the mode (shell vs exec)
                         if directive.is_cmd() || directive.is_entrypoint() {
                             directive.set_mode(Mode::from(next_byte));
                         }
@@ -472,10 +485,13 @@ impl DockerfileDecoder {
                     let argument_mut = arguments.as_mut().unwrap();
                     argument_mut.put_u8(next_byte);
 
+                    // only update new line behaviour when escaped (i.e. cancel \ if followed by non-newline char)
+                    // if new line behaviour is set to ignore line, then we are in an embedded comment, new line remains escaped
                     if new_line_behaviour.is_escaped() {
                         *new_line_behaviour = NewLineBehaviour::Observe;
                     }
 
+                    // if this byte is a string character, check if stack can be popped, else push
                     if next_byte == b'\'' || next_byte == b'"' {
                         let token = StringToken::try_from(next_byte).unwrap();
                         if string_stack.peek_top() == Some(&token) {
@@ -512,15 +528,11 @@ impl Decoder for DockerfileDecoder {
         loop {
             let next_state = match decode_state {
                 DecoderState::ReadingWhitespace => self.decode_whitespace(src)?,
-                DecoderState::ReadingComment {
-                    mut content
-                } => {
+                DecoderState::ReadingComment(mut content) => {
                     return match self.decode_comment(src, &mut content)? {
                         Some(directive) => Ok(Some(directive)),
                         None => {
-                            self.current_state = Some(DecoderState::ReadingComment {
-                                content
-                            });
+                            self.current_state = Some(DecoderState::ReadingComment(content));
                             Ok(None)
                         }
                     };
