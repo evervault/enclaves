@@ -1,9 +1,21 @@
 use std::cmp::min;
 use std::fmt;
 use std::ops::{Deref, DerefMut};
+use crate::error::Error;
 
 pub struct Protected {
     data: *mut [u8]
+}
+
+unsafe impl Send for Protected {}
+unsafe impl Sync for Protected {}
+
+impl Clone for Protected {
+    fn clone (&self) -> Protected {
+	self.as_ref()
+	    .to_vec()
+	    .into()
+    }
 }
 
 impl Deref for Protected {
@@ -60,6 +72,8 @@ impl PartialEq for Protected {
     }
 }
 
+impl Eq for Protected {}
+
 impl fmt::Debug for Protected {
     #[cfg(debug_assertions)]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -83,6 +97,8 @@ pub struct Encrypted {
     salt: Protected
 }
 
+const ENCRYPTED_MEMORY_PREKEY_PAGES: usize = 4;
+const ENCRYPTED_MEMORY_PAGE_SIZE: usize = 4096;
 
 lazy_static::lazy_static! {
     static ref PREKEY: Box<[Box<[u8]>]> = {
@@ -131,7 +147,7 @@ impl Encrypted {
 	f(&self.data)
     }
 
-    pub fn map<F, R> (&self, mut f: F) -> R
+    pub fn map<F, R> (&self, mut f: F) -> Result<R, Error>
     where
 	F: FnMut(&[u8]) -> R
     {
@@ -142,14 +158,13 @@ impl Encrypted {
 	    &[],
 	    &self.data[..self.data.len()-16],
 	    &self.data[self.data.len()-16..]
-	).unwrap().into();
+	)
+	    .map_err(|e| Error::Crypto(e.to_string()))?
+	    .into();
 	
-	f(&plaintext)
+	Ok(f(&plaintext))
     }
 }
-
-const ENCRYPTED_MEMORY_PREKEY_PAGES: usize = 4;
-const ENCRYPTED_MEMORY_PAGE_SIZE: usize = 4096;
 
 fn derive_private_key(salt: &[u8]) -> Protected {
     let mut hasher = openssl::sha::Sha256::new();
@@ -163,24 +178,25 @@ mod tests {
     use super::*;
 
     fn random_salt() -> [u8; 32] {
-	let mut salt = [0u8; 32];
+	let mut salt = [0; 32];
 	openssl::rand::rand_bytes(&mut salt).unwrap();
 	salt
     }
     
     #[test]
     fn comparison_of_protected_data () {
-	assert_eq!(Protected::from(vec![1,2,3]),
-		   Protected::from(vec![1,2,3]));
-	assert_ne!(Protected::from(vec![1,2,3]),
-		   Protected::from(vec![3,2,1]));		   
+	assert_eq!(Protected::from([1,2,3]),
+		   Protected::from([1,2,3]));
+	assert_ne!(Protected::from([1,2,3]),
+		   Protected::from([3,2,1]));		   
     }
 
     #[test]
     fn encryption_works () {
-	let encrypted = Encrypted::new(vec![1,2,3], random_salt());
+	let encrypted = Encrypted::new([1,2,3], random_salt());
 	println!("Encrypted data: {:?}", encrypted);
-	encrypted.map_cipher(|ciphertext| assert_ne!(ciphertext, vec![1,2,3]));
-	encrypted.map(|plaintext| assert_eq!(plaintext, vec![1,2,3]));
+	encrypted.map_cipher(|ciphertext| assert_ne!(ciphertext, [1,2,3]));
+	encrypted.map(|plaintext| assert_eq!(plaintext, [1,2,3]))
+	    .expect("Failed to decrypt data");
     }
 }
