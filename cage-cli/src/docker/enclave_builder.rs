@@ -8,7 +8,7 @@ const EV_USER_IMAGE_NAME: &str = "ev-user-image";
 const NITRO_CLI_IMAGE_NAME: &str = "nitro-cli-image";
 
 struct CommandConfig {
-    verbose: bool, 
+    verbose: bool,
     architecture: &'static str,
 }
 
@@ -42,7 +42,7 @@ fn build_user_image(user_dockerfile_path: &str, user_context_path: &str, command
         .stdout(command_config.output_setting())
         .stderr(command_config.output_setting())
         .status().expect("Failed to run docker command.");
-    
+
     if build_image_status.success() {
         Ok(())
     } else {
@@ -65,7 +65,7 @@ fn build_nitro_cli_image(command_config: &CommandConfig) -> Result<(), String> {
         .stdout(command_config.output_setting())
         .stderr(command_config.output_setting())
         .status().expect("Failed to run docker command for building Nitro CLI image.");
-    
+
     if build_image_status.success() {
         Ok(())
     } else {
@@ -75,7 +75,7 @@ fn build_nitro_cli_image(command_config: &CommandConfig) -> Result<(), String> {
 
 fn run_conversion_to_enclave(command_config: &CommandConfig) -> Result<TempDir, String> {
     let output_dir = TempDir::new("nitro-cli-output").unwrap();
-    
+
     println!("Converting user image to enclave...");
     let run_conversion_status = Command::new("docker")
         .args(vec![
@@ -84,13 +84,13 @@ fn run_conversion_to_enclave(command_config: &CommandConfig) -> Result<TempDir, 
             "-v", format!("{}:{}", output_dir.path().to_str().unwrap(), IN_CONTAINER_VOLUME_DIR).as_str(),
             NITRO_CLI_IMAGE_NAME,
             "--output-file", &format!("{}/{}", IN_CONTAINER_VOLUME_DIR, ENCLAVE_FILENAME),
-            "--docker-uri", EV_USER_IMAGE_NAME, 
+            "--docker-uri", EV_USER_IMAGE_NAME,
         ])
         .stdout(command_config.output_setting())
         .stderr(command_config.output_setting())
         .status()
         .expect("Failed to run Nitro CLI image");
-    
+
 
     if run_conversion_status.success() {
         Ok(output_dir)
@@ -121,18 +121,18 @@ pub fn build_enclave(user_dockerfile_path: &str, user_context_path: &str, save_l
     Ok(output_dir)
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::docker::enclave_builder::{build_enclave, ENCLAVE_FILENAME};
-
-    #[test]
-    fn test_build_runtime() -> Result<(), String> {
-        let user_context_path = "..";
-        let user_dockerfile_path = "../runtime/Dockerfile";
-
-        let temp_output_dir = build_enclave(user_dockerfile_path, user_context_path, false, false)?;
-        // temporary directory containing the enclave.eif file is returned
-        assert_eq!(temp_output_dir.path().join(ENCLAVE_FILENAME).exists(), true);
-        Ok(())
-    }
-}
+// #[cfg(test)]
+// mod tests {
+//     use crate::docker::enclave_builder::{build_enclave, ENCLAVE_FILENAME};
+//
+//     #[test]
+//     fn test_build_runtime() -> Result<(), String> {
+//         let user_context_path = "..";
+//         let user_dockerfile_path = "../runtime/Dockerfile";
+//
+//         let temp_output_dir = build_enclave(user_dockerfile_path, user_context_path, false, false)?;
+//         // temporary directory containing the enclave.eif file is returned
+//         assert_eq!(temp_output_dir.path().join(ENCLAVE_FILENAME).exists(), true);
+//         Ok(())
+//     }
+// }

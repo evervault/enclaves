@@ -1,0 +1,18 @@
+on:
+  push:
+    paths:
+      - cage-cli/**
+      - .github/workflows/lint-and-test-cli.yml
+name: Lint and Test
+jobs:
+  clippy_check_cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Compile project
+        run: cargo build --all-features  -p cage-cli
+      - name: Test project
+        run: cargo test -p cage-cli
