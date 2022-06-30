@@ -63,6 +63,7 @@ impl Directive {
         matches!(self, Self::Expose(_))
     }
 
+    #[allow(dead_code)]
     pub fn is_run(&self) -> bool {
         matches!(self, Self::Run(_))
     }
@@ -98,8 +99,8 @@ impl Directive {
                         .filter_map(|token_slice| std::str::from_utf8(token_slice).ok())
                         .map(|token| {
                             let trimmed_token = token.trim();
-                            let token_without_leading_quote = trimmed_token.strip_prefix("\"").unwrap_or(trimmed_token);
-                            token_without_leading_quote.strip_suffix("\"").unwrap_or(token_without_leading_quote).to_string()
+                            let token_without_leading_quote = trimmed_token.strip_prefix('"').unwrap_or(trimmed_token);
+                            token_without_leading_quote.strip_suffix('"').unwrap_or(token_without_leading_quote).to_string()
                         })
                         .collect();
                     *tokens = parsed_tokens;
@@ -183,9 +184,9 @@ impl TryFrom<&[u8]> for Directive {
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         let directive_str = std::str::from_utf8(value)
-            .map_err(|err| DecodeError::NonUtf8Directive(err))?;
+            .map_err(DecodeError::NonUtf8Directive)?;
 
-        if directive_str.starts_with("#") {
+        if directive_str.starts_with('#') {
             return Ok(Self::Comment(Bytes::new()));
         }
 
@@ -280,15 +281,15 @@ impl std::fmt::Display for StringStack {
 
 // States for the Dockerfile decoder's internal state management
 enum DecoderState {
-    ReadingDirective(BytesMut),
-    ReadingDirectiveArguments {
+    Directive(BytesMut),
+    DirectiveArguments {
         directive: Directive,
         arguments: Option<BytesMut>,
         new_line_behaviour: NewLineBehaviour,
         string_stack: StringStack,
     },
-    ReadingComment(BytesMut),
-    ReadingWhitespace
+    Comment(BytesMut),
+    Whitespace
 }
 
 // Helper function to clear out any lingering state in the Decoder on eof
@@ -298,8 +299,8 @@ impl std::convert::TryInto<Option<Directive>> for DecoderState {
 
     fn try_into(self) -> Result<Option<Directive>, Self::Error> {
         match self {
-            Self::ReadingComment(content) => Ok(Some(Directive::Comment(Bytes::from(content)))),
-            Self::ReadingDirectiveArguments {
+            Self::Comment(content) => Ok(Some(Directive::Comment(Bytes::from(content)))),
+            Self::DirectiveArguments {
                 mut directive,
                 arguments,
                 ..
@@ -332,13 +333,13 @@ impl std::convert::TryFrom<u8> for DecoderState {
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         if value.is_ascii_whitespace() {
-            Ok(Self::ReadingWhitespace)
+            Ok(Self::Whitespace)
         } else if value.is_ascii_alphabetic() {
             let mut bytes = BytesMut::with_capacity(1);
             bytes.put_u8(value);
-            Ok(Self::ReadingDirective(bytes))
+            Ok(Self::Directive(bytes))
         } else if value == b'#' {
-            Ok(Self::ReadingComment(BytesMut::new()))
+            Ok(Self::Comment(BytesMut::new()))
         } else {
             Err(DecodeError::UnexpectedToken)
         }
@@ -374,13 +375,13 @@ impl DockerfileDecoder {
 
     fn derive_new_line_state(&mut self, first_byte: u8) -> Result<Option<DecoderState>, DecodeError> {
         let initial_state = if first_byte.is_ascii_whitespace() {
-            DecoderState::ReadingWhitespace
+            DecoderState::Whitespace
         } else if first_byte.is_ascii_alphabetic() {
             let mut bytes = BytesMut::with_capacity(1);
             bytes.put_u8(first_byte);
-            DecoderState::ReadingDirective(bytes)
+            DecoderState::Directive(bytes)
         } else if first_byte == b'#' {
-            DecoderState::ReadingComment(BytesMut::with_capacity(1))
+            DecoderState::Comment(BytesMut::with_capacity(1))
         } else {
             return Err(DecodeError::UnexpectedToken);
         };
@@ -422,7 +423,7 @@ impl DockerfileDecoder {
         loop {
             match self.read_u8(src) {
                 Some(byte) if byte == b' ' => {
-                    return Ok(Some(DecoderState::ReadingDirectiveArguments {
+                    return Ok(Some(DecoderState::DirectiveArguments {
                         directive: Directive::try_from(directive.as_ref())?,
                         arguments: None,
                         new_line_behaviour: NewLineBehaviour::Observe,
@@ -467,7 +468,7 @@ impl DockerfileDecoder {
                 Some(next_byte) if next_byte == b'\n' => {
                     // safety: first arm will be matched if next_byte is a newline and arguments is None
                     let content = arguments.as_ref().unwrap().to_vec();
-                    directive.set_arguments(content.clone());
+                    directive.set_arguments(content);
                     return Ok(Some(directive.clone()));
                 },
                 // if a newline character is next, escape it, if already escaped then observe (\\)
@@ -554,24 +555,24 @@ impl Decoder for DockerfileDecoder {
 
         loop {
             let next_state = match decode_state {
-                DecoderState::ReadingWhitespace => self.decode_whitespace(src)?,
-                DecoderState::ReadingComment(mut content) => {
+                DecoderState::Whitespace => self.decode_whitespace(src)?,
+                DecoderState::Comment(mut content) => {
                     return match self.decode_comment(src, &mut content)? {
                         Some(directive) => Ok(Some(directive)),
                         None => {
-                            self.current_state = Some(DecoderState::ReadingComment(content));
+                            self.current_state = Some(DecoderState::Comment(content));
                             Ok(None)
                         }
                     };
                 },
-                DecoderState::ReadingDirective(mut directive) => {
+                DecoderState::Directive(mut directive) => {
                     let next_state = self.decode_directive(src, &mut directive)?;
                     if next_state.is_none() {
-                        self.current_state = Some(DecoderState::ReadingDirective(directive));
+                        self.current_state = Some(DecoderState::Directive(directive));
                     }
                     next_state
                 },
-                DecoderState::ReadingDirectiveArguments {
+                DecoderState::DirectiveArguments {
                     mut directive,
                     mut arguments,
                     mut new_line_behaviour,
@@ -586,7 +587,7 @@ impl Decoder for DockerfileDecoder {
                     )? {
                         Some(instruction) => Ok(Some(instruction)),
                         None => {
-                            self.current_state = Some(DecoderState::ReadingDirectiveArguments {
+                            self.current_state = Some(DecoderState::DirectiveArguments {
                                 directive,
                                 arguments,
                                 new_line_behaviour,
