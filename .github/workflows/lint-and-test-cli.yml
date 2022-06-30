@@ -9,17 +9,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - run: rustup component add clippy
-      - name: navigate to cli
-        run: cd cage-cli
-      - uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-features
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
       - name: Compile project
-        run: cargo build --all-features
+        run: cargo build --all-features  -p cage-cli
       - name: Test project
-        run: cargo test
+        run: cargo test -p cage-cli
