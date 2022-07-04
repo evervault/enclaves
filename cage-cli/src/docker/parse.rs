@@ -208,6 +208,7 @@ impl TryFrom<&[u8]> for Directive {
     }
 }
 
+#[derive(Clone)]
 enum NewLineBehaviour {
     Escaped,
     IgnoreLine, // handle embedded comments
@@ -224,7 +225,7 @@ impl NewLineBehaviour {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 enum StringToken {
     SingleQuote,
     DoubleQuote
@@ -245,6 +246,7 @@ impl TryFrom<u8> for StringToken {
 
 // tiny stack which is used to track if we are inside/outside of a string
 // which helps with incorrectly treating # in strings as a comment
+#[derive(Clone)]
 struct StringStack {
     inner: Vec<StringToken>
 }
@@ -280,6 +282,7 @@ impl std::fmt::Display for StringStack {
 }
 
 // States for the Dockerfile decoder's internal state management
+#[derive(Clone)]
 enum DecoderState {
     Directive(BytesMut),
     DirectiveArguments {
@@ -357,11 +360,11 @@ impl DockerfileDecoder {
         }
     }
 
-    pub fn flush(self) -> Result<Option<Directive>,DecodeError> {
+    pub fn flush(&mut self) -> Result<Option<Directive>,DecodeError> {
         if self.current_state.is_none() {
             Ok(None)
         } else {
-            self.current_state.unwrap().try_into()
+            self.current_state.clone().unwrap().try_into()
         }
     }
 
@@ -605,6 +608,13 @@ impl Decoder for DockerfileDecoder {
                 },
                 None => return Ok(None)
             }
+        }
+    }
+
+    fn decode_eof(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        match self.decode(buf)? {
+            Some(directive) => Ok(Some(directive)),
+            None => self.flush()
         }
     }
 }
