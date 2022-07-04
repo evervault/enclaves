@@ -22,6 +22,9 @@ impl Clone for Protected {
     }
 }
 
+
+// It's always safe to dereference the pointer as it is only
+// invalidated when the Protected data is dropped.
 impl Deref for Protected {
     type Target = [u8];
 
@@ -44,6 +47,7 @@ where
     fn from(mut source: T) -> Protected {
 	let data: Vec<u8> = source.as_mut().to_vec();
 
+	// memzero will never overread here
 	unsafe {
 	    memsec::memzero(source.as_mut().as_mut_ptr(), source.as_mut().len())
 	}
@@ -56,9 +60,18 @@ where
 
 impl Drop for Protected {
     fn drop(&mut self) {
-	let len = self.len();
 	unsafe {
-	    memsec::memzero(self.as_mut().as_mut_ptr(), len);
+	    // memzero will never overread here
+	    memsec::memzero(self.as_mut().as_mut_ptr(), self.len());
+	    
+	    // We know that the data was allocated by Rust and that it
+	    // is still valid before this call to Box::from_raw. The
+	    // pointer cannot be leaked in safe rust. We have to
+	    // assume that if the pointer was leaked through unsafe
+	    // rust code, appropriate measures have been applied to
+	    // ensure that no references are kept after this struct is
+	    // dropped. If this is the case, it is safe to reconstruct
+	    // the box and allow it to be dropped here.
 	    Box::from_raw(self.data);
 	}
     }
@@ -66,8 +79,9 @@ impl Drop for Protected {
 
 impl PartialEq for Protected {
     fn eq(&self, other: &Protected) -> bool {
+	// memcmp will never overread here
 	unsafe {
-	    memsec::memcmp(self.as_ptr(), other.as_ptr(), min(self.len(), other.len())) == 0
+	    self.len() == other.len() && memsec::memcmp(self.as_ptr(), other.as_ptr(), self.len()) == 0
 	}
     }
 }
