@@ -12,3 +12,5 @@ tokio-util = { version = "0.6", features = ["full"] }
 bytes = "1"
 itertools = "0.10.3"
 tempdir = "0.3.7"
+futures-core = "0.3.21"
+futures = "0.3.21"

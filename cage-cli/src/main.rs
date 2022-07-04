@@ -1,10 +1,7 @@
-extern crate core;
-
-use bytes::{Buf, BytesMut};
 use clap::Parser;
 use tokio::fs::File;
-use tokio::io::AsyncReadExt;
-use tokio_util::codec::Decoder;
+use tokio_util::codec::FramedRead;
+use futures::stream::StreamExt;
 
 mod docker;
 use docker::enclave_builder;
@@ -28,7 +25,7 @@ async fn main() {
         return;
     }
 
-    let mut dockerfile = match File::open(dockerfile_path).await {
+    let dockerfile = match File::open(dockerfile_path).await {
         Ok(dockerfile) => dockerfile,
         Err(e) => {
             eprintln!("Error accessing dockerfile - {:?}", e);
@@ -36,12 +33,14 @@ async fn main() {
         }
     };
 
-    let mut buf = BytesMut::with_capacity(1024);
-    let mut eof = false;
-    let mut dockerfile_decoder = docker::parse::DockerfileDecoder::new();
     let mut instruction_set = Vec::new();
     let mut last_cmd = None;
     let mut last_entrypoint = None;
+
+    let mut dockerfile_reader = FramedRead::new(
+        dockerfile,
+        docker::parse::DockerfileDecoder::new()
+    );
 
     let handle_emitted_instructions = |
         instruction_set: &mut Vec<Directive>,
@@ -58,44 +57,15 @@ async fn main() {
         }
     };
 
-    'outer: loop {
-        if !eof {
-            match dockerfile.read_buf(&mut buf).await {
-                Ok(consumed) if consumed == 0 => {
-                    eof = true;
-                },
-                Err(e) => {
-                    eprintln!("Error reading dockerfile - {:?}", e);
-                    return;
-                },
-                _ => {}
-            };
-        }
-        'inner: loop {
-            if !buf.has_remaining() && eof {
-                match dockerfile_decoder.flush() {
-                    Ok(Some(final_instruction)) => {
-                        handle_emitted_instructions(&mut instruction_set, final_instruction, &mut last_cmd, &mut last_entrypoint)
-                    },
-                    Err(e) => {
-                        eprintln!("Error parsing dockerfile — {:?}", e);
-                    },
-                    _ => {}
-                }
-                break 'outer;
-            }
-            match dockerfile_decoder.decode(&mut buf) {
-                Ok(Some(instruction)) => {
-                    handle_emitted_instructions(&mut instruction_set, instruction, &mut last_cmd, &mut last_entrypoint);
-                    continue;
-                },
-                Ok(None) if eof && !buf.has_remaining() => break 'outer,
-                Ok(None) => break 'inner,
-                Err(e) => {
-                    eprintln!("Error parsing dockerfile - {:?}", e);
-                    break 'outer;
-                }
-            };
+    while let Some(instruction) = dockerfile_reader.next().await {
+        match instruction {
+            Ok(directive) => handle_emitted_instructions(
+                &mut instruction_set,
+                directive,
+                &mut last_cmd,
+                &mut last_entrypoint
+            ),
+            Err(e) => eprintln!("Error parsing dockerfile — {:?}", e)
         }
     }
 
