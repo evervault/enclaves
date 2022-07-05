@@ -1,8 +1,10 @@
 use itertools::{join};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use tokio_util::codec::Decoder;
+use tokio_util::codec::{Decoder,FramedRead};
 use std::convert::{From,TryFrom,TryInto};
 use std::fmt::Formatter;
+use tokio::io::AsyncRead;
+use futures::StreamExt;
 
 #[derive(Clone,Debug,PartialEq)]
 pub enum Mode {
@@ -322,6 +324,7 @@ pub enum DecodeError {
     IoError(tokio::io::Error),
     UnexpectedToken,
     NonUtf8Directive(std::str::Utf8Error),
+    NoEntrypoint,
     IncompleteInstruction
 }
 
@@ -364,7 +367,7 @@ impl DockerfileDecoder {
         if self.current_state.is_none() {
             Ok(None)
         } else {
-            self.current_state.clone().unwrap().try_into()
+            self.current_state.take().unwrap().try_into()
         }
     }
 
@@ -535,6 +538,21 @@ impl DockerfileDecoder {
                 None => return Ok(None)
             }
         }
+    }
+
+    pub async fn decode_dockerfile_from_src<R: AsyncRead + std::marker::Unpin>(dockerfile_src: R) -> Result<Vec<Directive>,DecodeError> {
+        let mut dockerfile_reader = FramedRead::new(
+            dockerfile_src,
+            Self::new()
+        );
+
+        let mut directives = Vec::new();
+
+        while let Some(directive) = dockerfile_reader.next().await.transpose()? {
+            directives.push(directive);
+        }
+
+        Ok(directives)
     }
 }
 

@@ -1,5 +1,5 @@
 use std::process::{Command, Stdio};
-use tempdir::TempDir;
+use tempfile::TempDir;
 
 const NITRO_CLI_DOCKERFILE_PATH: &str = "./nitro-cli-image.Dockerfile";
 const IN_CONTAINER_VOLUME_DIR: &str = "/output";
@@ -52,7 +52,7 @@ fn build_user_image(user_dockerfile_path: &str, user_context_path: &str, command
 
 fn build_nitro_cli_image(command_config: &CommandConfig) -> Result<(), String> {
     println!("Building Nitro CLI image...");
-    let temp_context_dir = TempDir::new("temp-context").unwrap();
+    let temp_context_dir = TempDir::new().unwrap();
 
     let build_nitro_cli_image_args = [
         vec!["build", "-f", NITRO_CLI_DOCKERFILE_PATH, "-t", NITRO_CLI_IMAGE_NAME],
@@ -74,8 +74,7 @@ fn build_nitro_cli_image(command_config: &CommandConfig) -> Result<(), String> {
 }
 
 fn run_conversion_to_enclave(command_config: &CommandConfig) -> Result<TempDir, String> {
-    let output_dir = TempDir::new("nitro-cli-output").unwrap();
-
+    let output_dir = TempDir::new().unwrap();
     println!("Converting user image to enclave...");
     let run_conversion_status = Command::new("docker")
         .args(vec![

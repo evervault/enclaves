@@ -95,7 +95,7 @@ impl fmt::Debug for Protected {
 
     #[cfg(not(debug_assertions))]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-	write!(f, "[REDACTED]", self.as_ref())
+	write!(f, "[REDACTED]")
     }
 }
 
