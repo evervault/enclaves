@@ -6,7 +6,7 @@ use std::fmt::Formatter;
 use tokio::io::AsyncRead;
 use futures::StreamExt;
 
-#[derive(Clone,Debug,PartialEq)]
+#[derive(Clone,Debug,PartialEq, Eq)]
 pub enum Mode {
     Exec,
     Shell

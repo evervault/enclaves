@@ -8,5 +8,15 @@ hyper = { version = "0.14.4", features = ["server","http1","http2","tcp","stream
 tokio = { version = "1.18.0", features = ["net", "macros", "rt", "rt-multi-thread", "io-util", "time"] }
 memsec = { version = ">=0.5", default-features = false }
 openssl = { version = "0.10.36" }
-lazy_static = "1.4.0"
 aws-nitro-enclaves-nsm-api = "0.2.1"
+lazy_static = "1.4.0"
+bytes = "1"
+dns-message-parser = { version = "*", optional = true }
+ttl_cache = { version = "*", optional = true }
+
+
+[features]
+default = []
+network_egress = ["dep:dns-message-parser","dep:ttl_cache"]
+
+

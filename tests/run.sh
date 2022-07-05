@@ -1,6 +1,6 @@
 
-cd control-plane && cargo build && cargo run &
-cd data-plane && cargo build && cargo run &
+cd control-plane && sudo cargo run --features "network_egress" &
+cd data-plane && sudo cargo run --features "network_egress" &
 
 cd tests
 npm install

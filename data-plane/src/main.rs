@@ -2,12 +2,33 @@ use tokio::io::{AsyncRead,AsyncWrite};
 use tokio::net::{TcpListener, TcpStream, TcpSocket};
 use std::net::{SocketAddr, Ipv4Addr, IpAddr};
 
-const CUSTOMER_CONNECT_PORT: u16 = 8888;
+#[cfg(feature = "network_egress")]
+mod enclavedns;
+
+const CUSTOMER_CONNECT_PORT: u16 = 8008;
 const DATA_PLANE_PORT: u16 = 7777;
+
 
 #[tokio::main]
 async fn main() {
     println!("Data plane running.");
+    start().await
+}
+
+#[cfg(not(feature = "network_egress"))]
+async fn start() {
+    println!("Running data plane without egress enabled");
+    start_data_plane().await;
+}
+
+#[cfg(feature = "network_egress")]
+async fn start() {
+    println!("Running data plane with egress enabled");
+    tokio::join!(start_data_plane(), enclavedns::EnclaveDns::bind_server());
+}
+
+async fn start_data_plane() {
+    print!("Data plane starting on {}", DATA_PLANE_PORT);
     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), DATA_PLANE_PORT);
     let listener = TcpListener::bind(addr).await.unwrap();
 
@@ -17,10 +38,9 @@ async fn main() {
 }
 
 async fn handle_connection(external_stream: TcpStream) {
-
     let ip_addr = std::net::Ipv4Addr::new(127, 0, 0, 1);
     let tcp_socket = TcpSocket::new_v4().expect("Failed to create socket — socket sys call with AF_INET & SOCK_STREAM");
-    let customer_stream = tcp_socket.connect((ip_addr, CUSTOMER_CONNECT_PORT).into()).await.expect("Failed to bind socket — connect sys call failed for 127.0.0.1");
+    let customer_stream = tcp_socket.connect((ip_addr, CUSTOMER_CONNECT_PORT).into()).await.expect("Failed to connect to customer service");
 
     match pipe_streams(external_stream, customer_stream).await {
         Ok(_) => println!("Finished piping connection to customer"),
@@ -42,4 +62,3 @@ where
         tokio::io::copy(&mut dest_reader, &mut src_writer)
     )
 }
-
