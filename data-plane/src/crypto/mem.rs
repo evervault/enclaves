@@ -3,7 +3,6 @@
 //! This implementation is based heavily on sequoia's implementation of protected memory. See
 //! [here](https://gitlab.com/sequoia-pgp/sequoia/-/blob/28639cf97fe3e526c6ace7499a3117d87bc1bd8f/openpgp/src/crypto/mem.rs).
 
-use std::cmp::min;
 use std::fmt;
 use std::ops::{Deref, DerefMut};
 use crate::error::Error;
@@ -51,7 +50,7 @@ where
 	unsafe {
 	    memsec::memzero(source.as_mut().as_mut_ptr(), source.as_mut().len())
 	}
-	
+
 	Protected {
 	    data: Box::leak(data.into_boxed_slice())
 	}
@@ -63,7 +62,7 @@ impl Drop for Protected {
 	unsafe {
 	    // memzero will never overread here
 	    memsec::memzero(self.as_mut().as_mut_ptr(), self.len());
-	    
+
 	    // We know that the data was allocated by Rust and that it
 	    // is still valid before this call to Box::from_raw. The
 	    // pointer cannot be leaked in safe rust. We have to
@@ -93,7 +92,7 @@ impl fmt::Debug for Protected {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 	write!(f, "{:?}", self.as_ref())
     }
-    
+
     #[cfg(not(debug_assertions))]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 	write!(f, "[REDACTED]", self.as_ref())
@@ -130,9 +129,9 @@ impl Encrypted {
     {
 	let plaintext = plaintext.into();
 	let salt = salt.into();
-	
+
 	let mut auth_tag: Protected = [0; 16].into();
-	
+
 	let mut data = openssl::symm::encrypt_aead(
 	    openssl::symm::Cipher::aes_256_gcm(),
 	    &derive_private_key(&salt),
@@ -141,9 +140,9 @@ impl Encrypted {
 	    &plaintext,
 	    &mut auth_tag
 	).unwrap();
-	
-	data.extend_from_slice(&mut auth_tag);
-	
+
+	data.extend_from_slice(&auth_tag);
+
 	Encrypted {
 	    data: data.into(),
 	    salt
@@ -171,7 +170,7 @@ impl Encrypted {
 	)
 	    .map_err(|e| Error::Crypto(e.to_string()))?
 	    .into();
-	
+
 	Ok(f(&plaintext))
     }
 }
@@ -184,12 +183,12 @@ impl PartialEq for Encrypted {
 
 fn derive_private_key(salt: &[u8]) -> Protected {
     let mut hasher = openssl::sha::Sha256::new();
-    hasher.update(&salt[..]);
+    hasher.update(salt);
     PREKEY.iter().for_each(|block| hasher.update(&block[..]));
     hasher.finish().into()
 }
 
-
+#[allow(dead_code)]
 fn random_salt() -> [u8; 32] {
     let mut salt = [0; 32];
     rand::rand_bytes(&mut salt).unwrap();

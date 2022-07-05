@@ -12,5 +12,5 @@ pub fn rand_bytes(buffer: &mut [u8]) -> Result<()> {
 
 #[cfg(not(enclave))]
 pub fn rand_bytes(buffer: &mut [u8]) -> Result<()> {
-    Ok(openssl::rand::rand_bytes(buffer).map_err(|e| Error::Crypto(e.to_string()))?)
+    openssl::rand::rand_bytes(buffer).map_err(|e| Error::Crypto(e.to_string()))
 }
