@@ -16,7 +16,7 @@ impl CommandConfig {
     pub fn extra_build_args(&self) -> Vec<&str> {
         match self.architecture {
             "aarch64" | "arm" => vec!["--platform", "linux/amd64"],
-            _ => vec![]
+            _ => vec![],
         }
     }
 
@@ -29,19 +29,31 @@ impl CommandConfig {
     }
 }
 
-fn build_user_image(user_dockerfile_path: &str, user_context_path: &str, command_config: &CommandConfig) -> Result<(), String> {
+fn build_user_image(
+    user_dockerfile_path: &str,
+    user_context_path: &str,
+    command_config: &CommandConfig,
+) -> Result<(), String> {
     println!("Building user image...");
     let build_image_args = [
-        vec!["build", "-f", user_dockerfile_path, "-t", EV_USER_IMAGE_NAME],
+        vec![
+            "build",
+            "-f",
+            user_dockerfile_path,
+            "-t",
+            EV_USER_IMAGE_NAME,
+        ],
         command_config.extra_build_args(),
-        vec![user_context_path]
-    ].concat();
+        vec![user_context_path],
+    ]
+    .concat();
 
     let build_image_status = Command::new("docker")
         .args(build_image_args)
         .stdout(command_config.output_setting())
         .stderr(command_config.output_setting())
-        .status().expect("Failed to run docker command.");
+        .status()
+        .expect("Failed to run docker command.");
 
     if build_image_status.success() {
         Ok(())
@@ -55,16 +67,24 @@ fn build_nitro_cli_image(command_config: &CommandConfig) -> Result<(), String> {
     let temp_context_dir = TempDir::new().unwrap();
 
     let build_nitro_cli_image_args = [
-        vec!["build", "-f", NITRO_CLI_DOCKERFILE_PATH, "-t", NITRO_CLI_IMAGE_NAME],
+        vec![
+            "build",
+            "-f",
+            NITRO_CLI_DOCKERFILE_PATH,
+            "-t",
+            NITRO_CLI_IMAGE_NAME,
+        ],
         command_config.extra_build_args(),
-        vec![temp_context_dir.path().to_str().unwrap()]
-    ].concat();
+        vec![temp_context_dir.path().to_str().unwrap()],
+    ]
+    .concat();
 
     let build_image_status = Command::new("docker")
         .args(build_nitro_cli_image_args)
         .stdout(command_config.output_setting())
         .stderr(command_config.output_setting())
-        .status().expect("Failed to run docker command for building Nitro CLI image.");
+        .status()
+        .expect("Failed to run docker command for building Nitro CLI image.");
 
     if build_image_status.success() {
         Ok(())
@@ -78,18 +98,27 @@ fn run_conversion_to_enclave(command_config: &CommandConfig) -> Result<TempDir, 
     println!("Converting user image to enclave...");
     let run_conversion_status = Command::new("docker")
         .args(vec![
-            "run", "--rm",
-            "-v", "/var/run/docker.sock:/var/run/docker.sock",
-            "-v", format!("{}:{}", output_dir.path().to_str().unwrap(), IN_CONTAINER_VOLUME_DIR).as_str(),
+            "run",
+            "--rm",
+            "-v",
+            "/var/run/docker.sock:/var/run/docker.sock",
+            "-v",
+            format!(
+                "{}:{}",
+                output_dir.path().to_str().unwrap(),
+                IN_CONTAINER_VOLUME_DIR
+            )
+            .as_str(),
             NITRO_CLI_IMAGE_NAME,
-            "--output-file", &format!("{}/{}", IN_CONTAINER_VOLUME_DIR, ENCLAVE_FILENAME),
-            "--docker-uri", EV_USER_IMAGE_NAME,
+            "--output-file",
+            &format!("{}/{}", IN_CONTAINER_VOLUME_DIR, ENCLAVE_FILENAME),
+            "--docker-uri",
+            EV_USER_IMAGE_NAME,
         ])
         .stdout(command_config.output_setting())
         .stderr(command_config.output_setting())
         .status()
         .expect("Failed to run Nitro CLI image");
-
 
     if run_conversion_status.success() {
         Ok(output_dir)
@@ -98,11 +127,16 @@ fn run_conversion_to_enclave(command_config: &CommandConfig) -> Result<TempDir, 
     }
 }
 
-pub fn build_enclave(user_dockerfile_path: &str, user_context_path: &str, save_locally: bool, verbose: bool) -> Result<TempDir, String> {
+pub fn build_enclave(
+    user_dockerfile_path: &str,
+    user_context_path: &str,
+    save_locally: bool,
+    verbose: bool,
+) -> Result<TempDir, String> {
     let architecture = std::env::consts::ARCH;
     let command_config = CommandConfig {
         verbose,
-        architecture
+        architecture,
     };
 
     build_user_image(user_dockerfile_path, user_context_path, &command_config)?;
@@ -111,9 +145,14 @@ pub fn build_enclave(user_dockerfile_path: &str, user_context_path: &str, save_l
 
     if save_locally {
         std::fs::copy(
-            format!("{}/{}", output_dir.path().to_str().unwrap(), ENCLAVE_FILENAME),
-            ENCLAVE_FILENAME
-        ).unwrap();
+            format!(
+                "{}/{}",
+                output_dir.path().to_str().unwrap(),
+                ENCLAVE_FILENAME
+            ),
+            ENCLAVE_FILENAME,
+        )
+        .unwrap();
         println!("{} saved in the current directory.", ENCLAVE_FILENAME);
     }
 

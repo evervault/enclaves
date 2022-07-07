@@ -12,7 +12,10 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+          components: rustfmt
       - name: Compile project
         run: cargo build --all-features  -p cage-cli
       - name: Test project
         run: cargo test -p cage-cli
+      - name: Format project
+        run: cargo fmt --check

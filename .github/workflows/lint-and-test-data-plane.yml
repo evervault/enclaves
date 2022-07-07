@@ -12,7 +12,10 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+          components: rustfmt
       - name: Compile project
         run: cargo build --all-features -p data-plane
       - name: Test project
         run: cargo test -p data-plane
+      - name: Format project
+        run: cargo fmt --check

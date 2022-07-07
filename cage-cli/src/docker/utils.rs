@@ -1,5 +1,5 @@
+use crate::docker::parse::{DecodeError, Directive};
 use itertools::join;
-use crate::docker::parse::{Directive,DecodeError};
 
 /*
  Expected behaviour of various ENTRYPOINT/CMD combos in dockerfiles.
@@ -15,10 +15,11 @@ use crate::docker::parse::{Directive,DecodeError};
 | CMD exec_cmd p1_cmd        | /bin/sh -c exec_cmd p1_cmd | /bin/sh -c exec_entry p1_entry | exec_entry p1_entry /bin/sh -c exec_cmd p1_cmd |
 +----------------------------+----------------------------+--------------------------------+------------------------------------------------+
 */
-pub fn create_combined_docker_entrypoint(entrypoint: Option<Directive>, cmd: Option<Directive>) -> Result<String,DecodeError> {
-    let format_tokens = |tokens: &[String]| -> String {
-        join(tokens, " ")
-    };
+pub fn create_combined_docker_entrypoint(
+    entrypoint: Option<Directive>,
+    cmd: Option<Directive>,
+) -> Result<String, DecodeError> {
+    let format_tokens = |tokens: &[String]| -> String { join(tokens, " ") };
     let entrypoint = match (entrypoint.as_ref(), cmd.as_ref()) {
         (Some(entrypoint), None) => format_tokens(entrypoint.tokens().unwrap()),
         (None, Some(cmd)) => format_tokens(cmd.tokens().unwrap()),
@@ -26,10 +27,14 @@ pub fn create_combined_docker_entrypoint(entrypoint: Option<Directive>, cmd: Opt
             if entrypoint.mode().unwrap().is_shell() {
                 format_tokens(entrypoint.tokens().unwrap())
             } else {
-                format!("{} {}", format_tokens(entrypoint.tokens().unwrap()), format_tokens(cmd.tokens().unwrap()))
+                format!(
+                    "{} {}",
+                    format_tokens(entrypoint.tokens().unwrap()),
+                    format_tokens(cmd.tokens().unwrap())
+                )
             }
-        },
-        (None, None) => return Err(DecodeError::NoEntrypoint)
+        }
+        (None, None) => return Err(DecodeError::NoEntrypoint),
     };
     Ok(entrypoint)
 }
@@ -42,8 +47,9 @@ pub fn write_command_to_script(command: &str, script_path: &str) -> String {
         command,
         r#"\n'"' > "#,
         script_path,
-        r#"""#
-    ].join("")
+        r#"""#,
+    ]
+    .join("")
 }
 
 #[cfg(test)]
@@ -51,8 +57,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_write_command_to_script()  {
-        let script_command = write_command_to_script("echo hello",  "hello-script.sh");
-        assert_eq!(script_command, r#"/bin/sh -c "echo -e '"'#!/bin/sh\necho hello\n'"' > hello-script.sh""#)
+    fn test_write_command_to_script() {
+        let script_command = write_command_to_script("echo hello", "hello-script.sh");
+        assert_eq!(
+            script_command,
+            r#"/bin/sh -c "echo -e '"'#!/bin/sh\necho hello\n'"' > hello-script.sh""#
+        )
     }
 }
