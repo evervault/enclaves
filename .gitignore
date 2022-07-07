@@ -3,4 +3,4 @@ target
 */target
 tests/node_modules
 tests/customer-process/node_modules
-target
+data-plane/*.pem
