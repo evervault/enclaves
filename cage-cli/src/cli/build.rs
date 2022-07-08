@@ -1,5 +1,6 @@
 use crate::docker::parse::{DecodeError, Directive, DockerfileDecoder, Mode};
 use crate::enclave;
+use atty::Stream;
 use clap::Parser;
 use std::io::Write;
 use std::path::Path;
@@ -17,23 +18,31 @@ pub struct BuildArgs {
     #[clap(short = 'f', long = "file", default_value = "Dockerfile")]
     dockerfile: String,
 
+    /// Enable verbose output
+    #[clap(short, long, from_global)]
+    pub verbose: bool,
+
     /// Enable JSON output
     #[clap(long, from_global)]
     pub json: bool,
+
+    /// Save enclave file
+    #[clap(long)]
+    pub save: bool,
 }
 
 pub async fn run(build_args: BuildArgs) {
     // read dockerfile
     let dockerfile_path = Path::new(build_args.dockerfile.as_str());
     if !dockerfile_path.exists() {
-        eprintln!("{} does not exist", build_args.dockerfile);
+        log::error!("{} does not exist", build_args.dockerfile);
         return;
     }
 
     let dockerfile = match File::open(dockerfile_path).await {
         Ok(dockerfile) => dockerfile,
         Err(e) => {
-            eprintln!("Error accessing dockerfile - {:?}", e);
+            log::error!("Error accessing dockerfile - {:?}", e);
             return;
         }
     };
@@ -41,7 +50,7 @@ pub async fn run(build_args: BuildArgs) {
     let built_dockerfile = match process_dockerfile(dockerfile).await {
         Ok(directives) => directives,
         Err(e) => {
-            eprintln!(
+            log::error!(
                 "An error occurred while processing your dockerfile - {:?}",
                 e
             );
@@ -55,12 +64,64 @@ pub async fn run(build_args: BuildArgs) {
     built_dockerfile.iter().for_each(|instruction| {
         writeln!(ev_user_dockerfile, "{}", instruction).unwrap();
     });
-    println!("{} saved in current directory.", EV_USER_DOCKERFILE_PATH);
+    log::info!("{} saved in current directory.", EV_USER_DOCKERFILE_PATH);
 
     // build enclave, and also output in current directory. Mainly here just to avoid "unused" warnings
     let user_context_path = ".";
-    let _temp_output_dir =
-        enclave::build_enclave(EV_USER_DOCKERFILE_PATH, user_context_path, true, false).unwrap();
+
+    let command_config = enclave::CommandConfig::new(build_args.verbose);
+    log::info!("Building docker image…");
+    if let Err(e) =
+        enclave::build_user_image(EV_USER_DOCKERFILE_PATH, user_context_path, &command_config)
+    {
+        log::error!("An error occurred while building the docker image. {}", e);
+        return;
+    }
+    log::info!("Building enclave compatible image…");
+    if let Err(e) = enclave::build_nitro_cli_image(&command_config) {
+        log::error!("An error occurred while building the enclave image. {}", e);
+        return;
+    }
+    log::info!("Converting docker image to EIF…");
+    let enclave_filename: &str = "enclave.eif";
+    let built_enclave = match enclave::run_conversion_to_enclave(&command_config, enclave_filename)
+    {
+        Ok(built_enclave) => built_enclave,
+        Err(e) => {
+            log::error!(
+                "An error occurred while converting your docker image to an enclave. {:?}",
+                e
+            );
+            return;
+        }
+    };
+
+    if build_args.save {
+        std::fs::copy(
+            format!(
+                "{}/{}",
+                built_enclave.location().path().to_str().unwrap(),
+                enclave_filename
+            ),
+            enclave_filename,
+        )
+        .unwrap();
+        log::info!("{} saved in the current directory.", enclave_filename);
+    }
+
+    // Write enclave measures to stdout
+    let success_msg = serde_json::json!({
+        "status": "success",
+        "message": "EIF built successfully",
+        "enclaveMeasurements": built_enclave.measurements()
+    });
+
+    if atty::is(Stream::Stdout) {
+        // nicely format the JSON when printing to a TTY
+        println!("{}", serde_json::to_string_pretty(&success_msg).unwrap());
+    } else {
+        println!("{}", serde_json::to_string(&success_msg).unwrap());
+    }
 }
 
 async fn process_dockerfile<R: AsyncRead + std::marker::Unpin>(

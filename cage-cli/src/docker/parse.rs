@@ -368,6 +368,13 @@ pub struct DockerfileDecoder {
     current_state: Option<DecoderState>,
 }
 
+#[allow(dead_code)]
+impl std::default::Default for DockerfileDecoder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DockerfileDecoder {
     pub fn new() -> Self {
         Self {
