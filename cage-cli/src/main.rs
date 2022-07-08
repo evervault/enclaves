@@ -3,6 +3,7 @@ use crate::docker::enclave_builder;
 use crate::docker::parse::{DecodeError, Directive, DockerfileDecoder, Mode};
 
 use clap::Parser;
+use human_panic::setup_panic;
 use std::io::Write;
 use std::path::Path;
 use tokio::fs::File;
@@ -20,6 +21,13 @@ struct BuildArgs {
 
 #[tokio::main]
 async fn main() {
+    // Use human panic to give nicer error logs in the case of a runtime panic
+    setup_panic!(Metadata {
+        name: env!("CARGO_PKG_NAME").into(),
+        version: env!("CARGO_PKG_VERSION").into(),
+        authors: "Engineering <engineering@evervault.com>".into(),
+        homepage: "https://github.com/evervault/cages".into(),
+    });
     let build_args = BuildArgs::parse();
     // read dockerfile
     let dockerfile_path = Path::new(build_args.dockerfile.as_str());
