@@ -52,6 +52,16 @@ pub fn write_command_to_script(command: &str, script_path: &str) -> String {
     .join("")
 }
 
+pub fn verify_docker_is_running() -> Result<bool, std::io::Error> {
+    let exit_status = std::process::Command::new("docker")
+        .args(["info"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()?;
+
+    Ok(exit_status.success())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

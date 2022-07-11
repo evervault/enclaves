@@ -1,4 +1,5 @@
 use crate::docker::parse::{DecodeError, Directive, DockerfileDecoder, Mode};
+use crate::docker::utils::verify_docker_is_running;
 use crate::enclave;
 use atty::Stream;
 use clap::Parser;
@@ -32,6 +33,21 @@ pub struct BuildArgs {
 }
 
 pub async fn run(build_args: BuildArgs) {
+    match verify_docker_is_running() {
+        Ok(false) => {
+            log::error!("Failed to communicate with docker. Please verify that docker is running and accessible.");
+            return;
+        }
+        Err(e) => {
+            log::error!(
+                "Process failed when checking if docker was running. Please try again. {:?}",
+                e
+            );
+            return;
+        }
+        _ => {}
+    }
+
     // read dockerfile
     let dockerfile_path = Path::new(build_args.dockerfile.as_str());
     if !dockerfile_path.exists() {
