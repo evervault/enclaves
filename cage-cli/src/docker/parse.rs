@@ -3,6 +3,8 @@ use futures::StreamExt;
 use itertools::join;
 use std::convert::{From, TryFrom, TryInto};
 use std::fmt::Formatter;
+use std::num::ParseIntError;
+use thiserror::Error;
 use tokio::io::AsyncRead;
 use tokio_util::codec::{Decoder, FramedRead};
 
@@ -43,7 +45,9 @@ pub enum Directive {
         mode: Option<Mode>,
         tokens: Vec<String>,
     },
-    Expose(Bytes),
+    Expose {
+        port: Option<u16>,
+    },
     Run(Bytes),
     // we only need to care about entrypoint, cmd, expose and run for cages
     Other {
@@ -62,7 +66,7 @@ impl Directive {
     }
 
     pub fn is_expose(&self) -> bool {
-        matches!(self, Self::Expose(_))
+        matches!(self, Self::Expose { .. })
     }
 
     #[allow(dead_code)]
@@ -86,7 +90,7 @@ impl Directive {
         }
     }
 
-    pub fn set_arguments(&mut self, given_arguments: Vec<u8>) {
+    pub fn set_arguments(&mut self, given_arguments: Vec<u8>) -> Result<(), DecodeError> {
         match self {
             Self::Entrypoint { mode, tokens } | Self::Cmd { mode, tokens } => {
                 let mode = mode.as_ref().unwrap();
@@ -122,17 +126,21 @@ impl Directive {
                         .collect();
                 }
             }
-            Self::Expose(arguments)
-            | Self::Other { arguments, .. }
-            | Self::Comment(arguments)
-            | Self::Run(arguments) => *arguments = Bytes::from(given_arguments),
-        }
+            Self::Expose { port } => {
+                let port_str = std::str::from_utf8(&given_arguments)?;
+                let parsed_port = port_str.parse().map_err(DecodeError::InvalidExposedPort)?;
+                *port = Some(parsed_port);
+            }
+            Self::Other { arguments, .. } | Self::Comment(arguments) | Self::Run(arguments) => {
+                *arguments = Bytes::from(given_arguments)
+            }
+        };
+        Ok(())
     }
 
-    fn arguments(&self) -> String {
-        match self {
+    fn arguments(&self) -> Option<String> {
+        let formatted_args = match self {
             Self::Comment(bytes)
-            | Self::Expose(bytes)
             | Self::Run(bytes)
             | Self::Other {
                 arguments: bytes, ..
@@ -148,7 +156,11 @@ impl Directive {
                     join(tokens.as_slice(), " ")
                 }
             }
-        }
+            Self::Expose { port } => {
+                return port.as_ref().map(|port| port.to_string());
+            }
+        };
+        Some(formatted_args)
     }
 
     pub fn tokens(&self) -> Option<&[String]> {
@@ -185,11 +197,19 @@ impl std::fmt::Display for Directive {
             Self::Comment(_) => "#",
             Self::Entrypoint { .. } => "ENTRYPOINT",
             Self::Cmd { .. } => "CMD",
-            Self::Expose(_) => "EXPOSE",
+            Self::Expose { .. } => "EXPOSE",
             Self::Run(_) => "RUN",
             Self::Other { directive, .. } => directive.as_str(),
         };
-        write!(f, "{} {}", prefix, self.arguments())
+        write!(
+            f,
+            "{} {}",
+            prefix,
+            match self.arguments() {
+                Some(str) => str,
+                _ => "".to_string(),
+            }
+        )
     }
 }
 
@@ -197,7 +217,7 @@ impl TryFrom<&[u8]> for Directive {
     type Error = DecodeError;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        let directive_str = std::str::from_utf8(value).map_err(DecodeError::NonUtf8Directive)?;
+        let directive_str = std::str::from_utf8(value)?;
 
         if directive_str.starts_with('#') {
             return Ok(Self::Comment(Bytes::new()));
@@ -212,7 +232,7 @@ impl TryFrom<&[u8]> for Directive {
                 mode: None,
                 tokens: Vec::new(),
             },
-            "EXPOSE" => Self::Expose(Bytes::new()),
+            "EXPOSE" => Self::Expose { port: None },
             "RUN" => Self::Run(Bytes::new()),
             _ => Self::Other {
                 directive: directive_str.to_string(),
@@ -323,7 +343,7 @@ impl std::convert::TryInto<Option<Directive>> for DecoderState {
                 ..
             } => {
                 let arguments = arguments.ok_or(DecodeError::IncompleteInstruction)?;
-                directive.set_arguments(arguments.to_vec());
+                directive.set_arguments(arguments.to_vec())?;
                 Ok(Some(directive))
             }
             _ => Ok(None),
@@ -331,19 +351,20 @@ impl std::convert::TryInto<Option<Directive>> for DecoderState {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum DecodeError {
-    IoError(tokio::io::Error),
+    #[error("An error occured while decoding the dockerfile - {0:?}")]
+    IoError(#[from] tokio::io::Error),
+    #[error("Unexpected token found in the dockerfile")]
     UnexpectedToken,
-    NonUtf8Directive(std::str::Utf8Error),
+    #[error("Encountered invalid utf8 in the dockerfile - {0:?}")]
+    InvalidUtf8(#[from] std::str::Utf8Error),
+    #[error("No CMD or Entrypoint directives found")]
     NoEntrypoint,
+    #[error("Incomplete instruction found")]
     IncompleteInstruction,
-}
-
-impl From<std::io::Error> for DecodeError {
-    fn from(io_err: std::io::Error) -> Self {
-        DecodeError::IoError(io_err)
-    }
+    #[error("Failed to parse the exposed port")]
+    InvalidExposedPort(ParseIntError),
 }
 
 impl std::convert::TryFrom<u8> for DecoderState {
@@ -509,7 +530,7 @@ impl DockerfileDecoder {
                 Some(next_byte) if next_byte == b'\n' => {
                     // safety: first arm will be matched if next_byte is a newline and arguments is None
                     let content = arguments.as_ref().unwrap().to_vec();
-                    directive.set_arguments(content);
+                    directive.set_arguments(content)?;
                     return Ok(Some(directive.clone()));
                 }
                 // if a newline character is next, escape it, if already escaped then observe (\\)
@@ -829,6 +850,43 @@ ENTRYPOINT apk update && apk add python3 glib make g++ gcc libc-dev &&\
         assert_eq!(directive.to_string(), test_dockerfile.to_string());
         assert_eq!(directive.is_cmd(), true);
         assert_eq!(directive.mode().unwrap(), &Mode::Shell);
+    }
+
+    #[test]
+    fn test_parsing_of_expose_directives() {
+        let mut decoder = DockerfileDecoder::new();
+        let test_dockerfile = r#"EXPOSE 80"#;
+        let dockerfile_contents = format!("{}\n", test_dockerfile);
+        let mut buffer = BytesMut::from(dockerfile_contents.as_str());
+        let expose_directive = decoder.decode(&mut buffer);
+        let directive = assert_directive_has_been_parsed(expose_directive);
+        assert_eq!(directive.to_string(), test_dockerfile.to_string());
+        assert_eq!(directive.is_expose(), true);
+        assert!(matches!(directive, Directive::Expose { port: Some(80) }));
+    }
+
+    #[tokio::test]
+    async fn test_decode_from_async_src() {
+        let test_dockerfile = b"EXPOSE 80\nENTRYPOINT [\"echo\",\"yo\"]";
+        let mut mock_builder = tokio_test::io::Builder::new();
+        mock_builder.read(test_dockerfile);
+        let mock = mock_builder.build();
+        let decoded_file = DockerfileDecoder::decode_dockerfile_from_src(mock).await;
+        assert!(decoded_file.is_ok());
+        let decoded_file = decoded_file.unwrap();
+        assert_eq!(decoded_file.len(), 2);
+        let expose_directive = decoded_file.get(0).unwrap();
+        assert!(matches!(
+            expose_directive,
+            Directive::Expose { port: Some(80) }
+        ));
+        let entrypoint_directive = decoded_file.get(1).unwrap();
+        assert!(entrypoint_directive.is_entrypoint());
+        if let Directive::Entrypoint { mode, tokens } = entrypoint_directive {
+            assert_eq!(*mode, Some(Mode::Exec));
+            assert_eq!(tokens.len(), 2);
+            assert_eq!(tokens.as_slice(), &["echo".to_string(), "yo".to_string()]);
+        }
     }
 
     #[test]

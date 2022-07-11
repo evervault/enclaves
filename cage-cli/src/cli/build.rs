@@ -149,17 +149,19 @@ async fn process_dockerfile<R: AsyncRead + std::marker::Unpin>(
     // Filter out unwanted directives
     let mut last_cmd = None;
     let mut last_entrypoint = None;
+    let mut exposed_port: Option<u16> = None;
 
     let remove_unwanted_directives = |directive: &Directive| -> bool {
         if directive.is_cmd() {
             last_cmd = Some(directive.clone());
-            false
         } else if directive.is_entrypoint() {
             last_entrypoint = Some(directive.clone());
-            false
+        } else if let Directive::Expose { port } = directive {
+            exposed_port = *port;
         } else {
-            !directive.is_expose()
+            return true;
         }
+        false
     };
 
     let cleaned_instructions: Vec<Directive> = instruction_set
@@ -181,6 +183,10 @@ async fn process_dockerfile<R: AsyncRead + std::marker::Unpin>(
                 )
             },
         )?;
+
+    if let Some(port) = exposed_port {
+        log::debug!("Customer service will listen on port: {}", port);
+    }
 
     let injected_directives = vec![
         // install dependencies
