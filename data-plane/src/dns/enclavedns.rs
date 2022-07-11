@@ -9,33 +9,35 @@ use tokio::net::TcpStream;
 use tokio::net::UdpSocket;
 use ttl_cache::TtlCache;
 
+use super::error::DNSError;
+
 pub struct EnclaveDns;
 
 impl EnclaveDns {
-    pub async fn bind_server() {
+    pub async fn bind_server() -> Result<(), DNSError> {
         let mut cache: TtlCache<String, Vec<RR>> = TtlCache::new(10);
 
-        let socket = UdpSocket::bind("127.0.0.1:5300").await.unwrap();
+        let socket = UdpSocket::bind("127.0.0.1:5300").await?;
 
         loop {
             let mut buffer = [0; 512];
-            let (amt, src) = socket.recv_from(&mut buffer).await.unwrap();
+            let (amt, src) = socket.recv_from(&mut buffer).await?;
             let buf = Bytes::copy_from_slice(&buffer[..amt]);
 
-            let dns_response = Self::forward_dns_lookup(buf.clone()).await;
-            let dns = Dns::decode(dns_response.clone()).unwrap();
+            let dns_response = Self::forward_dns_lookup(buf.clone()).await?;
+            let dns = Dns::decode(dns_response.clone())?;
             let domain_name = dns.questions.get(0).unwrap().domain_name.to_string();
             let resource_records = dns.answers.clone();
             if resource_records.is_empty() {
-                socket.send_to(&dns_response, &src).await.unwrap();
+                socket.send_to(&dns_response, &src).await?;
             } else {
                 cache.insert(
                     domain_name.clone(),
                     resource_records,
                     Duration::from_secs(30),
                 );
-                let local_response = Self::local_packet(dns.clone()).unwrap();
-                socket.send_to(&local_response, &src).await.unwrap();
+                let local_response = Self::local_packet(dns.clone())?;
+                socket.send_to(&local_response, &src).await?;
             }
         }
     }
@@ -68,13 +70,11 @@ impl EnclaveDns {
         .encode()
     }
 
-    async fn forward_dns_lookup(bytes: Bytes) -> Bytes {
-        let mut stream = Self::get_listener()
-            .await
-            .expect("Failed to establish connection");
-        stream.write_all(&bytes).await.unwrap();
+    async fn forward_dns_lookup(bytes: Bytes) -> Result<Bytes, DNSError> {
+        let mut stream = Self::get_listener().await?;
+        stream.write_all(&bytes).await?;
         let mut buffer = [0; 512];
-        let packet_size = stream.read(&mut buffer).await.unwrap();
-        Bytes::copy_from_slice(&buffer[..packet_size])
+        let packet_size = stream.read(&mut buffer).await?;
+        Ok(Bytes::copy_from_slice(&buffer[..packet_size]))
     }
 }

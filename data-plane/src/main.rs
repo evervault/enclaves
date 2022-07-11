@@ -8,7 +8,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpSocket;
 
 #[cfg(feature = "network_egress")]
-mod enclavedns;
+use data_plane::dns::enclavedns::EnclaveDns;
 
 const CUSTOMER_CONNECT_PORT: u16 = 8008;
 const DATA_PLANE_PORT: u16 = 7777;
@@ -28,12 +28,12 @@ async fn start() {
 #[cfg(feature = "network_egress")]
 async fn start() {
     println!("Running data plane with egress enabled");
-    tokio::join!(start_data_plane(), enclavedns::EnclaveDns::bind_server());
+    let _ = tokio::join!(start_data_plane(), EnclaveDns::bind_server());
 }
 
 async fn start_data_plane() {
     print!("Data plane starting on {}", DATA_PLANE_PORT);
-    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), DATA_PLANE_PORT);
+    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), DATA_PLANE_PORT);
 
     let server = match TcpServer::bind(addr).await {
         Ok(server) => server,
@@ -76,19 +76,16 @@ async fn enable_tls(server: TcpServer) -> Result<TlsServer, Error> {
     Ok(tls_server)
 }
 
-async fn handle_connection<S: AsyncRead + AsyncWrite>(external_stream: S) {
-    let ip_addr = std::net::Ipv4Addr::new(127, 0, 0, 1);
-    let tcp_socket = TcpSocket::new_v4()
-        .expect("Failed to create socket — socket sys call with AF_INET & SOCK_STREAM");
+async fn handle_connection<S: AsyncRead + AsyncWrite>(
+    external_stream: S,
+) -> Result<(u64, u64), std::io::Error> {
+    let ip_addr = std::net::Ipv4Addr::new(0, 0, 0, 0);
+    let tcp_socket = TcpSocket::new_v4()?;
     let customer_stream = tcp_socket
         .connect((ip_addr, CUSTOMER_CONNECT_PORT).into())
-        .await
-        .expect("Failed to connect to customer service");
+        .await?;
 
-    match pipe_streams(external_stream, customer_stream).await {
-        Ok(_) => println!("Finished piping connection to customer"),
-        Err(e) => println!("{} | Error piping connection to customer ", e),
-    };
+    pipe_streams(external_stream, customer_stream).await
 }
 
 async fn pipe_streams<T1, T2>(src: T1, dest: T2) -> Result<(u64, u64), tokio::io::Error>

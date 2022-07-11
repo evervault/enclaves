@@ -12,7 +12,7 @@ RUN apk update &&\
     rm -rf /var/cache/apk/*
 
 # add data-plane executable
-COPY ./data-plane/target/x86_64-unknown-linux-musl/release/data-plane $DATA_PLANE_EXECUTABLE_PATH
+COPY ./target/x86_64-unknown-linux-musl/release/data-plane $DATA_PLANE_EXECUTABLE_PATH
 RUN chmod +x $DATA_PLANE_EXECUTABLE_PATH
 
 # add user-entrypoint script

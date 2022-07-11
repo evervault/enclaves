@@ -1,14 +1,16 @@
+set -e 
 
-cd control-plane && sudo cargo run --features "network_egress" &
-cd data-plane && sudo cargo run --features "network_egress" &
+sudo cargo build --features network_egress --release --target x86_64-unknown-linux-musl
+docker build --platform linux/amd64 -t cages-test -f tests/Dockerfile .
+docker run -d -p 0.0.0.0:3030:3030 -it --rm --name cages-test-container cages-test
+
+sleep 2
 
 cd tests
-npm install
-npm run customer &
-
 npm run test
 
-kill -9 $(lsof -t -i tcp:8008)
-kill -9 $(lsof -t -i tcp:7777)
-kill -9 $(lsof -t -i tcp:3030)
+docker kill cages-test-container
+
+
+
 
