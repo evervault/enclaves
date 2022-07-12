@@ -19,15 +19,11 @@ RUN chmod +x $CONTROL_PLANE_EXECUTABLE_PATH
 
 RUN mkdir $DATA_PLANE_SERVICE_PATH
 COPY ./tests/scripts/start-data-plane.sh $DATA_PLANE_SERVICE_PATH/run
-RUN chmod +x $DATA_PLANE_SERVICE_PATH/run &&\
-    # tell runit not to automatically run this service
-    touch $DATA_PLANE_SERVICE_PATH/down
+RUN chmod +x $DATA_PLANE_SERVICE_PATH/run
 
 RUN mkdir $CONTROL_PLANE_SERVICE_PATH
 COPY ./tests/scripts/start-control-plane.sh $CONTROL_PLANE_SERVICE_PATH/run
-RUN chmod +x $CONTROL_PLANE_SERVICE_PATH/run &&\
-    # tell runit not to automatically run this service
-    touch $CONTROL_PLANE_SERVICE_PATH/down
+RUN chmod +x $CONTROL_PLANE_SERVICE_PATH/run
 
 COPY ./tests/customerProcess.js /customer-services/customerProcess.js
 COPY ./tests/package.json /customer-services/package.json
@@ -43,9 +39,5 @@ RUN mkdir /customer_process
 
 COPY ./tests/scripts/start_customer_process /customer_process/customer_process
 RUN chmod +x /customer_process/customer_process    
-
-RUN mkdir $START_EV_SERVICES_PATH
-COPY ./tests/scripts/start-ev-services.sh $START_EV_SERVICES_PATH/run
-RUN chmod +x $START_EV_SERVICES_PATH/run
 
 CMD ["runsvdir", "/etc/service"]
