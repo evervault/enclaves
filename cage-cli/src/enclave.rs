@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
 use std::process::{Command, Stdio};
-use tempfile::TempDir;
 
-const NITRO_CLI_DOCKERFILE_PATH: &str = "./nitro-cli-image.Dockerfile";
 const IN_CONTAINER_VOLUME_DIR: &str = "/output";
 const EV_USER_IMAGE_NAME: &str = "ev-user-image";
 const NITRO_CLI_IMAGE_NAME: &str = "nitro-cli-image";
+pub const NITRO_CLI_IMAGE_FILENAME: &str = "nitro-cli-image.Dockerfile";
+pub const ENCLAVE_FILENAME: &str = "enclave.eif";
 
 pub struct CommandConfig {
     verbose: bool,
@@ -68,19 +68,24 @@ pub fn build_user_image(
     }
 }
 
-pub fn build_nitro_cli_image(command_config: &CommandConfig) -> Result<(), String> {
-    let temp_context_dir = TempDir::new().unwrap();
+pub fn build_nitro_cli_image(
+    command_config: &CommandConfig,
+    output_dir: &String,
+) -> Result<(), String> {
+    let nitro_cli_dockerfile_contents = include_bytes!("nitro-cli-image.Dockerfile");
+    let nitro_cli_dockerfile_path = format!("{}/{}", output_dir, NITRO_CLI_IMAGE_FILENAME);
+    std::fs::write(&nitro_cli_dockerfile_path, nitro_cli_dockerfile_contents).unwrap();
 
     let build_nitro_cli_image_args = [
         vec![
             "build",
             "-f",
-            NITRO_CLI_DOCKERFILE_PATH,
+            nitro_cli_dockerfile_path.as_str(),
             "-t",
             NITRO_CLI_IMAGE_NAME,
         ],
         command_config.extra_build_args(),
-        vec![temp_context_dir.path().to_str().unwrap()],
+        vec![output_dir],
     ]
     .concat();
 
@@ -121,7 +126,7 @@ pub struct EnclaveBuildOutput {
 #[derive(Debug)]
 pub struct BuiltEnclave {
     measurements: EIFMeasurements,
-    location: TempDir,
+    location: String,
 }
 
 impl BuiltEnclave {
@@ -129,16 +134,15 @@ impl BuiltEnclave {
         &self.measurements
     }
 
-    pub fn location(&self) -> &TempDir {
+    pub fn location(&self) -> &String {
         &self.location
     }
 }
 
 pub fn run_conversion_to_enclave(
     command_config: &CommandConfig,
-    enclave_filename: &str,
+    output_dir: &String,
 ) -> Result<BuiltEnclave, String> {
-    let output_dir = TempDir::new().unwrap();
     let run_conversion_status = Command::new("docker")
         .args(vec![
             "run",
@@ -146,15 +150,10 @@ pub fn run_conversion_to_enclave(
             "-v",
             "/var/run/docker.sock:/var/run/docker.sock",
             "-v",
-            format!(
-                "{}:{}",
-                output_dir.path().to_str().unwrap(),
-                IN_CONTAINER_VOLUME_DIR
-            )
-            .as_str(),
+            format!("{}:{}", output_dir, IN_CONTAINER_VOLUME_DIR).as_str(),
             NITRO_CLI_IMAGE_NAME,
             "--output-file",
-            &format!("{}/{}", IN_CONTAINER_VOLUME_DIR, enclave_filename),
+            &format!("{}/{}", IN_CONTAINER_VOLUME_DIR, ENCLAVE_FILENAME),
             "--docker-uri",
             EV_USER_IMAGE_NAME,
         ])
@@ -168,7 +167,7 @@ pub fn run_conversion_to_enclave(
             serde_json::from_slice(run_conversion_status.stdout.as_slice()).unwrap();
         Ok(BuiltEnclave {
             measurements: build_output.measurements,
-            location: output_dir,
+            location: output_dir.clone(),
         })
     } else {
         Err("Failed to Nitro CLI image.".to_string())
