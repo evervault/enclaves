@@ -63,7 +63,7 @@ impl WantsCert {
 #[async_trait]
 impl Listener for TlsServer {
     type Connection = TlsStream<TcpStream>;
-    async fn accept(&self) -> ServerResult<Self::Connection> {
+    async fn accept(&mut self) -> ServerResult<Self::Connection> {
         let conn = self.inner.accept().await?;
         let accepted_tls_conn = self.tls_acceptor.accept(conn).await?;
         Ok(accepted_tls_conn)

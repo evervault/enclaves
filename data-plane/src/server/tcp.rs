@@ -18,7 +18,7 @@ impl TcpServer {
 #[async_trait]
 impl Listener for TcpServer {
     type Connection = TcpStream;
-    async fn accept(&self) -> super::error::ServerResult<Self::Connection> {
+    async fn accept(&mut self) -> super::error::ServerResult<Self::Connection> {
         let (conn, _socket_addr) = self.inner.accept().await?;
         Ok(conn)
     }

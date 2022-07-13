@@ -1,8 +1,12 @@
 #[cfg(feature = "tls")]
 use data_plane::error::Error;
+use data_plane::server::Listener;
+#[cfg(not(feature = "enclave"))]
+use data_plane::server::TcpServer;
 #[cfg(feature = "tls")]
 use data_plane::server::TlsServer;
-use data_plane::server::{Listener, TcpServer};
+
+#[cfg(not(feature = "enclave"))]
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpSocket;
@@ -10,8 +14,13 @@ use tokio::net::TcpSocket;
 #[cfg(feature = "network_egress")]
 use data_plane::dns::enclavedns::EnclaveDns;
 
+#[cfg(feature = "enclave")]
+use data_plane::server::VsockServer;
+
 const CUSTOMER_CONNECT_PORT: u16 = 8008;
 const DATA_PLANE_PORT: u16 = 7777;
+#[cfg(feature = "enclave")]
+const ENCLAVE_CID: u32 = 2021;
 
 #[tokio::main]
 async fn main() {
@@ -33,9 +42,17 @@ async fn start() {
 
 async fn start_data_plane() {
     print!("Data plane starting on {}", DATA_PLANE_PORT);
-    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), DATA_PLANE_PORT);
+    #[cfg(not(feature = "enclave"))]
+    let get_server = TcpServer::bind(SocketAddr::new(
+        IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+        DATA_PLANE_PORT,
+    ))
+    .await;
 
-    let server = match TcpServer::bind(addr).await {
+    #[cfg(feature = "enclave")]
+    let get_server = VsockServer::bind(ENCLAVE_CID, DATA_PLANE_PORT.into()).await;
+
+    let server = match get_server {
         Ok(server) => server,
         Err(e) => {
             eprintln!("Error: {:?}", e);
@@ -43,8 +60,11 @@ async fn start_data_plane() {
         }
     };
 
+    #[cfg(not(feature = "tls"))]
+    let mut server = server;
+
     #[cfg(feature = "tls")]
-    let server = {
+    let mut server = {
         println!("TLS enabled");
         match enable_tls(server).await {
             Ok(tls_server) => tls_server,

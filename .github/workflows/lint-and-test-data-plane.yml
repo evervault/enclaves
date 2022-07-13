@@ -12,9 +12,11 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-          components: rustfmt
-      - name: Compile project
-        run: cargo build --all-features -p data-plane
+          components: rustfmt 
+      - name: Compile project feature -enclave
+        run: cargo build --features enclave -p data-plane
+      - name: Compile project feature -not_enclave
+        run: cargo build --features not_enclave -p data-plane  
       - name: Test project
         run: cargo test -p data-plane
       - name: Format project

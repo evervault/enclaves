@@ -17,6 +17,7 @@ dns-message-parser = { version = "*", optional = true }
 ttl_cache = { version = "*", optional = true }
 tokio-rustls = { version = "0.23.4", optional = true }
 rustls-pemfile = { version = "1.0.0", optional = true }
+tokio-vsock = { version = "0.3.2", optional = true } 
 
 
 [features]
@@ -25,3 +26,5 @@ local-cert = [] # added to let us compile out any references to local certs
 tls = ["dep:tokio-rustls","dep:rustls-pemfile"]
 local-tls = ["tls","local-cert"]
 network_egress = ["dep:dns-message-parser","dep:ttl_cache"]
+enclave = ["dep:tokio-vsock", "network_egress"]
+not_enclave = ["network_egress", "tls", "network_egress", "local-tls"]

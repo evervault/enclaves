@@ -13,8 +13,10 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt
-      - name: Compile project
-        run: cargo build --all-features -p control-plane
+      - name: Compile project feature -enclave
+        run: cargo build --features enclave -p control-plane 
+      - name: Compile project feature -not_enclave
+        run: cargo build --features not_enclave -p control-plane 
       - name: Test project
         run: cargo test -p control-plane
       - name: Format project

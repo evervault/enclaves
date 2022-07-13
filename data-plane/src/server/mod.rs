@@ -2,6 +2,11 @@ pub mod error;
 mod tcp;
 pub use tcp::TcpServer;
 
+#[cfg(feature = "enclave")]
+mod vsock;
+#[cfg(feature = "enclave")]
+pub use vsock::VsockServer;
+
 #[cfg(feature = "tls")]
 mod tls;
 #[cfg(feature = "tls")]
@@ -13,5 +18,5 @@ use tokio::io::{AsyncRead, AsyncWrite};
 #[async_trait]
 pub trait Listener: Sized {
     type Connection: AsyncRead + AsyncWrite + Send + 'static;
-    async fn accept(&self) -> error::ServerResult<Self::Connection>;
+    async fn accept(&mut self) -> error::ServerResult<Self::Connection>;
 }

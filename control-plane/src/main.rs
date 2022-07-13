@@ -2,7 +2,12 @@ use hyper::client::conn::handshake;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+#[cfg(not(feature = "enclave"))]
 use tokio::net::TcpStream;
+
+#[cfg(feature = "enclave")]
+use tokio_vsock::VsockStream;
 
 use crate::error::Result;
 
@@ -14,8 +19,12 @@ mod error;
 const ENCLAVE_CONNECT_PORT: u16 = 7777;
 const CONTROL_PLANE_PORT: u16 = 3030;
 
+#[cfg(feature = "enclave")]
+const ENCLAVE_CID: u32 = 2021;
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    println!("Starting control plane on {}", CONTROL_PLANE_PORT);
     #[cfg(not(feature = "network_egress"))]
     tokio::spawn(http_server());
 
@@ -37,11 +46,15 @@ async fn http_server() -> Result<()> {
 
 async fn forward_to_enclave(req: Request<Body>) -> Result<Response<Body>> {
     println!("Forwarding to enclave");
+    #[cfg(not(feature = "enclave"))]
     let stream = TcpStream::connect(std::net::SocketAddr::new(
         std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
         ENCLAVE_CONNECT_PORT,
     ))
     .await;
+
+    #[cfg(feature = "enclave")]
+    let stream = VsockStream::connect(ENCLAVE_CID, ENCLAVE_CONNECT_PORT.into()).await;
 
     let (mut request_sender, conn) = handshake(stream?).await?;
 
