@@ -3,7 +3,7 @@ on:
     paths:
       - data-plane/**
       - .github/workflows/lint-and-test-data-plane.yml
-name: Lint and Test
+name: Lint and Test Data Plane
 jobs:
   clippy_check_data_plane:
     runs-on: ubuntu-latest

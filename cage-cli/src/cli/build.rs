@@ -276,29 +276,47 @@ ENTRYPOINT ["runsvdir", "/etc/service"]
 
     // Commented out until self-hosted actions runner with Docker is up and running.
 
-    // #[tokio::test]
-    // async fn test_choose_output_dir() {
-    //     let output_dir = TempDir::new().unwrap();
+    #[tokio::test]
+    async fn test_choose_output_dir() {
+        let output_dir = TempDir::new().unwrap();
 
-    //     let build_args = BuildArgs {
-    //         dockerfile: "./sample-user.Dockerfile".to_string(),
-    //         verbose: false,
-    //         json: false,
-    //         output_dir: Some(output_dir.path().to_str().unwrap().to_string()),
-    //     };
+        let build_args = BuildArgs {
+            dockerfile: "./sample-user.Dockerfile".to_string(),
+            verbose: false,
+            json: false,
+            output_dir: Some(output_dir.path().to_str().unwrap().to_string()),
+        };
 
-    //     println!("output_dir: {}", output_dir.path().to_str().unwrap().to_string());
+        println!(
+            "output_dir: {}",
+            output_dir.path().to_str().unwrap().to_string()
+        );
 
-    //     run(build_args).await;
+        run(build_args).await;
 
-    //     let paths = std::fs::read_dir(output_dir.path().to_str().unwrap().to_string()).unwrap();
+        let paths = std::fs::read_dir(output_dir.path().to_str().unwrap().to_string()).unwrap();
 
-    //     for path in paths {
-    //         println!("Name: {}", path.unwrap().path().display())
-    //     }
+        for path in paths {
+            println!("Name: {}", path.unwrap().path().display())
+        }
 
-    //     assert_eq!(output_dir.path().join(super::EV_USER_DOCKERFILE_PATH).exists(), true);
-    //     assert_eq!(output_dir.path().join(enclave::NITRO_CLI_IMAGE_FILENAME).exists(), true);
-    //     assert_eq!(output_dir.path().join(enclave::ENCLAVE_FILENAME).exists(), true);
-    // }
+        assert_eq!(
+            output_dir
+                .path()
+                .join(super::EV_USER_DOCKERFILE_PATH)
+                .exists(),
+            true
+        );
+        assert_eq!(
+            output_dir
+                .path()
+                .join(enclave::NITRO_CLI_IMAGE_FILENAME)
+                .exists(),
+            true
+        );
+        assert_eq!(
+            output_dir.path().join(enclave::ENCLAVE_FILENAME).exists(),
+            true
+        );
+    }
 }

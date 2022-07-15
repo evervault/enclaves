@@ -3,7 +3,7 @@ on:
     paths:
       - control-plane/**
       - .github/workflows/lint-and-test-control-plane.yml
-name: Lint and Test
+name: Lint and Test Control Plane
 jobs:
   clippy_check_control_plane:
     runs-on: ubuntu-latest

@@ -173,19 +173,3 @@ pub fn run_conversion_to_enclave(
         Err("Failed to Nitro CLI image.".to_string())
     }
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use crate::docker::enclave_builder::{build_enclave, ENCLAVE_FILENAME};
-//
-//     #[test]
-//     fn test_build_runtime() -> Result<(), String> {
-//         let user_context_path = "..";
-//         let user_dockerfile_path = "../runtime/Dockerfile";
-//
-//         let temp_output_dir = build_enclave(user_dockerfile_path, user_context_path, false, false)?;
-//         // temporary directory containing the enclave.eif file is returned
-//         assert_eq!(temp_output_dir.path().join(ENCLAVE_FILENAME).exists(), true);
-//         Ok(())
-//     }
-// }

@@ -3,12 +3,15 @@ on:
     paths:
       - cage-cli/**
       - .github/workflows/lint-and-test-cli.yml
-name: Lint and Test
+name: Lint and Test CLI
 jobs:
   clippy_check_cli:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - uses: actions-hub/docker/cli@f5fdbfc3f9d2a9265ead8962c1314108a7b7ec5d
+        env:
+          SKIP_LOGIN: true
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
