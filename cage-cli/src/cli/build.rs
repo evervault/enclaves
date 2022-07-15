@@ -31,9 +31,20 @@ pub struct BuildArgs {
     /// Path to directory where the processed docker image and enclave will be saved
     #[clap(short = 'o', long = "output")]
     pub output_dir: Option<String>,
+
+    #[clap()]
+    pub context_path: String,
 }
 
 pub async fn run(build_args: BuildArgs) {
+    if !Path::new(&build_args.context_path).exists() {
+        log::error!(
+            "The build context directory {} does not exist.",
+            build_args.context_path
+        );
+        return;
+    }
+
     // temporary directory must remain in scope for the whole
     // function so it isn't deleted until all the builds are finished.
     let (output_dir_path, _tmp_output_dir) =
@@ -119,7 +130,11 @@ pub async fn run(build_args: BuildArgs) {
 
     let command_config = enclave::CommandConfig::new(build_args.verbose);
     log::info!("Building docker image…");
-    if let Err(e) = enclave::build_user_image(&ev_user_dockerfile_path, ".", &command_config) {
+    if let Err(e) = enclave::build_user_image(
+        &ev_user_dockerfile_path,
+        &build_args.context_path,
+        &command_config,
+    ) {
         log::error!("An error occurred while building the docker image. {}", e);
         return;
     }
@@ -285,6 +300,7 @@ ENTRYPOINT ["runsvdir", "/etc/service"]
             verbose: false,
             json: false,
             output_dir: Some(output_dir.path().to_str().unwrap().to_string()),
+            context_path: ".".to_string(),
         };
 
         println!(
