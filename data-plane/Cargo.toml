@@ -13,12 +13,12 @@ lazy_static = "1.4.0"
 async-trait = "0.1.56"
 thiserror = "1.0"
 bytes = "1"
+nom = "7.1.1"
 dns-message-parser = { version = "*", optional = true }
 ttl_cache = { version = "*", optional = true }
 tokio-rustls = { version = "0.23.4", optional = true }
 rustls-pemfile = { version = "1.0.0", optional = true }
-tokio-vsock = { version = "0.3.2", optional = true } 
-
+tokio-vsock = { version = "0.3.2", optional = true }
 
 [features]
 default = []
