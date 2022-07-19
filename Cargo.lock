@@ -255,6 +255,7 @@ dependencies = [
  "aws-nitro-enclaves-nsm-api",
  "bytes 1.1.0",
  "dns-message-parser",
+ "futures",
  "hyper",
  "lazy_static",
  "memsec",
@@ -264,6 +265,8 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-rustls",
+ "tokio-test",
+ "tokio-util 0.6.10",
  "tokio-vsock",
  "ttl_cache",
 ]
