@@ -1,7 +1,6 @@
 on:
   push:
     paths:
-      - cage-cli/**
       - control-plane/**
       - data-plane/**
       - .github/workflows/lint.yml

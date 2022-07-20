@@ -1,2 +1,2 @@
 [workspace]
-members = ["cage-cli","control-plane","data-plane"]
+members = ["control-plane","data-plane"]
