@@ -1,0 +1,52 @@
+on:
+  push:
+    paths:
+      - control-plane/**
+      - .github/workflows/deploy-control-plane-base-image-staging.yml
+      - scripts/start-cage.sh
+    branches:
+      - main
+name: Deploy new control plane image
+jobs:
+  deploy_control_plane_image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt
+      - name: Test control plane
+        run: cargo test -p control-plane
+      - name: Compile control plane for enclave
+        run: cargo build --features enclave -p control-plane --release
+      - name: Move control-plane binary to root
+        run: cp ./target/release/control-plane ./control-plane
+      - name: Configure Staging AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_STAGING }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}
+          aws-region: us-east-1
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      - name: Build, and tag
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: evervault/control-plane
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -f ./control-plane/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest --pull --no-cache .
+      - name: Push control plane image to Amazon ECR
+        id: push-control-plane
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: evervault/control-plane
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
