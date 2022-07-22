@@ -21,6 +21,9 @@ ttl_cache = { version = "*", optional = true }
 tokio-rustls = { version = "0.23.4", optional = true }
 rustls-pemfile = { version = "1.0.0", optional = true }
 tokio-vsock = { version = "0.3.2", optional = true }
+tls-parser = "0.11.0"
+shared = { path = "../shared" }
+dashmap = "4.0.2"
 
 [dev-dependencies]
 tokio-test = "0.4.2"

@@ -12,10 +12,13 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpSocket;
 
 #[cfg(feature = "network_egress")]
+use data_plane::dns::egressproxy::EgressProxy;
+#[cfg(feature = "network_egress")]
 use data_plane::dns::enclavedns::EnclaveDns;
 
 #[cfg(feature = "enclave")]
 use data_plane::server::VsockServer;
+use shared::utils::pipe_streams;
 
 const CUSTOMER_CONNECT_PORT: u16 = 8008;
 const DATA_PLANE_PORT: u16 = 7777;
@@ -37,7 +40,11 @@ async fn start() {
 #[cfg(feature = "network_egress")]
 async fn start() {
     println!("Running data plane with egress enabled");
-    let _ = tokio::join!(start_data_plane(), EnclaveDns::bind_server());
+    let _ = tokio::join!(
+        start_data_plane(),
+        EnclaveDns::bind_server(),
+        EgressProxy::listen()
+    );
 }
 
 async fn start_data_plane() {
@@ -106,18 +113,4 @@ async fn handle_connection<S: AsyncRead + AsyncWrite>(
         .await?;
 
     pipe_streams(external_stream, customer_stream).await
-}
-
-async fn pipe_streams<T1, T2>(src: T1, dest: T2) -> Result<(u64, u64), tokio::io::Error>
-where
-    T1: AsyncRead + AsyncWrite,
-    T2: AsyncRead + AsyncWrite,
-{
-    let (mut src_reader, mut src_writer) = tokio::io::split(src);
-    let (mut dest_reader, mut dest_writer) = tokio::io::split(dest);
-
-    tokio::try_join!(
-        tokio::io::copy(&mut src_reader, &mut dest_writer),
-        tokio::io::copy(&mut dest_reader, &mut src_writer)
-    )
 }

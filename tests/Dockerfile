@@ -25,11 +25,11 @@ RUN mkdir $CONTROL_PLANE_SERVICE_PATH
 COPY ./tests/scripts/start-control-plane.sh $CONTROL_PLANE_SERVICE_PATH/run
 RUN chmod +x $CONTROL_PLANE_SERVICE_PATH/run
 
+
 COPY ./tests/customerProcess.js /customer-services/customerProcess.js
 COPY ./tests/package.json /customer-services/package.json
 
-RUN cd customer-services \
-    && npm install
+COPY ./tests/node_modules /customer-services/node_modules
 
 RUN mkdir /etc/service/customer_process \
     && /bin/sh -c "echo -e '"'#!/bin/sh\nexec /customer_process/customer_process\n'"' > /etc/service/customer_process/run" \

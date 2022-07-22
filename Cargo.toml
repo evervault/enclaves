@@ -1,2 +1,2 @@
 [workspace]
-members = ["control-plane","data-plane"]
+members = ["control-plane","data-plane", "shared"]

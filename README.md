@@ -9,9 +9,11 @@ If you're runnning the project locally the services are running on the following
 - Control Plane
     - HTTP server: 3030
     - TCP/Mock Vsock server: 8888
+    - Egress proxy: 4433
 - Data Plane
-    - DNS listener: 5300
+    - DNS listener: 53
     - TCP/Mock Vsock server: 7777
+    - HTTP listener: 443
 - Customer Service : 8008
 
 ## Feature flags
@@ -24,10 +26,10 @@ cargo run --features network_egress
 
 ## Query Local DNS Server
 
-The enclave DNS forwarder is listening on 5300 locally. To test lookup from data plane -> control plane -> remote DNS server use the following command:
+The enclave DNS forwarder is listening on 53. To test lookup from data plane -> control plane -> remote DNS server use the following command:
 
 ```
-dig evervault.com -p 5300 @127.0.0.1
+dig evervault.com @127.0.0.1
 ```
 
 

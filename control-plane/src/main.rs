@@ -6,18 +6,19 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 #[cfg(not(feature = "enclave"))]
 use tokio::net::TcpStream;
 
+use crate::error::Result;
 #[cfg(feature = "enclave")]
 use tokio_vsock::VsockStream;
 
-use crate::error::Result;
-
 #[cfg(feature = "network_egress")]
 mod dnsproxy;
+#[cfg(feature = "network_egress")]
+mod egressproxy;
 
 mod error;
 
 const ENCLAVE_CONNECT_PORT: u16 = 7777;
-const CONTROL_PLANE_PORT: u16 = 3030;
+const CONTROL_PLANE_PORT: u16 = 3031;
 
 #[cfg(feature = "enclave")]
 const ENCLAVE_CID: u32 = 2021;
@@ -29,7 +30,11 @@ async fn main() -> Result<()> {
     tokio::spawn(http_server());
 
     #[cfg(feature = "network_egress")]
-    let _ = tokio::join!(http_server(), dnsproxy::DnsProxy::listen());
+    let _ = tokio::join!(
+        http_server(),
+        dnsproxy::DnsProxy::listen(),
+        egressproxy::EgressProxy::listen()
+    );
 
     Ok(())
 }

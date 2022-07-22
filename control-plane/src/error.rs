@@ -3,8 +3,9 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum ServerError {
-    IoError(#[from] std::io::Error),
-    HyperError(#[from] hyper::Error),
+    Io(#[from] std::io::Error),
+    Hyper(#[from] hyper::Error),
+    Rpc(#[from] shared::rpc::error::RpcError),
 }
 
 impl std::fmt::Display for ServerError {

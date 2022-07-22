@@ -1,10 +1,9 @@
+use crate::error::Result;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 use tokio::net::UdpSocket;
-
-use crate::error::Result;
 
 pub struct DnsProxy;
 
