@@ -1,0 +1,26 @@
+on:
+  push:
+    paths:
+      - e2e-tests/**
+      - data-plane/**
+      - control-plane/**
+      - .github/workflows/test-e2e.yml
+name: Run end-to-end tests
+jobs:
+  run_e2e_tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: evervault/cargo-static-build@v2
+        with:
+          cmd: cargo build --features network_egress --release --target x86_64-unknown-linux-musl
+      - uses: actions-hub/docker/cli@f5fdbfc3f9d2a9265ead8962c1314108a7b7ec5d
+        env:
+          SKIP_LOGIN: true
+      - uses: actions/setup-node@v1
+        with:
+          node-version: '16.x'
+      - name: Run end-to-end test script
+        env:
+          CI: true
+        run: sh e2e-tests/run.sh

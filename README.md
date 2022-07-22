@@ -35,10 +35,10 @@ dig evervault.com @127.0.0.1
 
 ## Temp Running Instructions
 
-Run tests
+Run end-to-end tests
 
 ```
-sh tests/run.sh
+sh e2e-tests/run.sh
 ```
 
 ## Runtime

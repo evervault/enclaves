@@ -1,6 +1,7 @@
 .idea
 target
 */target
-tests/node_modules
-tests/customer-process/node_modules
+e2e-tests/node_modules
+e2e-tests/customer-process/node_modules
 data-plane/*.pem
+.cargo

@@ -6,6 +6,7 @@ ENV CONTROL_PLANE_EXECUTABLE_PATH=/control-plane
 ENV CONTROL_PLANE_SERVICE_PATH=/etc/service/control-plane
 ENV START_EV_SERVICES_PATH=/etc/service/ev-services-entrypoint
 
+EXPOSE 3030
 
 RUN apk update &&\
     apk add runit &&\
@@ -18,18 +19,17 @@ COPY ./target/x86_64-unknown-linux-musl/release/control-plane $CONTROL_PLANE_EXE
 RUN chmod +x $CONTROL_PLANE_EXECUTABLE_PATH
 
 RUN mkdir $DATA_PLANE_SERVICE_PATH
-COPY ./tests/scripts/start-data-plane.sh $DATA_PLANE_SERVICE_PATH/run
+COPY ./e2e-tests/scripts/start-data-plane.sh $DATA_PLANE_SERVICE_PATH/run
 RUN chmod +x $DATA_PLANE_SERVICE_PATH/run
 
 RUN mkdir $CONTROL_PLANE_SERVICE_PATH
-COPY ./tests/scripts/start-control-plane.sh $CONTROL_PLANE_SERVICE_PATH/run
+COPY ./e2e-tests/scripts/start-control-plane.sh $CONTROL_PLANE_SERVICE_PATH/run
 RUN chmod +x $CONTROL_PLANE_SERVICE_PATH/run
 
+COPY ./e2e-tests/customerProcess.js /customer-services/customerProcess.js
+COPY ./e2e-tests/package.json /customer-services/package.json
 
-COPY ./tests/customerProcess.js /customer-services/customerProcess.js
-COPY ./tests/package.json /customer-services/package.json
-
-COPY ./tests/node_modules /customer-services/node_modules
+COPY ./e2e-tests/node_modules /customer-services/node_modules
 
 RUN mkdir /etc/service/customer_process \
     && /bin/sh -c "echo -e '"'#!/bin/sh\nexec /customer_process/customer_process\n'"' > /etc/service/customer_process/run" \
@@ -37,7 +37,7 @@ RUN mkdir /etc/service/customer_process \
 
 RUN mkdir /customer_process
 
-COPY ./tests/scripts/start_customer_process /customer_process/customer_process
-RUN chmod +x /customer_process/customer_process    
+COPY ./e2e-tests/scripts/start_customer_process /customer_process/customer_process
+RUN chmod +x /customer_process/customer_process 
 
 CMD ["runsvdir", "/etc/service"]
