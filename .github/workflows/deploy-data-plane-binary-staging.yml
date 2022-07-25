@@ -19,11 +19,6 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Build data-plane
-        uses: evervault/cargo-static-build@master
-        with:
-          cmd: cargo build -p data-plane --features network_egress --release --target ${{ env.LINUX_TARGET }}
-
       - name: Configure Staging AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -31,9 +26,30 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}
           aws-region: us-east-1
 
-      - name: Upload data-plane to S3
+
+      - name: Build data-plane (egress enabled)
+        uses: evervault/cargo-static-build@master
+        with:
+          cmd: cargo build -p data-plane --features network_egress --release --target ${{ env.LINUX_TARGET }}
+
+      - name: Upload data-plane to S3 (egress enabled)
         env:
           VERSION_TAG: ${{ github.sha }}
+          FEATURE_LABEL: egress-enabled
         run: |
-          aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane
-          aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/latest/data-plane
+          aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
+          aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/latest/data-plane/${{ env.FEATURE_LABEL }}
+
+
+      - name: Build data-plane (egress disabled)
+        uses: evervault/cargo-static-build@master
+        with:
+          cmd: cargo build -p data-plane --release --target ${{ env.LINUX_TARGET }}
+
+      - name: Upload data-plane to S3 (egress disabled)
+        env:
+          VERSION_TAG: ${{ github.sha }}
+          FEATURE_LABEL: egress-disabled
+        run: |
+          aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
+          aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/latest/data-plane/${{ env.FEATURE_LABEL }}

@@ -33,7 +33,7 @@ async fn main() {
 
 #[cfg(not(feature = "network_egress"))]
 async fn start() {
-    println!("Running data plane without egress enabled");
+    println!("Running data plane with egress disabled");
     start_data_plane().await;
 }
 
