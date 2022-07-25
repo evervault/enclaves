@@ -1,0 +1,51 @@
+name: Release data-plane binary production
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  RUST_BACKTRACE: 1
+  LINUX_TARGET: x86_64-unknown-linux-musl
+  STAGE: production
+
+jobs:
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+    steps:
+      - id: get-version
+        run: |
+          echo "using version tag ${GITHUB_REF:11}"
+          echo ::set-output name=version::${GITHUB_REF:11}
+
+  deploy-data-plane-binary:
+    needs: get-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Inject Version
+        run: |
+          sh ./scripts/insert-data-plane-version.sh ${{ needs.get-version.outputs.version }}
+
+      - name: Build data-plane
+        uses: evervault/cargo-static-build@master
+        with:
+          cmd: cargo build -p data-plane --features network_egress --release --target ${{ env.LINUX_TARGET }}
+
+      - name: Configure Production AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PRODUCTION }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PRODUCTION }}
+          aws-region: us-east-1
+
+      - name: Upload data-plane to S3
+        env:
+          VERSION_TAG: ${{ needs.get-version.outputs.version }}
+        run: |
+          aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane
+          aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/latest/data-plane

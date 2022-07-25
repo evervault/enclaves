@@ -1,0 +1,39 @@
+name: Release data-plane binary staging
+
+on:
+  push:
+    paths:
+      - .github/workflows/deploy-data-plane-binary-staging.yml
+      - data-plane/**
+    branches:
+      - main
+
+env:
+  RUST_BACKTRACE: 1
+  LINUX_TARGET: x86_64-unknown-linux-musl
+  STAGE: staging
+
+jobs:
+  deploy-data-plane-binary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Build data-plane
+        uses: evervault/cargo-static-build@master
+        with:
+          cmd: cargo build -p data-plane --features network_egress --release --target ${{ env.LINUX_TARGET }}
+
+      - name: Configure Staging AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_STAGING }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}
+          aws-region: us-east-1
+
+      - name: Upload data-plane to S3
+        env:
+          VERSION_TAG: ${{ github.sha }}
+        run: |
+          aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane
+          aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/latest/data-plane
