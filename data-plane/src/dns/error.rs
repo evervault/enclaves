@@ -4,7 +4,7 @@ use thiserror::Error;
 
 #[derive(Error)]
 pub enum DNSError {
-    IO(#[from] std::io::Error),
+    Io(#[from] std::io::Error),
     DNSEncodeError(#[from] dns_message_parser::EncodeError),
     DNSDecodeError(#[from] dns_message_parser::DecodeError),
     RpcError(#[from] shared::rpc::error::RpcError),
@@ -19,7 +19,7 @@ impl fmt::Display for DNSError {
             match self {
                 DNSError::DNSDecodeError(message) => message.to_string(),
                 DNSError::DNSEncodeError(message) => message.to_string(),
-                DNSError::IO(message) => message.to_string(),
+                DNSError::Io(message) => message.to_string(),
                 RpcError(message) => message.to_string(),
                 DNSError::MissingIP(message) => message.to_string(),
             }

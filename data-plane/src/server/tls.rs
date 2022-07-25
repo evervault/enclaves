@@ -1,4 +1,4 @@
-use super::Listener;
+use shared::server::Listener;
 
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -7,9 +7,10 @@ use tokio_rustls::server::TlsStream;
 use tokio_rustls::TlsAcceptor;
 
 use crate::server::error::ServerResult;
+use crate::server::error::TlsError;
 use crate::server::tls::cert::CertProvider;
-use crate::server::TcpServer;
 use rustls_pemfile::Item;
+use shared::server::tcp::TcpServer;
 use tokio_rustls::rustls::{Certificate, PrivateKey, ServerConfig};
 
 pub struct TlsServer {
@@ -63,7 +64,8 @@ impl WantsCert {
 #[async_trait]
 impl Listener for TlsServer {
     type Connection = TlsStream<TcpStream>;
-    async fn accept(&mut self) -> ServerResult<Self::Connection> {
+    type Error = TlsError;
+    async fn accept(&mut self) -> Result<Self::Connection, Self::Error> {
         let conn = self.inner.accept().await?;
         let accepted_tls_conn = self.tls_acceptor.accept(conn).await?;
         Ok(accepted_tls_conn)
@@ -72,7 +74,7 @@ impl Listener for TlsServer {
 
 mod cert {
     use super::*;
-    use crate::server::error::ServerError;
+    use crate::server::error::TlsError;
     #[async_trait]
     pub(super) trait CertProvider {
         async fn get_cert_and_key(&self) -> ServerResult<(Certificate, PrivateKey)>;
@@ -99,10 +101,10 @@ mod cert {
     impl CertProvider for LocalCertProvider {
         async fn get_cert_and_key(&self) -> ServerResult<(Certificate, PrivateKey)> {
             let cert = self.get_cert_location();
-            let imported_cert = import_cert(cert.as_str())?.ok_or(ServerError::NoCertFound)?;
+            let imported_cert = import_cert(cert.as_str())?.ok_or(TlsError::NoCertFound)?;
 
             let key = self.get_key_location();
-            let imported_key = import_key(key.as_str())?.ok_or(ServerError::NoKeyFound)?;
+            let imported_key = import_key(key.as_str())?.ok_or(TlsError::NoKeyFound)?;
 
             Ok((imported_cert, imported_key))
         }

@@ -1,3 +1,4 @@
+use crate::server::error::ServerError;
 use std::net::SocketAddr;
 use tokio::net::{TcpListener, TcpStream};
 
@@ -18,7 +19,8 @@ impl TcpServer {
 #[async_trait]
 impl Listener for TcpServer {
     type Connection = TcpStream;
-    async fn accept(&mut self) -> super::error::ServerResult<Self::Connection> {
+    type Error = ServerError;
+    async fn accept(&mut self) -> Result<Self::Connection, Self::Error> {
         let (conn, _socket_addr) = self.inner.accept().await?;
         Ok(conn)
     }

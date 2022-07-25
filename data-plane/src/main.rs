@@ -1,15 +1,16 @@
 #[cfg(feature = "tls")]
-use data_plane::error::Error;
-use data_plane::server::Listener;
+use data_plane::server::tls::TlsServer;
 #[cfg(not(feature = "enclave"))]
-use data_plane::server::TcpServer;
-#[cfg(feature = "tls")]
-use data_plane::server::TlsServer;
+use shared::server::tcp::TcpServer;
+use shared::server::Listener;
 
 #[cfg(not(feature = "enclave"))]
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpSocket;
+
+#[cfg(feature = "tls")]
+use data_plane::server::error::TlsError;
 
 #[cfg(feature = "network_egress")]
 use data_plane::dns::egressproxy::EgressProxy;
@@ -17,7 +18,7 @@ use data_plane::dns::egressproxy::EgressProxy;
 use data_plane::dns::enclavedns::EnclaveDns;
 
 #[cfg(feature = "enclave")]
-use data_plane::server::VsockServer;
+use shared::server::vsock::VsockServer;
 use shared::utils::pipe_streams;
 
 const CUSTOMER_CONNECT_PORT: u16 = 8008;
@@ -88,7 +89,7 @@ async fn start_data_plane() {
 }
 
 #[cfg(all(feature = "tls", feature = "local-cert"))]
-async fn enable_tls(server: TcpServer) -> Result<TlsServer, Error> {
+async fn enable_tls(server: TcpServer) -> Result<TlsServer, TlsError> {
     println!("--> Using local cert + key");
     let tls_builder = TlsServer::builder().with_tcp_server(server);
     let tls_server = tls_builder.with_local_cert().await?;
@@ -96,7 +97,7 @@ async fn enable_tls(server: TcpServer) -> Result<TlsServer, Error> {
 }
 
 #[cfg(all(feature = "tls", not(feature = "local-cert")))]
-async fn enable_tls(server: TcpServer) -> Result<TlsServer, Error> {
+async fn enable_tls(server: TcpServer) -> Result<TlsServer, TlsError> {
     println!("--> Using remote cert + key");
     let tls_builder = TlsServer::builder().with_tcp_server(server);
     let tls_server = tls_builder.with_remote_cert().await?;

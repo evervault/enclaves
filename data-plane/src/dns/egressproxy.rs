@@ -1,6 +1,6 @@
 use crate::dns::error::DNSError::MissingIP;
-use crate::server::Listener;
-use crate::server::TcpServer;
+use shared::server::tcp::TcpServer;
+use shared::server::Listener;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tls_parser::{
     parse_tls_extensions, parse_tls_plaintext, TlsExtension, TlsMessage, TlsMessageHandshake,

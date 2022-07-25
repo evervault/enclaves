@@ -14,9 +14,15 @@ serde_json = "1.0.61"
 thiserror = "1.0.25"
 dashmap = "4.0.2"
 tokio = { version = "1.18.0", features = ["net", "macros", "rt", "rt-multi-thread", "io-util", "time"] }
+async-trait = "0.1.56"
+tokio-vsock = { version = "0.3.2", optional = true }
 
 [lib]
 name = "shared"
 path = "src/lib.rs"
 doc = true
 crate-type = ["lib"]
+
+[features]
+default = []
+enclave = ["dep:tokio-vsock"]

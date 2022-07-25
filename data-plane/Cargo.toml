@@ -22,7 +22,7 @@ tokio-rustls = { version = "0.23.4", optional = true }
 rustls-pemfile = { version = "1.0.0", optional = true }
 tokio-vsock = { version = "0.3.2", optional = true }
 tls-parser = "0.11.0"
-shared = { path = "../shared" }
+shared = { path = "../shared", default-features = false }
 dashmap = "4.0.2"
 
 [dev-dependencies]
@@ -34,5 +34,5 @@ local-cert = [] # added to let us compile out any references to local certs
 tls = ["dep:tokio-rustls","dep:rustls-pemfile"]
 local-tls = ["tls","local-cert"]
 network_egress = ["dep:dns-message-parser","dep:ttl_cache"]
-enclave = ["dep:tokio-vsock", "network_egress"]
+enclave = ["dep:tokio-vsock", "network_egress", "shared/enclave"]
 not_enclave = ["network_egress", "tls", "network_egress", "local-tls"]

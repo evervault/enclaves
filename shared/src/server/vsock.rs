@@ -1,6 +1,6 @@
 use tokio_vsock::{VsockListener, VsockStream};
 
-use super::Listener;
+use super::{error::ServerError, Listener};
 use async_trait::async_trait;
 
 pub struct VsockServer {
@@ -17,7 +17,8 @@ impl VsockServer {
 #[async_trait]
 impl Listener for VsockServer {
     type Connection = VsockStream;
-    async fn accept(&mut self) -> super::error::ServerResult<Self::Connection> {
+    type Error = ServerError;
+    async fn accept(&mut self) -> Result<Self::Connection, Self::Error> {
         let (conn, _socket_addr) = self.inner.accept().await?;
         Ok(conn)
     }
