@@ -12,7 +12,6 @@ env:
 jobs:
   deploy_control_plane_image:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
 
     steps:
       - uses: actions/checkout@v2
