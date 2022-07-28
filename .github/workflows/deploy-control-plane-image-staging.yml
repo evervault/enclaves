@@ -2,7 +2,7 @@ on:
   push:
     paths:
       - control-plane/**
-      - .github/workflows/deploy-control-plane-base-image-staging.yml
+      - .github/workflows/deploy-control-plane-image-staging.yml
       - scripts/start-cage.sh
     branches:
       - main
