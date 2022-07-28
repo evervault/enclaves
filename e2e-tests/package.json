@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "mocha e2e.js",
+    "test": "NODE_TLS_REJECT_UNAUTHORIZED=0 mocha e2e.js",
     "customer": "node customerProcess.js"
   },
   "author": "",

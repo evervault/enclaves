@@ -12,7 +12,7 @@ fi
 docker build --platform=linux/amd64 -f e2e-tests/Dockerfile -t cages-test .
 
 # run the container
-docker run -d --dns 127.0.0.1 -p 0.0.0.0:3030:3031 --rm --name cages-test-container cages-test
+docker run -d --dns 127.0.0.1 -p 0.0.0.0:443:3031 --rm --name cages-test-container cages-test
 
 sleep 2
 

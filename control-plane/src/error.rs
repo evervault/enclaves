@@ -4,7 +4,6 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum ServerError {
     Io(#[from] std::io::Error),
-    Hyper(#[from] hyper::Error),
     Rpc(#[from] shared::rpc::error::RpcError),
 }
 

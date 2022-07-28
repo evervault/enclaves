@@ -1,14 +1,20 @@
 const { expect } = require('chai');
 const axios = require('axios').default;
+const https = require('https');
 
 describe('POST data to enclave', () => {
+    const allowAllCerts = axios.create({
+        httpsAgent: new https.Agent({
+            rejectUnauthorized: false
+        })
+    });
     it('enclave responds and echos back body', async () => {
-        const result = await axios.post('http://localhost:3030/hello', { secret: 'ev:123' })
+        const result = await allowAllCerts.post('https://localhost:443/hello', { secret: 'ev:123' })
         expect(result.data).to.deep.equal({ response: 'Hello from enclave',  secret: 'ev:123'});
     });
 
     it('calls out to the internet', async () => {
-        const result = await axios.get('http://localhost:3030/egress')
+        const result = await allowAllCerts.get('https://localhost:443/egress')
         expect(result.data).to.deep.equal({
             userId :1,
             id:1,

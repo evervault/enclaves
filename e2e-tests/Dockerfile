@@ -6,7 +6,7 @@ ENV CONTROL_PLANE_EXECUTABLE_PATH=/control-plane
 ENV CONTROL_PLANE_SERVICE_PATH=/etc/service/control-plane
 ENV START_EV_SERVICES_PATH=/etc/service/ev-services-entrypoint
 
-EXPOSE 3030
+EXPOSE 443
 
 RUN apk update &&\
     apk add runit &&\

@@ -1,5 +1,8 @@
-#[cfg(feature = "tls")]
-use data_plane::server::tls::TlsServer;
+#[cfg(feature = "enclave")]
+use data_plane::crypto::attest;
+use data_plane::error::Result;
+
+use data_plane::server::tls::TlsServerBuilder;
 #[cfg(not(feature = "enclave"))]
 use shared::server::tcp::TcpServer;
 use shared::server::Listener;
@@ -8,9 +11,6 @@ use shared::server::Listener;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpSocket;
-
-#[cfg(feature = "tls")]
-use data_plane::server::error::TlsError;
 
 #[cfg(feature = "network_egress")]
 use data_plane::dns::egressproxy::EgressProxy;
@@ -68,50 +68,29 @@ async fn start_data_plane() {
         }
     };
 
-    #[cfg(not(feature = "tls"))]
-    let mut server = server;
-
-    #[cfg(feature = "tls")]
-    let mut server = {
-        println!("TLS enabled");
-        match enable_tls(server).await {
-            Ok(tls_server) => tls_server,
-            Err(e) => {
-                eprintln!("Error: {:?}", e);
-                return;
-            }
+    let tls_server_builder = TlsServerBuilder.with_server(server);
+    let mut server = match tls_server_builder.with_self_signed_cert().await {
+        Ok(server) => server,
+        Err(e) => {
+            eprintln!("Error: {:?}", e);
+            return;
         }
     };
 
-    while let Ok(stream) = server.accept().await {
-        tokio::spawn(handle_connection(stream));
+    loop {
+        if let Ok(stream) = server.accept().await {
+            tokio::spawn(handle_connection(stream));
+        }
     }
 }
 
-#[cfg(all(feature = "tls", feature = "local-cert"))]
-async fn enable_tls(server: TcpServer) -> Result<TlsServer, TlsError> {
-    println!("--> Using local cert + key");
-    let tls_builder = TlsServer::builder().with_tcp_server(server);
-    let tls_server = tls_builder.with_local_cert().await?;
-    Ok(tls_server)
-}
-
-#[cfg(all(feature = "tls", not(feature = "local-cert")))]
-async fn enable_tls(server: TcpServer) -> Result<TlsServer, TlsError> {
-    println!("--> Using remote cert + key");
-    let tls_builder = TlsServer::builder().with_tcp_server(server);
-    let tls_server = tls_builder.with_remote_cert().await?;
-    Ok(tls_server)
-}
-
-async fn handle_connection<S: AsyncRead + AsyncWrite>(
-    external_stream: S,
-) -> Result<(u64, u64), std::io::Error> {
+async fn handle_connection<S: AsyncRead + AsyncWrite>(external_stream: S) -> Result<(u64, u64)> {
     let ip_addr = std::net::Ipv4Addr::new(0, 0, 0, 0);
     let tcp_socket = TcpSocket::new_v4()?;
     let customer_stream = tcp_socket
         .connect((ip_addr, CUSTOMER_CONNECT_PORT).into())
         .await?;
 
-    pipe_streams(external_stream, customer_stream).await
+    let bytes_written = pipe_streams(external_stream, customer_stream).await?;
+    Ok(bytes_written)
 }

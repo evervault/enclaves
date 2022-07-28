@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-hyper = { version = "0.14.4", features = ["server","http1","http2","tcp","stream","client"] }
 tokio = { version = "1.18.0", features = ["net", "macros", "rt", "rt-multi-thread", "io-util", "time"] }
 dashmap = "4.0.2"
 trust-dns-resolver = { version = "*", optional = true }
