@@ -7,6 +7,8 @@ on:
     branches:
       - main
 name: Deploy new control plane image
+env:
+  LINUX_TARGET: x86_64-unknown-linux-musl
 jobs:
   deploy_control_plane_image:
     runs-on: ubuntu-latest
@@ -20,10 +22,12 @@ jobs:
           components: rustfmt
       - name: Test control plane
         run: cargo test -p control-plane
-      - name: Compile control plane for enclave
-        run: cargo build --features enclave -p control-plane --release
+      - name: Build control plane
+        uses: evervault/cargo-static-build@master
+        with:
+          cmd: cargo build -p control-plane --features enclave --release --target ${{ env.LINUX_TARGET }}
       - name: Move control-plane binary to root
-        run: cp ./target/release/control-plane ./control-plane
+        run: cp ./target/${{ env.LINUX_TARGET }}/release/control-plane ./control-plane
       - name: Configure Staging AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
