@@ -2,6 +2,24 @@ use shared::server::error::ServerError;
 use std::fmt;
 use thiserror::Error;
 
+#[derive(Debug, Error)]
+pub enum AuthError {
+    #[error("No api-key header present on request")]
+    NoApiKeyGiven,
+    #[error("Invalid api key provided")]
+    FailedToAuthenticateApiKey,
+}
+
+impl From<AuthError> for hyper::Response<hyper::Body> {
+    fn from(err: AuthError) -> Self {
+        let msg = err.to_string();
+        hyper::Response::builder()
+            .status(401)
+            .body(msg.into())
+            .unwrap()
+    }
+}
+
 #[derive(Error)]
 pub enum Error {
     Crypto(String),
@@ -9,6 +27,7 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[cfg(feature = "network_egress")]
     DNS(#[from] crate::dns::error::DNSError),
+    Auth(#[from] AuthError),
 }
 
 impl fmt::Display for Error {
@@ -22,6 +41,7 @@ impl fmt::Display for Error {
                 Error::Io(message) => message.to_string(),
                 #[cfg(feature = "network_egress")]
                 Error::DNS(message) => message.to_string(),
+                Error::Auth(auth_err) => auth_err.to_string(),
             }
         )
     }

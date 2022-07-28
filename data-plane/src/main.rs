@@ -1,16 +1,16 @@
 #[cfg(feature = "enclave")]
 use data_plane::crypto::attest;
+use data_plane::error::AuthError;
 use data_plane::error::Result;
 
 use data_plane::server::tls::TlsServerBuilder;
+use hyper::{Body, Request, Response};
 #[cfg(not(feature = "enclave"))]
 use shared::server::tcp::TcpServer;
 use shared::server::Listener;
 
 #[cfg(not(feature = "enclave"))]
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::net::TcpSocket;
 
 #[cfg(feature = "network_egress")]
 use data_plane::dns::egressproxy::EgressProxy;
@@ -19,12 +19,15 @@ use data_plane::dns::enclavedns::EnclaveDns;
 
 #[cfg(feature = "enclave")]
 use shared::server::vsock::VsockServer;
-use shared::utils::pipe_streams;
 
 const CUSTOMER_CONNECT_PORT: u16 = 8008;
 const DATA_PLANE_PORT: u16 = 7777;
+
 #[cfg(feature = "enclave")]
 const ENCLAVE_CID: u32 = 2021;
+
+use hyper::server::conn;
+use hyper::service::service_fn;
 
 #[tokio::main]
 async fn main() {
@@ -77,20 +80,66 @@ async fn start_data_plane() {
         }
     };
 
+    let http_server = conn::Http::new();
+
     loop {
         if let Ok(stream) = server.accept().await {
-            tokio::spawn(handle_connection(stream));
+            let server = http_server.clone();
+            tokio::spawn(async move {
+                let sent_response = server
+                    .serve_connection(stream, service_fn(handle_incoming_request))
+                    .await;
+
+                if let Err(processing_err) = sent_response {
+                    eprintln!(
+                        "An error occurred while processing your request — {:?}",
+                        processing_err
+                    );
+                }
+            });
         }
     }
 }
 
-async fn handle_connection<S: AsyncRead + AsyncWrite>(external_stream: S) -> Result<(u64, u64)> {
-    let ip_addr = std::net::Ipv4Addr::new(0, 0, 0, 0);
-    let tcp_socket = TcpSocket::new_v4()?;
-    let customer_stream = tcp_socket
-        .connect((ip_addr, CUSTOMER_CONNECT_PORT).into())
-        .await?;
+async fn handle_incoming_request(mut req: Request<Body>) -> Result<Response<Body>> {
+    // Extract API Key header and authenticate request
+    // Run parser over payload
+    // Serialize request onto socket
+    let _api_key_header = match req
+        .headers_mut()
+        .remove(hyper::http::header::HeaderName::from_static("api-key"))
+        .ok_or(AuthError::NoApiKeyGiven)
+    {
+        Ok(api_key_header) => api_key_header,
+        Err(e) => return Ok(e.into()),
+    };
 
-    let bytes_written = pipe_streams(external_stream, customer_stream).await?;
-    Ok(bytes_written)
+    // TODO: authenticate api key from request
+    let (mut req_info, req_body) = req.into_parts();
+    // TODO: find ciphertexts & decrypt
+    // tmp: rename body to recreate request
+
+    // Build processed request
+    let decrypted_req_body = req_body;
+    let mut uri_builder = hyper::Uri::builder()
+        .authority(format!("0.0.0.0:{}", CUSTOMER_CONNECT_PORT))
+        .scheme("http");
+    if let Some(req_path) = req_info.uri.path_and_query() {
+        uri_builder = uri_builder.path_and_query(req_path.clone());
+    }
+    req_info.uri = uri_builder.build().expect("rebuilt from existing request");
+    let decrypted_request = Request::from_parts(req_info, decrypted_req_body);
+
+    let http_client = hyper::Client::new();
+    let customer_response = match http_client.request(decrypted_request).await {
+        Ok(res) => res,
+        Err(e) => {
+            let msg = format!("Error requesting customer process - {:?}", e);
+            eprintln!("{}", msg);
+            let res_body = Body::from(msg);
+            Response::builder().status(500).body(res_body).unwrap()
+        }
+    };
+
+    Ok(customer_response)
 }

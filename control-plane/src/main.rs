@@ -23,7 +23,9 @@ const ENCLAVE_CID: u32 = 2021;
 async fn main() -> Result<()> {
     println!("Starting control plane on {}", CONTROL_PLANE_PORT);
     #[cfg(not(feature = "network_egress"))]
-    tokio::spawn(tcp_server());
+    if let Err(err) = tcp_server().await {
+        eprintln!("Error running TCP server on host: {:?}", err);
+    };
 
     #[cfg(feature = "network_egress")]
     let _ = tokio::join!(
