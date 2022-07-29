@@ -1,34 +1,21 @@
-use crate::dns::error::DNSError::RpcError;
-use std::fmt;
 use thiserror::Error;
 
-#[derive(Error)]
+#[derive(Debug, Error)]
 pub enum DNSError {
+    #[error("{0}")]
     Io(#[from] std::io::Error),
+    #[error("{0}")]
     DNSEncodeError(#[from] dns_message_parser::EncodeError),
+    #[error("{0}")]
     DNSDecodeError(#[from] dns_message_parser::DecodeError),
+    #[error("DNS query format error — no questions found")]
+    DNSNoQuestionsFound,
+    #[error("{0}")]
     RpcError(#[from] shared::rpc::error::RpcError),
+    #[error("{0}")]
     MissingIP(String),
-}
-
-impl fmt::Display for DNSError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                DNSError::DNSDecodeError(message) => message.to_string(),
-                DNSError::DNSEncodeError(message) => message.to_string(),
-                DNSError::Io(message) => message.to_string(),
-                RpcError(message) => message.to_string(),
-                DNSError::MissingIP(message) => message.to_string(),
-            }
-        )
-    }
-}
-
-impl fmt::Debug for DNSError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
-    }
+    #[error("{0}")]
+    TlsParseError(String),
+    #[error("Could not find a hostname in the TLS hello message. Perhaps SNI is not being used.")]
+    NoHostnameFound,
 }

@@ -219,6 +219,7 @@ dependencies = [
  "memsec",
  "nom",
  "openssl",
+ "rand",
  "rcgen",
  "serde_bytes",
  "sha2",

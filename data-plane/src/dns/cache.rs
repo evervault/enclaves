@@ -5,11 +5,13 @@ lazy_static::lazy_static! {
 pub struct Cache;
 
 impl Cache {
-    pub fn store_ip(domain: String, records: Vec<String>) {
-        HOST_TO_IP.insert(domain, records);
+    pub fn store_ip(domain: &str, records: Vec<String>) {
+        if !records.is_empty() {
+            HOST_TO_IP.insert(domain.to_string(), records);
+        }
     }
 
-    pub fn get_ip(domain: String) -> Option<Vec<String>> {
+    pub fn get_ip(domain: &str) -> Option<Vec<String>> {
         let fqdn = format!("{}.", &domain);
         HOST_TO_IP.get(&fqdn).map(|rr| rr.clone())
     }

@@ -1,30 +1,44 @@
 use crate::error::Result;
 use shared::rpc::request::ExternalRequest;
+#[cfg(not(feature = "enclave"))]
+use shared::server::tcp::TcpServer;
+#[cfg(feature = "enclave")]
+use shared::server::vsock::VsockServer;
+use shared::server::Listener;
 use shared::utils::pipe_streams;
+#[cfg(not(feature = "enclave"))]
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpStream;
 
 pub struct EgressProxy;
 
-impl EgressProxy {
-    pub async fn listen() {
-        println!("Egress proxy started");
-        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 4433);
+#[cfg(feature = "enclave")]
+const PARENT_CID: u32 = 3;
+#[cfg(feature = "enclave")]
+const PROXY_PORT: u32 = 4433;
 
-        let server = match TcpListener::bind(addr).await {
-            Ok(server) => server,
-            Err(e) => {
-                eprintln!("Error: {:?}", e);
-                return;
-            }
-        };
-        while let Ok((stream, _)) = server.accept().await {
+impl EgressProxy {
+    pub async fn listen() -> Result<()> {
+        println!("Egress proxy started");
+
+        #[cfg(not(feature = "enclave"))]
+        let mut server =
+            TcpServer::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 4433)).await?;
+
+        #[cfg(feature = "enclave")]
+        let mut server = VsockServer::bind(PARENT_CID, PROXY_PORT).await?;
+
+        while let Ok(stream) = server.accept().await {
             tokio::spawn(Self::handle_connection(stream));
         }
+        Ok(())
     }
 
-    async fn handle_connection(mut external_stream: TcpStream) -> Result<(u64, u64)> {
+    async fn handle_connection<T: AsyncReadExt + AsyncWriteExt + Unpin>(
+        mut external_stream: T,
+    ) -> Result<(u64, u64)> {
+        println!("Recieved request to egress proxy");
         let mut request_buffer = [0; 4096];
         let packet_size = external_stream.read(&mut request_buffer).await?;
         let req = &request_buffer[..packet_size];

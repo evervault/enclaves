@@ -4,7 +4,7 @@ Run code on TEEs (Trusted Execution Environments)
 
 ## Ports
 
-If you're runnning the project locally the services are running on the following ports
+If you're running the project locally the services are running on the following ports
 
 - Control Plane
     - HTTP server: 3030

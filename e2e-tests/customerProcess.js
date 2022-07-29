@@ -10,8 +10,12 @@ app.all('/hello', async (req, res) => {
 
 
 app.get('/egress', async (req, res) => {
-  const result = await axios.get("https://jsonplaceholder.typicode.com/posts/1")
-  res.send({...result.data})
+  try {
+    const result = await axios.get("https://jsonplaceholder.typicode.com/posts/1")
+    res.send({...result.data})
+  } catch (e) {
+    console.log("Failed", e)
+  }
 })
 
 

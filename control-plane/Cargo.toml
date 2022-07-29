@@ -18,5 +18,5 @@ shared = { path = "../shared" }
 [features]
 default = []
 network_egress = ["dep:trust-dns-resolver","dep:dns-message-parser"]
-enclave = ["dep:tokio-vsock", "network_egress"]
+enclave = ["dep:tokio-vsock", "network_egress", "shared/enclave"]
 not_enclave = ["network_egress"]
