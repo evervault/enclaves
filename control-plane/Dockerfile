@@ -9,5 +9,5 @@ RUN chmod a+x ./control-plane
 COPY ./scripts/start-cage.sh .
 RUN chmod a+x ./start-cage.sh
 
-EXPOSE 443
+EXPOSE 3031
 ENTRYPOINT ["./start-cage.sh"]
