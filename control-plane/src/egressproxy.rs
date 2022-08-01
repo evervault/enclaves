@@ -29,8 +29,22 @@ impl EgressProxy {
         #[cfg(feature = "enclave")]
         let mut server = VsockServer::bind(PARENT_CID, PROXY_PORT).await?;
 
-        while let Ok(stream) = server.accept().await {
-            tokio::spawn(Self::handle_connection(stream));
+        loop {
+            match server.accept().await {
+                Ok(stream) => {
+                    tokio::spawn(async move {
+                        if let Err(e) = Self::handle_connection(stream).await {
+                            eprintln!(
+                                "An error occurred while handling an egress connection - {:?}",
+                                e
+                            );
+                        }
+                    });
+                }
+                Err(e) => {
+                    eprintln!("An error occurred accepting the egress connection");
+                }
+            }
         }
         Ok(())
     }

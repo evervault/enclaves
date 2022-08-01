@@ -23,12 +23,17 @@ impl DnsProxy {
         #[cfg(feature = "enclave")]
         let mut server = VsockServer::bind(3, DNS_LISTENING_PORT.into()).await?;
 
-        while let Ok(stream) = server.accept().await {
-            tokio::spawn(async move {
-                if let Err(e) = Self::proxy_dns_connection(stream).await {
-                    eprintln!("Error proxying dns connection: {}", e);
+        loop {
+            match server.accept().await {
+                Ok(stream) => {
+                    tokio::spawn(async move {
+                        if let Err(e) = Self::proxy_dns_connection(stream).await {
+                            eprintln!("Error proxying dns connection: {}", e);
+                        }
+                    });
                 }
-            });
+                Err(e) => eprintln!("Error accepting connection in DNS proxy - {:?}", e),
+            }
         }
         Ok(())
     }
