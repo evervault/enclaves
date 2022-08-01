@@ -20,7 +20,6 @@ use data_plane::dns::enclavedns::EnclaveDns;
 #[cfg(feature = "enclave")]
 use shared::server::vsock::VsockServer;
 
-const CUSTOMER_CONNECT_PORT: u16 = 8008;
 const DATA_PLANE_PORT: u16 = 7777;
 
 #[cfg(feature = "enclave")]
@@ -29,29 +28,39 @@ const ENCLAVE_CID: u32 = 2021;
 use hyper::server::conn;
 use hyper::service::service_fn;
 
+use clap::Parser;
+
+#[derive(Debug, Parser)]
+struct DataPlaneArgs {
+    /// Port to forward incoming traffic on
+    #[clap(short, long, default_value = "8008")]
+    port: u16,
+}
+
 #[tokio::main]
 async fn main() {
     println!("Data plane running.");
-    start().await
+    let args: DataPlaneArgs = DataPlaneArgs::parse();
+    start(args).await
 }
 
 #[cfg(not(feature = "network_egress"))]
-async fn start() {
+async fn start(args: DataPlaneArgs) {
     println!("Running data plane with egress disabled");
-    start_data_plane().await;
+    start_data_plane(args).await;
 }
 
 #[cfg(feature = "network_egress")]
-async fn start() {
+async fn start(args: DataPlaneArgs) {
     println!("Running data plane with egress enabled");
     let _ = tokio::join!(
-        start_data_plane(),
+        start_data_plane(args),
         EnclaveDns::bind_server(),
         EgressProxy::listen()
     );
 }
 
-async fn start_data_plane() {
+async fn start_data_plane(args: DataPlaneArgs) {
     print!("Data plane starting on {}", DATA_PLANE_PORT);
     #[cfg(not(feature = "enclave"))]
     let get_server = TcpServer::bind(SocketAddr::new(
@@ -87,7 +96,12 @@ async fn start_data_plane() {
             let server = http_server.clone();
             tokio::spawn(async move {
                 let sent_response = server
-                    .serve_connection(stream, service_fn(handle_incoming_request))
+                    .serve_connection(
+                        stream,
+                        service_fn(|req: Request<Body>| async move {
+                            handle_incoming_request(req, args.port).await
+                        }),
+                    )
                     .await;
 
                 if let Err(processing_err) = sent_response {
@@ -101,7 +115,10 @@ async fn start_data_plane() {
     }
 }
 
-async fn handle_incoming_request(mut req: Request<Body>) -> Result<Response<Body>> {
+async fn handle_incoming_request(
+    mut req: Request<Body>,
+    customer_port: u16,
+) -> Result<Response<Body>> {
     // Extract API Key header and authenticate request
     // Run parser over payload
     // Serialize request onto socket
@@ -122,7 +139,7 @@ async fn handle_incoming_request(mut req: Request<Body>) -> Result<Response<Body
     // Build processed request
     let decrypted_req_body = req_body;
     let mut uri_builder = hyper::Uri::builder()
-        .authority(format!("0.0.0.0:{}", CUSTOMER_CONNECT_PORT))
+        .authority(format!("0.0.0.0:{}", customer_port))
         .scheme("http");
     if let Some(req_path) = req_info.uri.path_and_query() {
         uri_builder = uri_builder.path_and_query(req_path.clone());
