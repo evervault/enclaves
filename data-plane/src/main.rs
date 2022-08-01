@@ -53,11 +53,19 @@ async fn start(args: DataPlaneArgs) {
 #[cfg(feature = "network_egress")]
 async fn start(args: DataPlaneArgs) {
     println!("Running data plane with egress enabled");
-    let _ = tokio::join!(
+    let (_, dns_result, egress_result) = tokio::join!(
         start_data_plane(args),
         EnclaveDns::bind_server(),
         EgressProxy::listen()
     );
+
+    if let Err(e) = dns_result {
+        eprintln!("An error occurred within the dns server — {:?}", e);
+    }
+
+    if let Err(e) = egress_result {
+        eprintln!("An error occurred within the egress server — {:?}", e);
+    }
 }
 
 async fn start_data_plane(args: DataPlaneArgs) {
@@ -80,21 +88,24 @@ async fn start_data_plane(args: DataPlaneArgs) {
         }
     };
 
+    println!("Data plane server started successfully");
     let tls_server_builder = TlsServerBuilder.with_server(server);
     let mut server = match tls_server_builder.with_self_signed_cert().await {
         Ok(server) => server,
         Err(e) => {
-            eprintln!("Error: {:?}", e);
+            eprintln!("Error creating tls server — {:?}", e);
             return;
         }
     };
 
+    println!("TLS upgrade complete");
     let http_server = conn::Http::new();
 
     loop {
         if let Ok(stream) = server.accept().await {
             let server = http_server.clone();
             tokio::spawn(async move {
+                println!("Accepted tls connection");
                 let sent_response = server
                     .serve_connection(
                         stream,
@@ -131,6 +142,7 @@ async fn handle_incoming_request(
         Err(e) => return Ok(e.into()),
     };
 
+    println!("Extracted API key from request");
     // TODO: authenticate api key from request
     let (mut req_info, req_body) = req.into_parts();
     // TODO: find ciphertexts & decrypt
@@ -146,7 +158,7 @@ async fn handle_incoming_request(
     }
     req_info.uri = uri_builder.build().expect("rebuilt from existing request");
     let decrypted_request = Request::from_parts(req_info, decrypted_req_body);
-
+    println!("Finished processing request");
     let http_client = hyper::Client::new();
     let customer_response = match http_client.request(decrypted_request).await {
         Ok(res) => res,
@@ -157,6 +169,7 @@ async fn handle_incoming_request(
             Response::builder().status(500).body(res_body).unwrap()
         }
     };
+    println!("Response received from customer");
 
     Ok(customer_response)
 }

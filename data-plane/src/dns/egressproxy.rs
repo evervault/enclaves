@@ -29,8 +29,10 @@ impl EgressProxy {
         let mut server =
             TcpServer::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 443)).await?;
 
-        while let Ok(stream) = server.accept().await {
-            tokio::spawn(Self::handle_egress_connection(stream));
+        loop {
+            if let Ok(stream) = server.accept().await {
+                tokio::spawn(Self::handle_egress_connection(stream));
+            }
         }
         Ok(())
     }

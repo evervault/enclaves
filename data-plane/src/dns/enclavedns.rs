@@ -16,6 +16,7 @@ pub struct EnclaveDns;
 
 impl EnclaveDns {
     pub async fn bind_server() -> Result<(), DNSError> {
+        println!("DNS proxy started");
         let socket = UdpSocket::bind("127.0.0.1:53").await?;
 
         loop {
