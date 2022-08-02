@@ -15,11 +15,11 @@ mod egressproxy;
 
 mod error;
 
-const ENCLAVE_CONNECT_PORT: u16 = 7777;
 const CONTROL_PLANE_PORT: u16 = 3031;
 
 #[cfg(feature = "enclave")]
-const ENCLAVE_CID: u32 = 2021;
+use shared::ENCLAVE_CID;
+use shared::ENCLAVE_CONNECT_PORT;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -55,15 +55,20 @@ async fn main() -> Result<()> {
 
 #[cfg(not(feature = "enclave"))]
 async fn get_connection_to_guest_process() -> std::io::Result<TcpStream> {
-    TcpStream::connect(std::net::SocketAddr::new(
-        std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
-        ENCLAVE_CONNECT_PORT,
-    ))
-    .await
+    let ip_addr = std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0));
+    println!(
+        "Connecting to tcp data plane on ({},{})",
+        ip_addr, ENCLAVE_CONNECT_PORT
+    );
+    TcpStream::connect(std::net::SocketAddr::new(ip_addr, ENCLAVE_CONNECT_PORT)).await
 }
 
 #[cfg(feature = "enclave")]
 async fn get_connection_to_guest_process() -> std::io::Result<VsockStream> {
+    println!(
+        "Connecting to enclave on ({},{})",
+        ENCLAVE_CID, ENCLAVE_CONNECT_PORT
+    );
     VsockStream::connect(ENCLAVE_CID, ENCLAVE_CONNECT_PORT.into()).await
 }
 
@@ -81,6 +86,7 @@ async fn tcp_server() -> Result<()> {
     loop {
         if let Ok((mut connection, _client_socket_addr)) = tcp_listener.accept().await {
             tokio::spawn(async move {
+                println!("Accepted incoming TCP stream — {:?}", _client_socket_addr);
                 let enclave_stream = match get_connection_to_guest_process().await {
                     Ok(enclave_stream) => enclave_stream,
                     Err(e) => {

@@ -17,13 +17,9 @@ use data_plane::dns::egressproxy::EgressProxy;
 #[cfg(feature = "network_egress")]
 use data_plane::dns::enclavedns::EnclaveDns;
 
+use shared::ENCLAVE_CONNECT_PORT;
 #[cfg(feature = "enclave")]
-use shared::server::vsock::VsockServer;
-
-const DATA_PLANE_PORT: u16 = 7777;
-
-#[cfg(feature = "enclave")]
-const ENCLAVE_CID: u32 = 2021;
+use shared::{server::vsock::VsockServer, ENCLAVE_CID};
 
 use hyper::server::conn;
 use hyper::service::service_fn;
@@ -68,22 +64,29 @@ async fn start(args: DataPlaneArgs) {
     }
 }
 
-async fn start_data_plane(args: DataPlaneArgs) {
-    print!("Data plane starting on {}", DATA_PLANE_PORT);
-    #[cfg(not(feature = "enclave"))]
-    let get_server = TcpServer::bind(SocketAddr::new(
+#[cfg(not(feature = "enclave"))]
+async fn get_server() -> std::result::Result<TcpServer, shared::server::error::ServerError> {
+    println!("Creating tcp server");
+    TcpServer::bind(SocketAddr::new(
         IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-        DATA_PLANE_PORT,
+        ENCLAVE_CONNECT_PORT,
     ))
-    .await;
+    .await
+}
 
-    #[cfg(feature = "enclave")]
-    let get_server = VsockServer::bind(ENCLAVE_CID, DATA_PLANE_PORT.into()).await;
+#[cfg(feature = "enclave")]
+async fn get_server() -> std::result::Result<VsockServer, shared::server::error::ServerError> {
+    println!("Creating VSock server");
+    VsockServer::bind(ENCLAVE_CID, ENCLAVE_CONNECT_PORT.into()).await
+}
 
-    let server = match get_server {
+async fn start_data_plane(args: DataPlaneArgs) {
+    print!("Data plane starting on {}", ENCLAVE_CONNECT_PORT);
+    let server_result = get_server().await;
+    let server = match server_result {
         Ok(server) => server,
         Err(e) => {
-            eprintln!("Error: {:?}", e);
+            eprintln!("Error creating server: {:?}", e);
             return;
         }
     };
@@ -93,7 +96,7 @@ async fn start_data_plane(args: DataPlaneArgs) {
     let mut server = match tls_server_builder.with_self_signed_cert().await {
         Ok(server) => server,
         Err(e) => {
-            eprintln!("Error creating tls server — {:?}", e);
+            eprintln!("Error creating tls server with self signed cert — {:?}", e);
             return;
         }
     };
@@ -102,27 +105,35 @@ async fn start_data_plane(args: DataPlaneArgs) {
     let http_server = conn::Http::new();
 
     loop {
-        if let Ok(stream) = server.accept().await {
-            let server = http_server.clone();
-            tokio::spawn(async move {
-                println!("Accepted tls connection");
-                let sent_response = server
-                    .serve_connection(
-                        stream,
-                        service_fn(|req: Request<Body>| async move {
-                            handle_incoming_request(req, args.port).await
-                        }),
-                    )
-                    .await;
+        let stream = match server.accept().await {
+            Ok(stream) => stream,
+            Err(tls_err) => {
+                eprintln!(
+                    "An error occurred while accepting the incoming connection — {:?}",
+                    tls_err
+                );
+                continue;
+            }
+        };
+        let server = http_server.clone();
+        tokio::spawn(async move {
+            println!("Accepted tls connection");
+            let sent_response = server
+                .serve_connection(
+                    stream,
+                    service_fn(|req: Request<Body>| async move {
+                        handle_incoming_request(req, args.port).await
+                    }),
+                )
+                .await;
 
-                if let Err(processing_err) = sent_response {
-                    eprintln!(
-                        "An error occurred while processing your request — {:?}",
-                        processing_err
-                    );
-                }
-            });
-        }
+            if let Err(processing_err) = sent_response {
+                eprintln!(
+                    "An error occurred while processing your request — {:?}",
+                    processing_err
+                );
+            }
+        });
     }
 }
 

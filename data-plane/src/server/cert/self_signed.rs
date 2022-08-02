@@ -42,10 +42,13 @@ mod ra_tls {
     pub fn inject_attestation_into_cert(
         cert: SelfSignedCertificate,
     ) -> ServerResult<SelfSignedCertificate> {
+        println!("Adding attestation document to the enclave cert");
         let public_key = cert.get_key_pair().public_key_der();
         let hashed_pub_key = common::compute_sha256(public_key);
-        let attestation_doc = attest::get_attestation_doc(hashed_pub_key).unwrap();
+        let attestation_doc = attest::get_attestation_doc(hashed_pub_key)?;
+        println!("Attestation doc received");
         let ra_tls_cert = rebuild_cert_with_extension(cert, attestation_doc)?;
+        println!("Cert rebuilt with attestation document");
         Ok(ra_tls_cert)
     }
 
