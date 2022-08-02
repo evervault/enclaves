@@ -42,7 +42,7 @@ jobs:
       - name: Build data-plane (egress enabled)
         uses: evervault/cargo-static-build@master
         with:
-          cmd: cargo build -p data-plane --features network_egress --release --target ${{ env.LINUX_TARGET }}
+          cmd: cargo build -p data-plane --features enclave network_egress --release --target ${{ env.LINUX_TARGET }}
 
       - name: Upload data-plane to S3 (egress enabled)
         env:
@@ -56,7 +56,7 @@ jobs:
       - name: Build data-plane (egress disabled)
         uses: evervault/cargo-static-build@master
         with:
-          cmd: cargo build -p data-plane --release --target ${{ env.LINUX_TARGET }}
+          cmd: cargo build -p data-plane --features enclave --release --target ${{ env.LINUX_TARGET }}
 
       - name: Upload data-plane to S3 (egress disabled)
         env:
