@@ -15,6 +15,9 @@ mod egressproxy;
 
 mod error;
 
+#[cfg(feature = "enclave")]
+const CONTROL_PLANE_PORT: u16 = 443;
+#[cfg(not(feature = "enclave"))]
 const CONTROL_PLANE_PORT: u16 = 3031;
 
 #[cfg(feature = "enclave")]
