@@ -42,7 +42,20 @@ pub struct WantsCert<S: Listener> {
 
 impl<S: Listener + Send + Sync> WantsCert<S> {
     pub async fn with_self_signed_cert(self) -> ServerResult<TlsServer<S>> {
-        let cert_provider = super::cert::SelfSignedCertProvider::new(vec!["localhost".into()])?;
+        #[cfg(feature = "enclave")]
+        let mut cert_alt_names: Vec<String> = vec!["localhost".into()];
+        #[cfg(not(feature = "enclave"))]
+        let cert_alt_names: Vec<String> = vec!["localhost".into()];
+
+        #[cfg(feature = "enclave")]
+        {
+            use crate::crypto::attest;
+            let attestation_doc = attest::get_attestation_doc(None)?;
+            let attestation_san = format!("{:X?}.localhost", attestation_doc.as_slice());
+            cert_alt_names.push(attestation_san);
+        }
+
+        let cert_provider = super::cert::SelfSignedCertProvider::new(cert_alt_names)?;
         let (cert, key) = cert_provider.get_cert_and_key().await?;
         let config = ServerConfig::builder()
             .with_safe_defaults()

@@ -30,7 +30,7 @@ pub enum AttestationError {
     UnexpectedResponse(DriverCalls, nitro::api::Response),
 }
 
-pub fn get_attestation_doc(public_key_hash: Vec<u8>) -> Result<Vec<u8>, AttestationError> {
+pub fn get_attestation_doc(public_key_hash: Option<Vec<u8>>) -> Result<Vec<u8>, AttestationError> {
     let nsm_fd: i32 = nitro::driver::nsm_init();
     let nonce = match nitro::driver::nsm_process_request(nsm_fd, nitro::api::Request::GetRandom) {
         nitro::api::Response::GetRandom {
@@ -45,7 +45,7 @@ pub fn get_attestation_doc(public_key_hash: Vec<u8>) -> Result<Vec<u8>, Attestat
     };
 
     let nsm_request = nitro::api::Request::Attestation {
-        user_data: Some(ByteBuf::from(public_key_hash)),
+        user_data: public_key_hash.map(ByteBuf::from),
         nonce: Some(ByteBuf::from(nonce)),
         public_key: None,
     };
