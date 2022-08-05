@@ -41,17 +41,28 @@ pub struct WantsCert<S: Listener> {
 }
 
 impl<S: Listener + Send + Sync> WantsCert<S> {
+    fn get_name_for_cert() -> String {
+        let subdomain = std::env::var("EV_CAGE_NAME")
+            .and_then(|cage_name| {
+                std::env::var("EV_APP_UUID").map(|app_uuid| format!("{}.{}", cage_name, app_uuid))
+            })
+            .unwrap_or("localhost".to_string());
+
+        format!("{}.cages.evervault.dev", subdomain)
+    }
+
     pub async fn with_self_signed_cert(self) -> ServerResult<TlsServer<S>> {
+        let cert_name = Self::get_name_for_cert();
         #[cfg(feature = "enclave")]
-        let mut cert_alt_names: Vec<String> = vec!["localhost".into()];
+        let mut cert_alt_names: Vec<String> = vec![cert_name.clone()];
         #[cfg(not(feature = "enclave"))]
-        let cert_alt_names: Vec<String> = vec!["localhost".into()];
+        let cert_alt_names: Vec<String> = vec![cert_name];
 
         #[cfg(feature = "enclave")]
         {
             use crate::crypto::attest;
             let attestation_doc = attest::get_attestation_doc(None)?;
-            let attestation_san = format!("{:X?}.localhost", attestation_doc.as_slice());
+            let attestation_san = format!("{:X?}.{cert_name}", attestation_doc.as_slice());
             cert_alt_names.push(attestation_san);
         }
 
