@@ -46,7 +46,7 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
             .and_then(|cage_name| {
                 std::env::var("EV_APP_UUID").map(|app_uuid| format!("{}.{}", cage_name, app_uuid))
             })
-            .unwrap_or("localhost".to_string());
+            .unwrap_or_else(|_| "localhost".to_string());
 
         format!("{}.cages.evervault.dev", subdomain)
     }
