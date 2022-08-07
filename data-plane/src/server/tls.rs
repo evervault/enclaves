@@ -62,7 +62,8 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
         {
             use crate::crypto::attest;
             let attestation_doc = attest::get_attestation_doc(None)?;
-            let attestation_san = format!("{:X?}.{cert_name}", attestation_doc.as_slice());
+            let attestation_hex_slice = shared::utils::HexSlice::from(attestation_doc.as_slice());
+            let attestation_san = format!("{:x}.{cert_name}", attestation_hex_slice);
             cert_alt_names.push(attestation_san);
         }
 

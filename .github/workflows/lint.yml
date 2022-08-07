@@ -3,6 +3,7 @@ on:
     paths:
       - control-plane/**
       - data-plane/**
+      - shared/**
       - .github/workflows/lint.yml
 name: Lint
 jobs:
