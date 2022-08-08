@@ -57,6 +57,9 @@ impl Decoder for IncomingStreamDecoder {
     type Error = IncomingStreamError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        if src.len() == 0 {
+            return Ok(None);
+        }
         let next_candidate = Self::find_next_ciphertext_candidate(src.as_ref())?;
         if next_candidate.is_none() {
             // no ciphertext candidate
@@ -99,6 +102,9 @@ impl Decoder for IncomingStreamDecoder {
     }
 
     fn decode_eof(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        if buf.remaining() == 0 {
+            return Ok(None);
+        }
         match self.decode(buf) {
             Ok(Some(frame)) => Ok(Some(frame)),
             // We've hit EOF, can assume any remainder is plaintext
@@ -201,9 +207,10 @@ mod tests {
         let _expected_frame = IncomingFrame::Plaintext(plaintext_bytes.to_vec());
         assert!(matches!(frame1, Some(_expected_frame)));
         let frame2 = reader.next().await.transpose().unwrap(); // don't expect errors
-        assert!(matches!(frame2, Some(IncomingFrame::Plaintext(_))));
-        let frame3 = reader.next().await.transpose().unwrap(); // don't expect errors
-        assert!(matches!(frame3, Some(IncomingFrame::Plaintext(_))));
+        assert!(matches!(frame2, Some(IncomingFrame::Plaintext(_)))); // Frame 2 contains the remainder of the payload
+        let frame3 = reader.next().await.transpose().unwrap(); // expect None
+        println!("{:?}", frame3);
+        assert!(matches!(frame3, None));
     }
 
     #[tokio::test]

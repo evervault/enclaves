@@ -8,11 +8,7 @@ use crate::error::Result;
 #[cfg(feature = "enclave")]
 use tokio_vsock::VsockStream;
 
-#[cfg(feature = "network_egress")]
-mod dnsproxy;
-#[cfg(feature = "network_egress")]
-mod egressproxy;
-
+mod e3proxy;
 mod error;
 
 #[cfg(feature = "enclave")]
@@ -27,17 +23,26 @@ use shared::ENCLAVE_CONNECT_PORT;
 #[tokio::main]
 async fn main() -> Result<()> {
     println!("Starting control plane on {}", CONTROL_PLANE_PORT);
+    let e3_proxy = e3proxy::E3Proxy::new();
     #[cfg(not(feature = "network_egress"))]
-    if let Err(err) = tcp_server().await {
-        eprintln!("Error running TCP server on host: {:?}", err);
-    };
+    {
+        let (tcp_result, e3_result) = tokio::join!(tcp_server(), e3_proxy.listen());
+        if let Err(err) = tcp_result {
+            eprintln!("Error running TCP server on host: {:?}", err);
+        };
+
+        if let Err(err) = e3_result {
+            eprintln!("Error running E3 proxy on host: {:?}", err);
+        }
+    }
 
     #[cfg(feature = "network_egress")]
     {
-        let (tcp_result, dns_result, egress_result) = tokio::join!(
+        let (tcp_result, dns_result, egress_result, e3_result) = tokio::join!(
             tcp_server(),
-            dnsproxy::DnsProxy::listen(),
-            egressproxy::EgressProxy::listen()
+            control_plane::dnsproxy::DnsProxy::listen(),
+            control_plane::egressproxy::EgressProxy::listen(),
+            e3_proxy.listen()
         );
 
         if let Err(tcp_err) = tcp_result {
@@ -50,6 +55,10 @@ async fn main() -> Result<()> {
 
         if let Err(egress_err) = egress_result {
             eprintln!("An error occurred in the egress server - {:?}", egress_err);
+        }
+
+        if let Err(e3_err) = e3_result {
+            eprintln!("An error occurred in the e3 server - {:?}", e3_err);
         }
     }
 

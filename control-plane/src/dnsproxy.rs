@@ -35,6 +35,7 @@ impl DnsProxy {
                 Err(e) => eprintln!("Error accepting connection in DNS proxy - {:?}", e),
             }
         }
+        #[allow(unreachable_code)]
         Ok(())
     }
 

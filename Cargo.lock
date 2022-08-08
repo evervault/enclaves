@@ -211,6 +211,7 @@ dependencies = [
  "bytes 1.1.0",
  "dashmap",
  "dns-message-parser",
+ "rand",
  "shared",
  "thiserror",
  "tls-parser",

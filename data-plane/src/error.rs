@@ -1,5 +1,5 @@
+use crate::crypto::stream::IncomingStreamError;
 use shared::server::error::ServerError;
-use std::fmt;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -20,37 +20,21 @@ impl From<AuthError> for hyper::Response<hyper::Body> {
     }
 }
 
-#[derive(Error)]
+#[derive(Debug, Error)]
 pub enum Error {
+    #[error("{0}")]
     Crypto(String),
+    #[error("{0}")]
     Network(#[from] ServerError),
+    #[error("{0}")]
     Io(#[from] std::io::Error),
     #[cfg(feature = "network_egress")]
+    #[error("{0}")]
     DNS(#[from] crate::dns::error::DNSError),
+    #[error("{0}")]
     Auth(#[from] AuthError),
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Error::Crypto(message) => message.clone(),
-                Error::Network(server_error) => server_error.to_string(),
-                Error::Io(message) => message.to_string(),
-                #[cfg(feature = "network_egress")]
-                Error::DNS(message) => message.to_string(),
-                Error::Auth(auth_err) => auth_err.to_string(),
-            }
-        )
-    }
-}
-
-impl fmt::Debug for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
-    }
+    #[error("An error occurred while parsing the incoming stream for ciphertexts — {0}")]
+    ParseError(#[from] IncomingStreamError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

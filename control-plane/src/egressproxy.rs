@@ -42,10 +42,14 @@ impl EgressProxy {
                     });
                 }
                 Err(e) => {
-                    eprintln!("An error occurred accepting the egress connection");
+                    eprintln!(
+                        "An error occurred accepting the egress connection — {:?}",
+                        e
+                    );
                 }
             }
         }
+        #[allow(unreachable_code)]
         Ok(())
     }
 

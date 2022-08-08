@@ -34,6 +34,7 @@ impl EgressProxy {
                 tokio::spawn(Self::handle_egress_connection(stream));
             }
         }
+        #[allow(unreachable_code)]
         Ok(())
     }
 

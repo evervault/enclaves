@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use data_plane::crypto;
 #[cfg(feature = "enclave")]
@@ -212,27 +213,17 @@ async fn handle_standard_request(
         }
     };
 
-    let mut stream_reader =
-        crypto::stream::IncomingStreamDecoder::create_reader(request_bytes.as_bytes());
-
-    let mut decryption_payload = vec![];
-    while let Some(parsed_frame) = stream_reader.next().await {
-        let (range, ciphertext) = match parsed_frame {
-            Ok(crypto::stream::IncomingFrame::Ciphertext(ciphertext)) => ciphertext,
-            Ok(_) => continue,
-            Err(e) => {
-                eprintln!("An error while decoding the incoming request — {:?}", e);
-                return Ok(Response::builder().status(500).body(Body::empty()).unwrap());
-            }
-        };
-
-        let ciphertext_item = serde_json::json!({
-            "range": [range.0, range.1],
-            "value": ciphertext.to_string()
-        });
-        decryption_payload.push(ciphertext_item);
-    }
-
+    let decryption_payload = match extract_ciphertexts_from_payload(&request_bytes).await {
+        Ok(decryption_payload) => decryption_payload,
+        Err(e) => {
+            return Ok(Response::builder()
+                .status(500)
+                .body(Body::from(
+                    "Failed to parse incoming stream for ciphertexts",
+                ))
+                .unwrap())
+        }
+    };
     println!("Ciphertexts extracted: {:?}", decryption_payload);
 
     let bytes_vec = request_bytes.to_vec();
@@ -260,4 +251,44 @@ async fn handle_standard_request(
     println!("Response received from customer");
 
     Ok(customer_response)
+}
+
+async fn extract_ciphertexts_from_payload(incoming_payload: &[u8]) -> Result<Vec<Value>> {
+    let mut stream_reader = crypto::stream::IncomingStreamDecoder::create_reader(incoming_payload);
+
+    let mut decryption_payload = vec![];
+    while let Some(parsed_frame) = stream_reader.next().await {
+        let (range, ciphertext) = match parsed_frame? {
+            crypto::stream::IncomingFrame::Ciphertext(ciphertext) => ciphertext,
+            _ => continue,
+        };
+
+        let ciphertext_item = serde_json::json!({
+            "range": [range.0, range.1],
+            "value": ciphertext.to_string()
+        });
+        decryption_payload.push(ciphertext_item);
+    }
+    Ok(decryption_payload)
+}
+
+#[cfg(test)]
+mod test {
+    use super::extract_ciphertexts_from_payload;
+
+    #[tokio::test]
+    async fn test_extract_ciphertexts_with_none_present() {
+        let input = b"this is an input string which has no sign of our ciphertexts";
+        let result = extract_ciphertexts_from_payload(input).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_extract_ciphertexts_with_one_present() {
+        let input = b"this is an input string which has one ev:YGJVktHhdj3ds3wC:A6rkaTU8lez7NSBT8nTqbhBIu3tX4/lyH3aJVBUcGmLh:8hI5qEp32kWcVK367yaC09bDRbk:$ of our ciphertexts";
+        let result = extract_ciphertexts_from_payload(input).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 1);
+    }
 }

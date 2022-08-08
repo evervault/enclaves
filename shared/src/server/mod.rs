@@ -5,8 +5,6 @@ pub use tcp::TcpServer;
 #[cfg(feature = "enclave")]
 pub mod vsock;
 #[cfg(feature = "enclave")]
-use tokio_vsock::VsockListener;
-#[cfg(feature = "enclave")]
 pub use vsock::VsockServer;
 
 use async_trait::async_trait;
@@ -19,6 +17,8 @@ pub trait Listener: Sized {
     async fn accept(&mut self) -> Result<Self::Connection, Self::Error>;
 }
 
+#[cfg(feature = "enclave")]
+use tokio_vsock::VsockListener;
 #[cfg(feature = "enclave")]
 pub async fn get_server_listener(port: u16) -> error::ServerResult<VsockListener> {
     let listener = VsockListener::bind(crate::ENCLAVE_CID, port.into())?;
