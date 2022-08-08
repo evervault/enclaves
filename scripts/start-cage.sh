@@ -26,8 +26,8 @@ if [ "$DEBUG_MODE" = true ] ; then
   echo "[HOST] Attaching headless console for running enclaves..."
   for id in $(nitro-cli describe-enclaves | jq -r ".[] | .EnclaveID")
   do
-      # Create console listener, prefix all enclave stdout with [ENCLAVE]
-      nitro-cli console --enclave-id $id | sed -e 's/^/[ENCLAVE] /;' &
+      # Create console listener
+      nitro-cli console --enclave-id $id &
   done
 fi
 
