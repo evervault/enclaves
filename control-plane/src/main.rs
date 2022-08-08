@@ -57,7 +57,7 @@ async fn main() -> Result<()> {
 }
 
 #[cfg(not(feature = "enclave"))]
-async fn get_connection_to_guest_process() -> std::io::Result<TcpStream> {
+async fn get_connection_to_enclave() -> std::io::Result<TcpStream> {
     let ip_addr = std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0));
     println!(
         "Connecting to tcp data plane on ({},{})",
@@ -67,7 +67,7 @@ async fn get_connection_to_guest_process() -> std::io::Result<TcpStream> {
 }
 
 #[cfg(feature = "enclave")]
-async fn get_connection_to_guest_process() -> std::io::Result<VsockStream> {
+async fn get_connection_to_enclave() -> std::io::Result<VsockStream> {
     println!(
         "Connecting to enclave on ({},{})",
         ENCLAVE_CID, ENCLAVE_CONNECT_PORT
@@ -90,7 +90,7 @@ async fn tcp_server() -> Result<()> {
         if let Ok((mut connection, _client_socket_addr)) = tcp_listener.accept().await {
             tokio::spawn(async move {
                 println!("Accepted incoming TCP stream — {:?}", _client_socket_addr);
-                let enclave_stream = match get_connection_to_guest_process().await {
+                let enclave_stream = match get_connection_to_enclave().await {
                     Ok(enclave_stream) => enclave_stream,
                     Err(e) => {
                         eprintln!(

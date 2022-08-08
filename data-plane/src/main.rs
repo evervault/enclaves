@@ -1,10 +1,16 @@
+use serde::{Deserialize, Serialize};
+
+use data_plane::crypto;
 #[cfg(feature = "enclave")]
 use data_plane::crypto::attest;
 use data_plane::error::AuthError;
 use data_plane::error::Result;
 
-use data_plane::server::tls::TlsServerBuilder;
+use data_plane::server::{http::ContentEncoding, tls::TlsServerBuilder};
+
+use hyper::http::{self, request::Parts};
 use hyper::{Body, Request, Response};
+use nom::AsBytes;
 #[cfg(not(feature = "enclave"))]
 use shared::server::tcp::TcpServer;
 use shared::server::Listener;
@@ -21,6 +27,7 @@ use shared::ENCLAVE_CONNECT_PORT;
 #[cfg(feature = "enclave")]
 use shared::{server::vsock::VsockServer, ENCLAVE_CID};
 
+use futures::StreamExt;
 use hyper::server::conn;
 use hyper::service::service_fn;
 
@@ -144,7 +151,7 @@ async fn handle_incoming_request(
     // Extract API Key header and authenticate request
     // Run parser over payload
     // Serialize request onto socket
-    let _api_key_header = match req
+    let api_key = match req
         .headers_mut()
         .remove(hyper::http::header::HeaderName::from_static("api-key"))
         .ok_or(AuthError::NoApiKeyGiven)
@@ -155,12 +162,82 @@ async fn handle_incoming_request(
 
     println!("Extracted API key from request");
     // TODO: authenticate api key from request
-    let (mut req_info, req_body) = req.into_parts();
-    // TODO: find ciphertexts & decrypt
-    // tmp: rename body to recreate request
+    let (req_info, req_body) = req.into_parts();
+
+    let compression = req_info
+        .headers
+        .get(http::header::CONTENT_ENCODING)
+        .map(ContentEncoding::try_from)
+        .map(|encoding_res| encoding_res.ok())
+        .flatten();
+
+    if let Some(_encoding) = req_info.headers.get(http::header::TRANSFER_ENCODING) {
+        Ok(Response::builder().status(500).body(Body::empty()).unwrap())
+    } else {
+        handle_standard_request(api_key, req_info, req_body, compression, customer_port).await
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct EncryptedDataEntry {
+    range: (usize, usize),
+    value: String,
+}
+
+impl EncryptedDataEntry {
+    #[allow(unused)]
+    pub fn range(&self) -> (usize, usize) {
+        self.range
+    }
+
+    #[allow(unused)]
+    pub fn value(&self) -> &str {
+        &self.value
+    }
+}
+
+// Handler for incoming requests which are not chunked
+async fn handle_standard_request(
+    _api_key: hyper::header::HeaderValue,
+    mut req_info: Parts,
+    req_body: Body,
+    _compression: Option<ContentEncoding>,
+    customer_port: u16,
+) -> Result<Response<Body>> {
+    let request_bytes = match hyper::body::to_bytes(req_body).await {
+        Ok(body_bytes) => body_bytes,
+        Err(e) => {
+            eprintln!("Failed to read entire body — {}", e);
+            return Ok(Response::builder().status(500).body(Body::empty()).unwrap());
+        }
+    };
+
+    let mut stream_reader =
+        crypto::stream::IncomingStreamDecoder::create_reader(request_bytes.as_bytes());
+
+    let mut decryption_payload = vec![];
+    while let Some(parsed_frame) = stream_reader.next().await {
+        let (range, ciphertext) = match parsed_frame {
+            Ok(crypto::stream::IncomingFrame::Ciphertext(ciphertext)) => ciphertext,
+            Ok(_) => continue,
+            Err(e) => {
+                eprintln!("An error while decoding the incoming request — {:?}", e);
+                return Ok(Response::builder().status(500).body(Body::empty()).unwrap());
+            }
+        };
+
+        let ciphertext_item = serde_json::json!({
+            "range": [range.0, range.1],
+            "value": ciphertext.to_string()
+        });
+        decryption_payload.push(ciphertext_item);
+    }
+
+    println!("Ciphertexts extracted: {:?}", decryption_payload);
+
+    let bytes_vec = request_bytes.to_vec();
 
     // Build processed request
-    let decrypted_req_body = req_body;
     let mut uri_builder = hyper::Uri::builder()
         .authority(format!("0.0.0.0:{}", customer_port))
         .scheme("http");
@@ -168,7 +245,7 @@ async fn handle_incoming_request(
         uri_builder = uri_builder.path_and_query(req_path.clone());
     }
     req_info.uri = uri_builder.build().expect("rebuilt from existing request");
-    let decrypted_request = Request::from_parts(req_info, decrypted_req_body);
+    let decrypted_request = Request::from_parts(req_info, Body::from(bytes_vec));
     println!("Finished processing request");
     let http_client = hyper::Client::new();
     let customer_response = match http_client.request(decrypted_request).await {

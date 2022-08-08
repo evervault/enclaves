@@ -3,6 +3,7 @@ use crate::crypto::parser::Ciphertext;
 use bytes::{Buf, BytesMut};
 use thiserror::Error;
 use tokio_util::codec::Decoder;
+use tokio_util::codec::FramedRead;
 
 pub type Range = (usize, usize);
 #[derive(Debug)]
@@ -44,6 +45,10 @@ impl IncomingStreamDecoder {
         self.offset += slice_length;
         let copied_bytes = src.copy_to_bytes(slice_length);
         copied_bytes.to_vec()
+    }
+
+    pub fn create_reader<R: tokio::io::AsyncRead>(src: R) -> FramedRead<R, Self> {
+        FramedRead::new(src, Self::default())
     }
 }
 

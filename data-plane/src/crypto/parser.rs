@@ -92,6 +92,25 @@ impl Ciphertext {
     }
 }
 
+impl std::fmt::Display for Ciphertext {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ev:")?;
+        if let Some(vers) = self.version.as_ref() {
+            write!(f, "{}:", vers)?;
+        }
+        if let Some(datatype) = self.datatype.as_ref() {
+            write!(f, "{}:", datatype)?;
+        }
+        write!(
+            f,
+            "{}:{}:{}:$",
+            base64::encode(self.iv.as_slice()),
+            base64::encode(self.public_key.as_slice()),
+            base64::encode(self.encrypted_value.as_slice())
+        )
+    }
+}
+
 fn ciphertext_prefix(input: &[u8]) -> IResult<&[u8], &[u8]> {
     tag(b"ev")(input)
 }
