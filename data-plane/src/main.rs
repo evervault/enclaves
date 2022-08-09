@@ -173,7 +173,16 @@ async fn handle_incoming_request(
     println!("Extracted API key from request");
     let is_auth = if cfg!(feature = "enclave") {
         println!("Authenticating request using E3");
-        e3_client.authenticate(&api_key).await.unwrap()
+        match e3_client.authenticate(&api_key).await {
+            Ok(auth_status) => auth_status,
+            Err(e) => {
+                eprintln!("Failed to authenticate against e3 — {:?}", e);
+                return Ok(Response::builder()
+                    .status(500)
+                    .body(Body::from("Connection to E3 failed."))
+                    .expect("Hardcoded response"));
+            }
+        }
     } else {
         true
     };
@@ -193,7 +202,10 @@ async fn handle_incoming_request(
         .flatten();
 
     if let Some(_encoding) = req_info.headers.get(http::header::TRANSFER_ENCODING) {
-        Ok(Response::builder().status(500).body(Body::empty()).unwrap())
+        Ok(Response::builder()
+            .status(500)
+            .body(Body::empty())
+            .expect("Hardcoded response"))
     } else {
         handle_standard_request(
             api_key,
@@ -236,7 +248,10 @@ async fn handle_standard_request(
         Ok(body_bytes) => body_bytes,
         Err(e) => {
             eprintln!("Failed to read entire body — {}", e);
-            return Ok(Response::builder().status(500).body(Body::empty()).unwrap());
+            return Ok(Response::builder()
+                .status(500)
+                .body(Body::empty())
+                .expect("Hardcoded response"));
         }
     };
 
@@ -248,7 +263,7 @@ async fn handle_standard_request(
                 .body(Body::from(
                     "Failed to parse incoming stream for ciphertexts",
                 ))
-                .unwrap())
+                .expect("Hardcoded response"))
         }
     };
     println!("Ciphertexts extracted: {:?}", decryption_payload);
@@ -262,7 +277,10 @@ async fn handle_standard_request(
                 Ok(decrypted) => decrypted,
                 Err(e) => {
                     eprintln!("Failed to decrypt — {:?}", e);
-                    return Ok(Response::builder().status(500).body(Body::empty()).unwrap());
+                    return Ok(Response::builder()
+                        .status(500)
+                        .body(Body::empty())
+                        .expect("Hardcoded response"));
                 }
             };
 
@@ -293,7 +311,10 @@ async fn handle_standard_request(
             let msg = format!("Error requesting customer process - {:?}", e);
             eprintln!("{}", msg);
             let res_body = Body::from(msg);
-            Response::builder().status(500).body(res_body).unwrap()
+            Response::builder()
+                .status(500)
+                .body(res_body)
+                .expect("Hardcoded response")
         }
     };
     println!("Response received from customer");

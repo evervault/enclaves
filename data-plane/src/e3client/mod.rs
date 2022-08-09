@@ -4,6 +4,7 @@ mod tls_verifier;
 
 use hyper::client::conn::{Connection as HyperConnection, SendRequest};
 use hyper::header::HeaderValue;
+use hyper::{Body, Response};
 use serde::de::DeserializeOwned;
 use serde_json::value::Value;
 use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, ServerName};
@@ -66,7 +67,8 @@ impl E3Client {
         let tls_config = get_tls_client_config();
         Self {
             tls_connector: TlsConnector::from(std::sync::Arc::new(tls_config)),
-            e3_server_name: ServerName::try_from("e3.cages-e3.internal").unwrap(),
+            e3_server_name: ServerName::try_from("e3.cages-e3.internal")
+                .expect("Hardcoded hostname"),
         }
     }
 
@@ -96,9 +98,13 @@ impl E3Client {
         Ok(connection_info)
     }
 
-    async fn send<T, V>(&self, api_key: V, path: &str, payload: hyper::Body) -> Result<T, E3Error>
+    async fn send<V>(
+        &self,
+        api_key: V,
+        path: &str,
+        payload: hyper::Body,
+    ) -> Result<Response<Body>, E3Error>
     where
-        T: DeserializeOwned,
         HeaderValue: TryFrom<V>,
         hyper::http::Error: From<<HeaderValue as TryFrom<V>>::Error>,
     {
@@ -117,12 +123,12 @@ impl E3Client {
             }
         });
 
-        let e3_response = request_sender.send_request(decrypt_request).await?;
-        let response_body = hyper::body::to_bytes(e3_response.into_body())
-            .await?
-            .to_vec();
+        let response = request_sender.send_request(decrypt_request).await?;
+        if !response.status().is_success() {
+            return Err(E3Error::FailedRequest(response.status()));
+        }
 
-        Ok(serde_json::from_slice(response_body.as_slice())?)
+        Ok(response)
     }
 
     pub async fn decrypt<'a, T, V>(&self, api_key: V, payload: E3Payload<'a>) -> Result<T, E3Error>
@@ -131,7 +137,8 @@ impl E3Client {
         HeaderValue: TryFrom<V>,
         hyper::http::Error: From<<HeaderValue as TryFrom<V>>::Error>,
     {
-        self.send(api_key, "/decrypt", payload.try_into()?).await
+        let response = self.send(api_key, "/decrypt", payload.try_into()?).await?;
+        self.parse_response(response).await
     }
 
     pub async fn encrypt<'a, T, V>(&self, api_key: V, payload: E3Payload<'a>) -> Result<T, E3Error>
@@ -140,7 +147,8 @@ impl E3Client {
         HeaderValue: TryFrom<V>,
         hyper::http::Error: From<<HeaderValue as TryFrom<V>>::Error>,
     {
-        self.send(api_key, "/encrypt", payload.try_into()?).await
+        let response = self.send(api_key, "/encrypt", payload.try_into()?).await?;
+        self.parse_response(response).await
     }
 
     pub async fn authenticate<'a, V>(&self, api_key: V) -> Result<bool, E3Error>
@@ -148,11 +156,17 @@ impl E3Client {
         HeaderValue: TryFrom<V>,
         hyper::http::Error: From<<HeaderValue as TryFrom<V>>::Error>,
     {
-        let response: Value = self
+        let response = self
             .send(api_key, "/authenticate", hyper::Body::empty())
             .await?;
 
-        Ok(response.is_object())
+        Ok(response.status().is_success())
+    }
+
+    async fn parse_response<T: DeserializeOwned>(&self, res: Response<Body>) -> Result<T, E3Error> {
+        let response_body = res.into_body();
+        let response_body = hyper::body::to_bytes(response_body).await?;
+        Ok(serde_json::from_slice(&response_body)?)
     }
 }
 

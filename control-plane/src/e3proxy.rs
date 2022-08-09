@@ -7,6 +7,7 @@ use shared::server::TcpServer;
 #[cfg(feature = "enclave")]
 use shared::server::VsockServer;
 use std::net::{IpAddr, Ipv4Addr};
+use tokio::io::AsyncWriteExt;
 use trust_dns_resolver::config::ResolverOpts;
 use trust_dns_resolver::config::{NameServerConfigGroup, ResolverConfig};
 use trust_dns_resolver::name_server::{GenericConnection, GenericConnectionProvider, TokioRuntime};
@@ -34,6 +35,20 @@ impl E3Proxy {
         Self { dns_resolver }
     }
 
+    #[cfg(feature = "enclave")]
+    async fn shutdown_conn(connection: tokio_vsock::VsockStream) {
+        if let Err(e) = connection.shutdown(std::net::Shutdown::Both) {
+            eprintln!("Failed to shutdown data plane connection — {:?}", e);
+        }
+    }
+
+    #[cfg(not(feature = "enclave"))]
+    async fn shutdown_conn(mut connection: tokio::net::TcpStream) {
+        if let Err(e) = connection.shutdown().await {
+            eprintln!("Failed to shutdown data plane connection — {:?}", e);
+        }
+    }
+
     pub async fn listen(self) -> Result<()> {
         #[cfg(feature = "enclave")]
         let mut enclave_conn =
@@ -56,12 +71,29 @@ impl E3Proxy {
                 }
             };
             println!("Crypto request received");
-            let e3_ip = self.get_ip_for_e3().await; // TODO: cache
+            let e3_ip = match self.get_ip_for_e3().await {
+                Ok(Some(ip)) => ip,
+                Ok(None) => {
+                    eprintln!("No ip returned for E3");
+                    Self::shutdown_conn(connection).await;
+                    continue;
+                }
+                Err(e) => {
+                    eprintln!("Error obtaining IP for E3 — {:?}", e);
+                    Self::shutdown_conn(connection).await;
+                    continue;
+                }
+            }; // TODO: cache
             println!("IP for E3 obtained");
             tokio::spawn(async move {
-                let e3_stream = tokio::net::TcpStream::connect((e3_ip, 443))
-                    .await
-                    .expect("Failed to connect to e3");
+                let e3_stream = match tokio::net::TcpStream::connect((e3_ip, 443)).await {
+                    Ok(e3_stream) => e3_stream,
+                    Err(e) => {
+                        eprintln!("Failed to connect to E3 — {:?}", e);
+                        Self::shutdown_conn(connection).await;
+                        return;
+                    }
+                };
 
                 if let Err(e) = shared::utils::pipe_streams(connection, e3_stream).await {
                     eprintln!("Error streaming from Data Plane to e3 — {:?}", e);
@@ -74,19 +106,19 @@ impl E3Proxy {
     }
 
     #[cfg(feature = "enclave")]
-    async fn get_ip_for_e3(&self) -> IpAddr {
-        self.dns_resolver
+    async fn get_ip_for_e3(&self) -> Result<Option<IpAddr>> {
+        let ip = self
+            .dns_resolver
             .lookup_ip("e3.cages-e3.internal.")
-            .await
-            .unwrap()
+            .await?
             .iter()
-            .choose(&mut rand::thread_rng())
-            .unwrap()
+            .choose(&mut rand::thread_rng());
+        Ok(ip)
     }
 
     // supporting local env
     #[cfg(not(feature = "enclave"))]
-    async fn get_ip_for_e3(&self) -> IpAddr {
-        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))
+    async fn get_ip_for_e3(&self) -> Result<Option<IpAddr>> {
+        Ok(Some(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))))
     }
 }

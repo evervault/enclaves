@@ -8,4 +8,6 @@ pub enum Error {
     HyperError(#[from] hyper::Error),
     #[error("Deserialization Error — {0:?}")]
     SerdeError(#[from] serde_json::Error),
+    #[error("Request to E3 failed with status: {0:?}")]
+    FailedRequest(hyper::StatusCode),
 }

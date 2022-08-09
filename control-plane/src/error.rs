@@ -1,11 +1,13 @@
 use std::fmt::Formatter;
 use thiserror::Error;
+use trust_dns_resolver::error::ResolveError;
 
 #[derive(Error, Debug)]
 pub enum ServerError {
     Io(#[from] std::io::Error),
     Rpc(#[from] shared::rpc::error::RpcError),
     Server(#[from] shared::server::error::ServerError),
+    DNSError(#[from] ResolveError),
 }
 
 impl std::fmt::Display for ServerError {

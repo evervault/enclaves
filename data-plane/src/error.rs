@@ -16,7 +16,7 @@ impl From<AuthError> for hyper::Response<hyper::Body> {
         hyper::Response::builder()
             .status(401)
             .body(msg.into())
-            .unwrap()
+            .expect("Failed to build auth error to response")
     }
 }
 
