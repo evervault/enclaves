@@ -33,4 +33,4 @@ fi
 
 # Boot control plane
 echo "[HOST] Starting control plane..."
-exec ./control-plane 2>&1 | sed -e 's/^/[HOST] /;'
+exec ./control-plane

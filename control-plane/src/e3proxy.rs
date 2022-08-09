@@ -43,22 +43,27 @@ impl E3Proxy {
             };
         #[cfg(feature = "enclave")]
         let mut enclave_conn = enclave_conn;
-
+        println!("Running e3 proxy on {}", shared::ENCLAVE_CRYPTO_PORT);
         loop {
-            if let Ok((connection, _client_socket_addr)) = enclave_conn.accept().await {
-                println!("Crypto request received");
-                let e3_ip = self.get_ip_for_e3().await; // TODO: cache
-                println!("IP for E3 obtained");
-                tokio::spawn(async move {
-                    let e3_stream = tokio::net::TcpStream::connect((e3_ip, 443))
-                        .await
-                        .expect("Failed to connect to e3");
+            let connection = match enclave_conn.accept().await {
+                Ok((conn, _client_socket_addr)) => conn,
+                Err(e) => {
+                    eprintln!("Error accepting crypto request — {:?}", e);
+                    continue;
+                }
+            };
+            println!("Crypto request received");
+            let e3_ip = self.get_ip_for_e3().await; // TODO: cache
+            println!("IP for E3 obtained");
+            tokio::spawn(async move {
+                let e3_stream = tokio::net::TcpStream::connect((e3_ip, 443))
+                    .await
+                    .expect("Failed to connect to e3");
 
-                    if let Err(e) = shared::utils::pipe_streams(connection, e3_stream).await {
-                        eprintln!("Error streaming from Data Plane to e3 — {:?}", e);
-                    }
-                });
-            }
+                if let Err(e) = shared::utils::pipe_streams(connection, e3_stream).await {
+                    eprintln!("Error streaming from Data Plane to e3 — {:?}", e);
+                }
+            });
         }
 
         #[allow(unreachable_code)]
