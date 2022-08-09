@@ -39,5 +39,5 @@ tokio-test = "0.4.2"
 [features]
 default = []
 network_egress = ["dep:dns-message-parser","dep:ttl_cache","dep:rand"]
-enclave = ["dep:tokio-vsock", "network_egress", "shared/enclave"]
-not_enclave = ["network_egress"]
+enclave = ["dep:tokio-vsock", "shared/enclave"]
+not_enclave = []
