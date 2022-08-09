@@ -18,8 +18,8 @@ else
 fi
 
 nitro-cli run-enclave --config enclave.json
-echo "[HOST] Enclave started... Waiting 5 seconds for warmup."
-sleep 5
+echo "[HOST] Enclave started... Waiting 10 seconds for warmup."
+sleep 10
 
 if [ "$DEBUG_MODE" = true ] ; then
   # Create stdout streams for any running enclaves
