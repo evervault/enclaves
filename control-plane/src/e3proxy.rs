@@ -37,7 +37,7 @@ impl E3Proxy {
     pub async fn listen(self) -> Result<()> {
         #[cfg(feature = "enclave")]
         let mut enclave_conn =
-            VsockServer::bind(shared::PARENT_CID, shared::ENCLAVE_CRYPTO_PORT).await?;
+            VsockServer::bind(shared::PARENT_CID, shared::ENCLAVE_CRYPTO_PORT.into()).await?;
 
         #[cfg(not(feature = "enclave"))]
         let mut enclave_conn = TcpServer::bind(std::net::SocketAddr::new(
