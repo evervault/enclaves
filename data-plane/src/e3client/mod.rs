@@ -30,6 +30,8 @@ fn get_tls_client_config() -> ClientConfig {
 #[cfg(not(feature = "enclave"))]
 type Connection = tokio::net::TcpStream;
 #[cfg(feature = "enclave")]
+use tokio_vsock::VsockStream;
+#[cfg(feature = "enclave")]
 type Connection = tokio_vsock::VsockStream;
 
 pub struct E3Client {
@@ -41,6 +43,22 @@ impl std::default::Default for E3Client {
     fn default() -> Self {
         Self::new()
     }
+}
+
+#[cfg(not(feature = "enclave"))]
+use tokio::net::TcpStream;
+#[cfg(not(feature = "enclave"))]
+async fn get_socket() -> Result<Connection, tokio::io::Error> {
+    TcpStream::connect(std::net::SocketAddr::new(
+        std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
+        shared::ENCLAVE_CRYPTO_PORT,
+    ))
+    .await
+}
+
+#[cfg(feature = "enclave")]
+async fn get_socket() -> Result<Connection, tokio::io::Error> {
+    VsockStream::connect(shared::PARENT_CID, shared::ENCLAVE_CRYPTO_PORT.into()).await
 }
 
 impl E3Client {
@@ -65,9 +83,7 @@ impl E3Client {
         ),
         E3Error,
     > {
-        let client_connection =
-            shared::client::get_client_socket(shared::ENCLAVE_CRYPTO_PORT).await?;
-
+        let client_connection: Connection = get_socket().await?;
         let connection = self
             .tls_connector
             .connect(self.e3_server_name.clone(), client_connection)
