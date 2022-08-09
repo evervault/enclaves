@@ -27,7 +27,7 @@ impl EgressProxy {
             TcpServer::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 4433)).await?;
 
         #[cfg(feature = "enclave")]
-        let mut server = VsockServer::bind(PARENT_CID, PROXY_PORT).await?;
+        let mut server = VsockServer::bind(shared::PARENT_CID, PROXY_PORT).await?;
 
         loop {
             match server.accept().await {

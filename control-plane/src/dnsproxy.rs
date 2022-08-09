@@ -21,7 +21,7 @@ impl DnsProxy {
         .await?;
 
         #[cfg(feature = "enclave")]
-        let mut server = VsockServer::bind(3, DNS_LISTENING_PORT.into()).await?;
+        let mut server = VsockServer::bind(shared::PARENT_CID, DNS_LISTENING_PORT.into()).await?;
 
         loop {
             match server.accept().await {
