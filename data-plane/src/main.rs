@@ -4,7 +4,6 @@ use serde_json::Value;
 use data_plane::crypto;
 #[cfg(feature = "enclave")]
 use data_plane::crypto::attest;
-use data_plane::e3client::E3Client;
 use data_plane::error::AuthError;
 use data_plane::error::Result;
 
@@ -12,10 +11,10 @@ use data_plane::server::{http::ContentEncoding, tls::TlsServerBuilder};
 
 use hyper::http::{self, request::Parts};
 use hyper::{Body, Request, Response};
+use nom::AsBytes;
 #[cfg(not(feature = "enclave"))]
 use shared::server::tcp::TcpServer;
 use shared::server::Listener;
-use std::sync::Arc;
 
 #[cfg(not(feature = "enclave"))]
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -113,7 +112,6 @@ async fn start_data_plane(args: DataPlaneArgs) {
     println!("TLS upgrade complete");
     let http_server = conn::Http::new();
 
-    let e3_client = Arc::new(E3Client::new());
     loop {
         let stream = match server.accept().await {
             Ok(stream) => stream,
@@ -126,22 +124,16 @@ async fn start_data_plane(args: DataPlaneArgs) {
             }
         };
         let server = http_server.clone();
-        let e3_client_for_connection = e3_client.clone();
         tokio::spawn(async move {
-            let e3_client_for_tcp = e3_client_for_connection.clone();
             println!("Accepted tls connection");
-            let sent_response =
-                server
-                    .serve_connection(
-                        stream,
-                        service_fn(|req: Request<Body>| {
-                            let e3_client_for_req = e3_client_for_tcp.clone();
-                            async move {
-                                handle_incoming_request(req, args.port, e3_client_for_req).await
-                            }
-                        }),
-                    )
-                    .await;
+            let sent_response = server
+                .serve_connection(
+                    stream,
+                    service_fn(|req: Request<Body>| async move {
+                        handle_incoming_request(req, args.port).await
+                    }),
+                )
+                .await;
 
             if let Err(processing_err) = sent_response {
                 eprintln!(
@@ -156,7 +148,6 @@ async fn start_data_plane(args: DataPlaneArgs) {
 async fn handle_incoming_request(
     mut req: Request<Body>,
     customer_port: u16,
-    e3_client: Arc<E3Client>,
 ) -> Result<Response<Body>> {
     // Extract API Key header and authenticate request
     // Run parser over payload
@@ -171,16 +162,7 @@ async fn handle_incoming_request(
     };
 
     println!("Extracted API key from request");
-    let is_auth = if cfg!(feature = "enclave") {
-        e3_client.authenticate(&api_key).await.unwrap()
-    } else {
-        true
-    };
-
-    if !is_auth {
-        return Ok(AuthError::FailedToAuthenticateApiKey.into());
-    }
-
+    // TODO: authenticate api key from request
     let (req_info, req_body) = req.into_parts();
 
     let compression = req_info
@@ -193,15 +175,7 @@ async fn handle_incoming_request(
     if let Some(_encoding) = req_info.headers.get(http::header::TRANSFER_ENCODING) {
         Ok(Response::builder().status(500).body(Body::empty()).unwrap())
     } else {
-        handle_standard_request(
-            api_key,
-            req_info,
-            req_body,
-            compression,
-            customer_port,
-            e3_client,
-        )
-        .await
+        handle_standard_request(api_key, req_info, req_body, compression, customer_port).await
     }
 }
 
@@ -212,10 +186,12 @@ struct EncryptedDataEntry {
 }
 
 impl EncryptedDataEntry {
+    #[allow(unused)]
     pub fn range(&self) -> (usize, usize) {
         self.range
     }
 
+    #[allow(unused)]
     pub fn value(&self) -> &str {
         &self.value
     }
@@ -223,12 +199,11 @@ impl EncryptedDataEntry {
 
 // Handler for incoming requests which are not chunked
 async fn handle_standard_request(
-    api_key: hyper::header::HeaderValue,
+    _api_key: hyper::header::HeaderValue,
     mut req_info: Parts,
     req_body: Body,
     _compression: Option<ContentEncoding>,
     customer_port: u16,
-    e3_client: Arc<E3Client>,
 ) -> Result<Response<Body>> {
     let request_bytes = match hyper::body::to_bytes(req_body).await {
         Ok(body_bytes) => body_bytes,
@@ -240,7 +215,7 @@ async fn handle_standard_request(
 
     let decryption_payload = match extract_ciphertexts_from_payload(&request_bytes).await {
         Ok(decryption_payload) => decryption_payload,
-        Err(_e) => {
+        Err(e) => {
             return Ok(Response::builder()
                 .status(500)
                 .body(Body::from(
@@ -251,25 +226,7 @@ async fn handle_standard_request(
     };
     println!("Ciphertexts extracted: {:?}", decryption_payload);
 
-    let mut bytes_vec = request_bytes.to_vec();
-    if decryption_payload.len() > 0 {
-        let decrypt_val = Value::Array(decryption_payload);
-        let decrypted: Vec<EncryptedDataEntry> =
-            match e3_client.decrypt(&api_key, (&decrypt_val).into()).await {
-                Ok(decrypted) => decrypted,
-                Err(e) => {
-                    eprintln!("Failed to decrypt — {:?}", e);
-                    return Ok(Response::builder().status(500).body(Body::empty()).unwrap());
-                }
-            };
-
-        decrypted.iter().rev().for_each(|entry| {
-            let range = entry.range();
-            let _: Vec<u8> = bytes_vec
-                .splice(range.0..range.1, entry.value().bytes())
-                .collect();
-        });
-    }
+    let bytes_vec = request_bytes.to_vec();
 
     // Build processed request
     let mut uri_builder = hyper::Uri::builder()
