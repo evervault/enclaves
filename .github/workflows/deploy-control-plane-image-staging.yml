@@ -43,7 +43,7 @@ jobs:
           ECR_REPOSITORY: evervault/control-plane
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -f ./control-plane/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest --pull --no-cache .
+          docker build -f ./control-plane/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-latest --pull --no-cache .
       - name: Push control plane image to Amazon ECR
         id: push-control-plane
         env:
@@ -87,7 +87,7 @@ jobs:
           ECR_REPOSITORY: evervault/control-plane
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -f ./control-plane/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest --pull --no-cache .
+          docker build -f ./control-plane/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-latest --pull --no-cache .
       - name: Push control plane image to Amazon ECR
         id: push-control-plane
         env:
