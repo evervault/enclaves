@@ -19,5 +19,5 @@ rand = { version = "0.8.5" }
 [features]
 default = []
 network_egress = []
-enclave = ["dep:tokio-vsock", "network_egress", "shared/enclave"]
+enclave = ["dep:tokio-vsock", "shared/enclave"]
 not_enclave = ["network_egress"]
