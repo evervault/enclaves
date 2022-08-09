@@ -172,12 +172,14 @@ async fn handle_incoming_request(
 
     println!("Extracted API key from request");
     let is_auth = if cfg!(feature = "enclave") {
+        println!("Authenticating request using E3");
         e3_client.authenticate(&api_key).await.unwrap()
     } else {
         true
     };
 
     if !is_auth {
+        println!("Request is not authenticated");
         return Ok(AuthError::FailedToAuthenticateApiKey.into());
     }
 
@@ -253,6 +255,7 @@ async fn handle_standard_request(
 
     let mut bytes_vec = request_bytes.to_vec();
     if decryption_payload.len() > 0 {
+        println!("{} Ciphertexts found in payload", decryption_payload.len());
         let decrypt_val = Value::Array(decryption_payload);
         let decrypted: Vec<EncryptedDataEntry> =
             match e3_client.decrypt(&api_key, (&decrypt_val).into()).await {
@@ -263,12 +266,14 @@ async fn handle_standard_request(
                 }
             };
 
+        println!("Decrypt complete");
         decrypted.iter().rev().for_each(|entry| {
             let range = entry.range();
             let _: Vec<u8> = bytes_vec
                 .splice(range.0..range.1, entry.value().bytes())
                 .collect();
         });
+        println!("Payload updated");
     }
 
     // Build processed request
