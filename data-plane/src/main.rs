@@ -287,14 +287,14 @@ async fn handle_standard_request(
                 }
             };
 
-        println!("Decrypt complete");
+        println!("Decrypt complete — {:?}", decrypted);
         decrypted.iter().rev().for_each(|entry| {
             let range = entry.range();
             let _: Vec<u8> = bytes_vec
                 .splice(range.0..range.1, entry.value().bytes())
                 .collect();
         });
-        println!("Payload updated");
+        println!("Payload updated - {:?}", std::str::from_utf8(&bytes_vec));
     }
 
     // Build processed request
