@@ -1,3 +1,4 @@
+use hyper::http::HeaderValue;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -287,14 +288,14 @@ async fn handle_standard_request(
                 }
             };
 
-        println!("Decrypt complete — {:?}", decrypted);
+        println!("Decrypt complete");
         decrypted.iter().rev().for_each(|entry| {
             let range = entry.range();
             let _: Vec<u8> = bytes_vec
                 .splice(range.0..range.1, entry.value().bytes())
                 .collect();
         });
-        println!("Payload updated - {:?}", std::str::from_utf8(&bytes_vec));
+        println!("Payload updated");
     }
 
     // Build processed request
@@ -305,6 +306,9 @@ async fn handle_standard_request(
         uri_builder = uri_builder.path_and_query(req_path.clone());
     }
     req_info.uri = uri_builder.build().expect("rebuilt from existing request");
+    req_info
+        .headers
+        .insert("Content-Length", HeaderValue::from(bytes_vec.len()));
     let decrypted_request = Request::from_parts(req_info, Body::from(bytes_vec));
     println!("Finished processing request");
     let http_client = hyper::Client::new();
