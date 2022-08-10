@@ -104,9 +104,11 @@ impl std::fmt::Display for Ciphertext {
         write!(
             f,
             "{}:{}:{}:$",
-            base64::encode(self.iv.as_slice()),
-            base64::encode(self.public_key.as_slice()),
-            base64::encode(self.encrypted_value.as_slice())
+            std::str::from_utf8(self.iv.as_slice()).expect("IV validated by parser"),
+            std::str::from_utf8(self.public_key.as_slice())
+                .expect("Public Key validated by parser"),
+            std::str::from_utf8(self.encrypted_value.as_slice())
+                .expect("Encrypted value validated by parser")
         )
     }
 }
@@ -308,5 +310,16 @@ mod test {
         build_ciphertext_test!(rfvc);
         build_ciphertext_test!(rfvc, Datatype::Boolean);
         build_ciphertext_test!(rfvc, Datatype::Number);
+    }
+
+    #[test]
+    fn test_ciphertext_serialization() {
+        let ciphertext_bytes = build_ciphertext(None, None);
+        let (_, parsed) = ciphertext(ciphertext_bytes.as_slice()).unwrap();
+        let ciphertext_struct = Ciphertext::new(parsed);
+        assert_eq!(
+            ciphertext_struct.to_string(),
+            std::str::from_utf8(&ciphertext_bytes).unwrap().to_string()
+        );
     }
 }
