@@ -175,6 +175,9 @@ async fn handle_incoming_request(
         println!("Authenticating request using E3");
         match e3_client.authenticate(&api_key).await {
             Ok(auth_status) => auth_status,
+            Err(data_plane::e3client::E3Error::FailedRequest(status)) if status.as_u16() == 401 => {
+                return Ok(AuthError::FailedToAuthenticateApiKey.into());
+            }
             Err(e) => {
                 eprintln!("Failed to authenticate against e3 — {:?}", e);
                 return Ok(Response::builder()

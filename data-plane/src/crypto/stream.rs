@@ -246,7 +246,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_stream_decoder_emitting_ciphertext_ranges() {
-        let ciphertext1 = "ev:Tk9D:boolean:YGJVktHhdj3ds3wC:A6rkaTU8lez7NSBT8nTqbhBIu3tX4/lyH3aJVBUcGmLh:8hI5qEp32kWcVK367yaC09bDRbk:$";
+        let ciphertext1 = "ev:Tk9D:GN/T3pluS6KLUdid:A+RiktKZbS4bBYTBN8nOpGIIJbeJ1vTIPhIcvD7XLQ/X:VdnTBKfoP+vzhfdcNawB1aRh7MQ:$";
         let plaintext1 = ". Praesent sit amet ultrices nibh, a egestas odio. ";
         let ciphertext2 = "ev:Tk9D:boolean:YGJVktHhdj3ds3wC:A6rkaTU8lez7NSBT8nTqbhBIu3tX4/lyH3aJVBUcGmLh:8hI5qEp32kWcVK367yaC09bDRbk:$";
         let sections: Vec<&str> = vec![ciphertext1, plaintext1, ciphertext2];

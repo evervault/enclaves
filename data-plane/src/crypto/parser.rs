@@ -136,7 +136,7 @@ fn ciphertext_suffix(input: &[u8]) -> IResult<&[u8], &[u8]> {
 }
 
 fn is_base64(input: u8) -> bool {
-    input.is_ascii_alphanumeric() || input == b'=' || input == b'/'
+    input.is_ascii_alphanumeric() || input == b'=' || input == b'/' || input == b'+'
 }
 
 fn opt_version(input: &[u8]) -> IResult<&[u8], Option<CiphertextVersion>> {

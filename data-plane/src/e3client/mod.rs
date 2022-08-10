@@ -48,6 +48,8 @@ impl std::default::Default for E3Client {
 
 #[cfg(not(feature = "enclave"))]
 use tokio::net::TcpStream;
+
+use crate::error::AuthError;
 #[cfg(not(feature = "enclave"))]
 async fn get_socket() -> Result<Connection, tokio::io::Error> {
     TcpStream::connect(std::net::SocketAddr::new(
