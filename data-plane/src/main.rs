@@ -8,6 +8,7 @@ use data_plane::crypto::attest;
 use data_plane::e3client::E3Client;
 use data_plane::error::AuthError;
 use data_plane::error::Result;
+use data_plane::CageContext;
 
 use data_plane::server::{http::ContentEncoding, tls::TlsServerBuilder};
 
@@ -92,6 +93,7 @@ async fn get_server() -> std::result::Result<VsockServer, shared::server::error:
 
 async fn start_data_plane(args: DataPlaneArgs) {
     print!("Data plane starting on {}", ENCLAVE_CONNECT_PORT);
+    let context = CageContext::new().expect("Missing required Cage context elements");
     let server_result = get_server().await;
     let server = match server_result {
         Ok(server) => server,
@@ -103,7 +105,10 @@ async fn start_data_plane(args: DataPlaneArgs) {
 
     println!("Data plane server started successfully");
     let tls_server_builder = TlsServerBuilder.with_server(server);
-    let mut server = match tls_server_builder.with_self_signed_cert().await {
+    let mut server = match tls_server_builder
+        .with_self_signed_cert(context.get_cert_name())
+        .await
+    {
         Ok(server) => server,
         Err(e) => {
             eprintln!("Error creating tls server with self signed cert — {:?}", e);
@@ -115,6 +120,7 @@ async fn start_data_plane(args: DataPlaneArgs) {
     let http_server = conn::Http::new();
 
     let e3_client = Arc::new(E3Client::new());
+    let cage_context = Arc::new(context);
     loop {
         let stream = match server.accept().await {
             Ok(stream) => stream,
@@ -128,21 +134,29 @@ async fn start_data_plane(args: DataPlaneArgs) {
         };
         let server = http_server.clone();
         let e3_client_for_connection = e3_client.clone();
+        let cage_context_for_connection = cage_context.clone();
         tokio::spawn(async move {
             let e3_client_for_tcp = e3_client_for_connection.clone();
+            let cage_context_for_tcp = cage_context_for_connection.clone();
             println!("Accepted tls connection");
-            let sent_response =
-                server
-                    .serve_connection(
-                        stream,
-                        service_fn(|req: Request<Body>| {
-                            let e3_client_for_req = e3_client_for_tcp.clone();
-                            async move {
-                                handle_incoming_request(req, args.port, e3_client_for_req).await
-                            }
-                        }),
-                    )
-                    .await;
+            let sent_response = server
+                .serve_connection(
+                    stream,
+                    service_fn(|req: Request<Body>| {
+                        let e3_client_for_req = e3_client_for_tcp.clone();
+                        let cage_context_for_req = cage_context_for_tcp.clone();
+                        async move {
+                            handle_incoming_request(
+                                req,
+                                args.port,
+                                e3_client_for_req,
+                                cage_context_for_req,
+                            )
+                            .await
+                        }
+                    }),
+                )
+                .await;
 
             if let Err(processing_err) = sent_response {
                 eprintln!(
@@ -158,6 +172,7 @@ async fn handle_incoming_request(
     mut req: Request<Body>,
     customer_port: u16,
     e3_client: Arc<E3Client>,
+    cage_context: Arc<CageContext>,
 ) -> Result<Response<Body>> {
     // Extract API Key header and authenticate request
     // Run parser over payload
@@ -174,7 +189,10 @@ async fn handle_incoming_request(
     println!("Extracted API key from request");
     let is_auth = if cfg!(feature = "enclave") {
         println!("Authenticating request using E3");
-        match e3_client.authenticate(&api_key).await {
+        match e3_client
+            .authenticate(&api_key, cage_context.as_ref().into())
+            .await
+        {
             Ok(auth_status) => auth_status,
             Err(data_plane::e3client::E3Error::FailedRequest(status)) if status.as_u16() == 401 => {
                 return Ok(AuthError::FailedToAuthenticateApiKey.into());
@@ -218,6 +236,7 @@ async fn handle_incoming_request(
             compression,
             customer_port,
             e3_client,
+            cage_context,
         )
         .await
     }
@@ -247,6 +266,7 @@ async fn handle_standard_request(
     _compression: Option<ContentEncoding>,
     customer_port: u16,
     e3_client: Arc<E3Client>,
+    cage_context: Arc<CageContext>,
 ) -> Result<Response<Body>> {
     let request_bytes = match hyper::body::to_bytes(req_body).await {
         Ok(body_bytes) => body_bytes,
@@ -276,17 +296,19 @@ async fn handle_standard_request(
     if decryption_payload.len() > 0 {
         println!("{} Ciphertexts found in payload", decryption_payload.len());
         let decrypt_val = Value::Array(decryption_payload);
-        let decrypted: Vec<EncryptedDataEntry> =
-            match e3_client.decrypt(&api_key, (&decrypt_val).into()).await {
-                Ok(decrypted) => decrypted,
-                Err(e) => {
-                    eprintln!("Failed to decrypt — {:?}", e);
-                    return Ok(Response::builder()
-                        .status(500)
-                        .body(Body::empty())
-                        .expect("Hardcoded response"));
-                }
-            };
+        let decrypted: Vec<EncryptedDataEntry> = match e3_client
+            .decrypt(&api_key, (&decrypt_val, cage_context.as_ref()).into())
+            .await
+        {
+            Ok(decrypted) => decrypted,
+            Err(e) => {
+                eprintln!("Failed to decrypt — {:?}", e);
+                return Ok(Response::builder()
+                    .status(500)
+                    .body(Body::empty())
+                    .expect("Hardcoded response"));
+            }
+        };
 
         println!("Decrypt complete");
         decrypted.iter().rev().for_each(|entry| {

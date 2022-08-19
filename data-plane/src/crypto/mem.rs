@@ -67,7 +67,7 @@ impl Drop for Protected {
             // ensure that no references are kept after this struct is
             // dropped. If this is the case, it is safe to reconstruct
             // the box and allow it to be dropped here.
-            Box::from_raw(self.data);
+            drop(Box::from_raw(self.data));
         }
     }
 }

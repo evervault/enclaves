@@ -49,6 +49,8 @@ impl std::default::Default for E3Client {
 #[cfg(not(feature = "enclave"))]
 use tokio::net::TcpStream;
 
+use crate::CageContext;
+
 #[cfg(not(feature = "enclave"))]
 async fn get_socket() -> Result<Connection, tokio::io::Error> {
     TcpStream::connect(std::net::SocketAddr::new(
@@ -152,13 +154,17 @@ impl E3Client {
         self.parse_response(response).await
     }
 
-    pub async fn authenticate<'a, V>(&self, api_key: V) -> Result<bool, E3Error>
+    pub async fn authenticate<'a, V>(
+        &self,
+        api_key: V,
+        payload: E3Payload<'a>,
+    ) -> Result<bool, E3Error>
     where
         HeaderValue: TryFrom<V>,
         hyper::http::Error: From<<HeaderValue as TryFrom<V>>::Error>,
     {
         let response = self
-            .send(api_key, "/authenticate", hyper::Body::empty())
+            .send(api_key, "/authenticate", payload.try_into()?)
             .await?;
 
         Ok(response.status().is_success())
@@ -171,21 +177,37 @@ impl E3Client {
     }
 }
 
-pub struct E3Payload<'a>(Option<&'a Value>);
+pub struct E3Payload<'a> {
+    data: Option<&'a Value>,
+    context: &'a crate::CageContext,
+}
 
-impl<'a> std::convert::From<&'a Value> for E3Payload<'a> {
-    fn from(val: &'a Value) -> Self {
-        Self(Some(val))
+impl<'a> std::convert::From<(&'a Value, &'a CageContext)> for E3Payload<'a> {
+    fn from((val, context): (&'a Value, &'a CageContext)) -> Self {
+        Self {
+            data: Some(val),
+            context,
+        }
+    }
+}
+
+impl<'a> std::convert::From<&'a CageContext> for E3Payload<'a> {
+    fn from(context: &'a CageContext) -> Self {
+        Self {
+            data: None,
+            context,
+        }
     }
 }
 
 impl<'a> std::convert::TryInto<hyper::Body> for E3Payload<'a> {
     type Error = E3Error;
     fn try_into(self) -> Result<hyper::Body, E3Error> {
-        let body = match self.0 {
-            None => hyper::Body::empty(),
-            Some(val) => hyper::Body::from(serde_json::to_vec(val)?),
-        };
-        Ok(body)
+        let object = serde_json::json!({
+            "data": self.data,
+            "team_uuid": self.context.team_uuid(),
+            "app_uuid": self.context.app_uuid(),
+        });
+        Ok(hyper::Body::from(serde_json::to_vec(&object)?))
     }
 }
