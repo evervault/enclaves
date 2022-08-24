@@ -91,44 +91,49 @@ async fn get_server() -> std::result::Result<VsockServer, shared::server::error:
     VsockServer::bind(ENCLAVE_CID, ENCLAVE_CONNECT_PORT.into()).await
 }
 
+macro_rules! create_tls_server_or_return {
+    ($server:expr, $cert_name:expr) => {
+        match TlsServerBuilder
+            .with_server($server)
+            .with_self_signed_cert($cert_name)
+            .await
+        {
+            Ok(tls_server) => {
+                println!("TLS upgrade complete");
+                tls_server
+            }
+            Err(error) => return eprintln!("Error performing TLS upgrade: {error}"),
+        }
+    };
+}
+
 async fn start_data_plane(args: DataPlaneArgs) {
-    print!("Data plane starting on {}", ENCLAVE_CONNECT_PORT);
-    let context = CageContext::new().expect("Missing required Cage context elements");
-    let server_result = get_server().await;
-    let server = match server_result {
+    println!("Data plane starting on {}", ENCLAVE_CONNECT_PORT);
+    let cage_context =
+        Arc::new(CageContext::new().expect("Missing required Cage context elements"));
+    let server = match get_server().await {
         Ok(server) => server,
-        Err(e) => {
-            eprintln!("Error creating server: {:?}", e);
-            return;
-        }
+        Err(error) => return eprintln!("Error creating server: {error}"),
     };
-
-    println!("Data plane server started successfully");
-    let tls_server_builder = TlsServerBuilder.with_server(server);
-    let mut server = match tls_server_builder
-        .with_self_signed_cert(context.get_cert_name())
-        .await
-    {
-        Ok(server) => server,
-        Err(e) => {
-            eprintln!("Error creating tls server with self signed cert — {:?}", e);
-            return;
-        }
-    };
-
-    println!("TLS upgrade complete");
+    println!("Data plane server created");
+    let mut server = create_tls_server_or_return!(server, cage_context.get_cert_name());
     let http_server = conn::Http::new();
 
     let e3_client = Arc::new(E3Client::new());
-    let cage_context = Arc::new(context);
     loop {
-        let stream = match server.accept().await {
-            Ok(stream) => stream,
-            Err(tls_err) => {
+        let stream = match tokio::time::timeout(server.time_till_expiry(), server.accept()).await {
+            Ok(Ok(stream)) => stream,
+            Ok(Err(tls_err)) => {
                 eprintln!(
                     "An error occurred while accepting the incoming connection — {:?}",
                     tls_err
                 );
+                continue;
+            }
+            Err(_) => {
+                println!("Attestation document signing cert expired, recreating server...");
+                server =
+                    create_tls_server_or_return!(server.into_inner(), cage_context.get_cert_name());
                 continue;
             }
         };
