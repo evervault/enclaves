@@ -20,6 +20,12 @@ pub struct E3Proxy {
     dns_resolver: AsyncDnsResolver,
 }
 
+impl std::default::Default for E3Proxy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl E3Proxy {
     pub fn new() -> Self {
         let aws_internal_dns_ip = IpAddr::V4(Ipv4Addr::new(169, 254, 169, 253));

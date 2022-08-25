@@ -57,7 +57,7 @@ impl Decoder for IncomingStreamDecoder {
     type Error = IncomingStreamError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        if src.len() == 0 {
+        if src.is_empty() {
             return Ok(None);
         }
         let next_candidate = Self::find_next_ciphertext_candidate(src.as_ref())?;

@@ -1,10 +1,12 @@
+use serde::{Deserialize, Serialize};
+
 pub mod crypto;
 pub mod dns;
 pub mod e3client;
 pub mod error;
 pub mod server;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CageContext {
     team_uuid: String,
     app_uuid: String,

@@ -6,6 +6,7 @@ use hyper::client::conn::{Connection as HyperConnection, SendRequest};
 use hyper::header::HeaderValue;
 use hyper::{Body, Response};
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use serde_json::value::Value;
 use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, ServerName};
 use tokio_rustls::{client::TlsStream, TlsConnector};
@@ -48,8 +49,6 @@ impl std::default::Default for E3Client {
 
 #[cfg(not(feature = "enclave"))]
 use tokio::net::TcpStream;
-
-use crate::CageContext;
 
 #[cfg(not(feature = "enclave"))]
 async fn get_socket() -> Result<Connection, tokio::io::Error> {
@@ -134,37 +133,37 @@ impl E3Client {
         Ok(response)
     }
 
-    pub async fn decrypt<'a, T, V>(&self, api_key: V, payload: E3Payload<'a>) -> Result<T, E3Error>
+    pub async fn decrypt<T, V>(&self, api_key: V, payload: DecryptRequest) -> Result<T, E3Error>
     where
         T: DeserializeOwned,
         HeaderValue: TryFrom<V>,
         hyper::http::Error: From<<HeaderValue as TryFrom<V>>::Error>,
     {
-        let response = self.send(api_key, "/decrypt", payload.try_into()?).await?;
+        let response = self
+            .send(api_key, "/decrypt", payload.try_into_body()?)
+            .await?;
         self.parse_response(response).await
     }
 
-    pub async fn encrypt<'a, T, V>(&self, api_key: V, payload: E3Payload<'a>) -> Result<T, E3Error>
+    pub async fn encrypt<T, V>(&self, api_key: V, payload: EncryptRequest) -> Result<T, E3Error>
     where
         T: DeserializeOwned,
         HeaderValue: TryFrom<V>,
         hyper::http::Error: From<<HeaderValue as TryFrom<V>>::Error>,
     {
-        let response = self.send(api_key, "/encrypt", payload.try_into()?).await?;
+        let response = self
+            .send(api_key, "/encrypt", payload.try_into_body()?)
+            .await?;
         self.parse_response(response).await
     }
 
-    pub async fn authenticate<'a, V>(
-        &self,
-        api_key: V,
-        payload: E3Payload<'a>,
-    ) -> Result<bool, E3Error>
+    pub async fn authenticate<V>(&self, api_key: V, payload: AuthRequest) -> Result<bool, E3Error>
     where
         HeaderValue: TryFrom<V>,
         hyper::http::Error: From<<HeaderValue as TryFrom<V>>::Error>,
     {
         let response = self
-            .send(api_key, "/authenticate", payload.try_into()?)
+            .send(api_key, "/authenticate", payload.try_into_body()?)
             .await?;
 
         Ok(response.status().is_success())
@@ -177,37 +176,94 @@ impl E3Client {
     }
 }
 
-pub struct E3Payload<'a> {
-    data: Option<&'a Value>,
-    context: &'a crate::CageContext,
+#[derive(Serialize, Deserialize)]
+pub struct AuthRequest {
+    team_uuid: String,
+    app_uuid: String,
 }
 
-impl<'a> std::convert::From<(&'a Value, &'a CageContext)> for E3Payload<'a> {
-    fn from((val, context): (&'a Value, &'a CageContext)) -> Self {
+impl E3Payload for AuthRequest {}
+
+impl std::convert::From<&crate::CageContext> for AuthRequest {
+    fn from(context: &crate::CageContext) -> Self {
         Self {
-            data: Some(val),
-            context,
+            team_uuid: context.team_uuid().to_string(),
+            app_uuid: context.app_uuid().to_string(),
         }
     }
 }
 
-impl<'a> std::convert::From<&'a CageContext> for E3Payload<'a> {
-    fn from(context: &'a CageContext) -> Self {
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EncryptedDataEntry {
+    range: (usize, usize),
+    value: String,
+}
+
+impl EncryptedDataEntry {
+    pub fn range(&self) -> (usize, usize) {
+        self.range
+    }
+
+    pub fn value(&self) -> &str {
+        &self.value
+    }
+
+    pub fn new(range: (usize, usize), value: String) -> Self {
+        Self { range, value }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct DecryptRequest {
+    team_uuid: String,
+    app_uuid: String,
+    data: Vec<EncryptedDataEntry>,
+}
+
+impl E3Payload for DecryptRequest {}
+
+impl DecryptRequest {
+    pub fn data(&self) -> &Vec<EncryptedDataEntry> {
+        &self.data
+    }
+}
+
+impl std::convert::From<(Vec<EncryptedDataEntry>, &crate::CageContext)> for DecryptRequest {
+    fn from((val, context): (Vec<EncryptedDataEntry>, &crate::CageContext)) -> Self {
         Self {
-            data: None,
-            context,
+            data: val,
+            team_uuid: context.team_uuid().to_string(),
+            app_uuid: context.app_uuid().to_string(),
         }
     }
 }
 
-impl<'a> std::convert::TryInto<hyper::Body> for E3Payload<'a> {
-    type Error = E3Error;
-    fn try_into(self) -> Result<hyper::Body, E3Error> {
-        let object = serde_json::json!({
-            "data": self.data,
-            "team_uuid": self.context.team_uuid(),
-            "app_uuid": self.context.app_uuid(),
-        });
-        Ok(hyper::Body::from(serde_json::to_vec(&object)?))
+#[derive(Serialize, Deserialize)]
+pub struct EncryptRequest {
+    team_uuid: String,
+    app_uuid: String,
+    data: Value,
+}
+
+impl E3Payload for EncryptRequest {}
+impl EncryptRequest {
+    pub fn data(&self) -> &Value {
+        &self.data
+    }
+}
+
+impl std::convert::From<(Value, &crate::CageContext)> for EncryptRequest {
+    fn from((val, context): (Value, &crate::CageContext)) -> Self {
+        Self {
+            data: val,
+            team_uuid: context.team_uuid().to_string(),
+            app_uuid: context.app_uuid().to_string(),
+        }
+    }
+}
+
+pub trait E3Payload: Sized + Serialize {
+    fn try_into_body(self) -> Result<hyper::Body, E3Error> {
+        Ok(hyper::Body::from(serde_json::to_vec(&self)?))
     }
 }

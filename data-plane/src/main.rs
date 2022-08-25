@@ -1,6 +1,6 @@
+use data_plane::e3client::DecryptRequest;
+use data_plane::e3client::EncryptedDataEntry;
 use hyper::http::HeaderValue;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use data_plane::crypto;
 #[cfg(feature = "enclave")]
@@ -225,8 +225,7 @@ async fn handle_incoming_request(
         .headers
         .get(http::header::CONTENT_ENCODING)
         .map(ContentEncoding::try_from)
-        .map(|encoding_res| encoding_res.ok())
-        .flatten();
+        .and_then(|encoding_res| encoding_res.ok());
 
     if let Some(_encoding) = req_info.headers.get(http::header::TRANSFER_ENCODING) {
         Ok(Response::builder()
@@ -244,22 +243,6 @@ async fn handle_incoming_request(
             cage_context,
         )
         .await
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct EncryptedDataEntry {
-    range: (usize, usize),
-    value: String,
-}
-
-impl EncryptedDataEntry {
-    pub fn range(&self) -> (usize, usize) {
-        self.range
-    }
-
-    pub fn value(&self) -> &str {
-        &self.value
     }
 }
 
@@ -298,11 +281,10 @@ async fn handle_standard_request(
     println!("Ciphertexts extracted: {:?}", decryption_payload);
 
     let mut bytes_vec = request_bytes.to_vec();
-    if decryption_payload.len() > 0 {
+    if !decryption_payload.is_empty() {
         println!("{} Ciphertexts found in payload", decryption_payload.len());
-        let decrypt_val = Value::Array(decryption_payload);
-        let decrypted: Vec<EncryptedDataEntry> = match e3_client
-            .decrypt(&api_key, (&decrypt_val, cage_context.as_ref()).into())
+        let decrypted: DecryptRequest = match e3_client
+            .decrypt(&api_key, (decryption_payload, cage_context.as_ref()).into())
             .await
         {
             Ok(decrypted) => decrypted,
@@ -316,7 +298,7 @@ async fn handle_standard_request(
         };
 
         println!("Decrypt complete");
-        decrypted.iter().rev().for_each(|entry| {
+        decrypted.data().iter().rev().for_each(|entry| {
             let range = entry.range();
             let _: Vec<u8> = bytes_vec
                 .splice(range.0..range.1, entry.value().bytes())
@@ -356,7 +338,9 @@ async fn handle_standard_request(
     Ok(customer_response)
 }
 
-async fn extract_ciphertexts_from_payload(incoming_payload: &[u8]) -> Result<Vec<Value>> {
+async fn extract_ciphertexts_from_payload(
+    incoming_payload: &[u8],
+) -> Result<Vec<EncryptedDataEntry>> {
     let mut stream_reader = crypto::stream::IncomingStreamDecoder::create_reader(incoming_payload);
 
     let mut decryption_payload = vec![];
@@ -366,10 +350,7 @@ async fn extract_ciphertexts_from_payload(incoming_payload: &[u8]) -> Result<Vec
             _ => continue,
         };
 
-        let ciphertext_item = serde_json::json!({
-            "range": [range.0, range.1],
-            "value": ciphertext.to_string()
-        });
+        let ciphertext_item = EncryptedDataEntry::new(range, ciphertext.to_string());
         decryption_payload.push(ciphertext_item);
     }
     Ok(decryption_payload)
