@@ -1,4 +1,8 @@
 #!/bin/bash
+yum install wget
+INSTANCE_ID=$(wget -q -O - http://169.254.169.254/latest/dynamic/instance-identity/document | jq -r ."instanceId")
+
+export EC2_INSTANCE_ID=${INSTANCE_ID}
 
 # Kill all existing enclaves on this host
 echo "[HOST] Deployment started. Terminating old enclave..."
