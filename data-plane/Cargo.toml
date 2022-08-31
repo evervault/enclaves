@@ -32,7 +32,6 @@ serde_json = "1.0.83"
 sha2 = "0.10.2"
 rcgen = { version = "0.9.2", features = ["x509-parser"] }
 rand = { version = "0.8.5", optional = true }
-clap = { version = "3.1.18", features = ["derive"] }
 base64 = "0.13.0"
 webpki-roots = "0.22.4"
 

@@ -35,33 +35,27 @@ use futures::StreamExt;
 use hyper::server::conn;
 use hyper::service::service_fn;
 
-use clap::Parser;
-
-#[derive(Debug, Parser)]
-struct DataPlaneArgs {
-    /// Port to forward incoming traffic on
-    #[clap(short, long, default_value = "8008")]
-    port: u16,
-}
-
 #[tokio::main]
 async fn main() {
     println!("Data plane running.");
-    let args: DataPlaneArgs = DataPlaneArgs::parse();
-    start(args).await
+    let data_plane_port = std::env::args()
+        .next()
+        .and_then(|port_str| u16::from_str_radix(port_str.as_str(), 10).ok())
+        .unwrap_or(8008);
+    start(data_plane_port).await
 }
 
 #[cfg(not(feature = "network_egress"))]
-async fn start(args: DataPlaneArgs) {
+async fn start(data_plane_port: u16) {
     println!("Running data plane with egress disabled");
-    start_data_plane(args).await;
+    start_data_plane(data_plane_port).await;
 }
 
 #[cfg(feature = "network_egress")]
-async fn start(args: DataPlaneArgs) {
+async fn start(data_plane_port: u16) {
     println!("Running data plane with egress enabled");
     let (_, dns_result, egress_result) = tokio::join!(
-        start_data_plane(args),
+        start_data_plane(data_plane_port),
         EnclaveDns::bind_server(),
         EgressProxy::listen()
     );
@@ -107,7 +101,7 @@ macro_rules! create_tls_server_or_return {
     };
 }
 
-async fn start_data_plane(args: DataPlaneArgs) {
+async fn start_data_plane(data_plane_port: u16) {
     println!("Data plane starting on {}", ENCLAVE_CONNECT_PORT);
     let cage_context =
         Arc::new(CageContext::new().expect("Missing required Cage context elements"));
@@ -153,7 +147,7 @@ async fn start_data_plane(args: DataPlaneArgs) {
                         async move {
                             handle_incoming_request(
                                 req,
-                                args.port,
+                                data_plane_port,
                                 e3_client_for_req,
                                 cage_context_for_req,
                             )
