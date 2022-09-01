@@ -3,8 +3,6 @@ use data_plane::e3client::EncryptedDataEntry;
 use hyper::http::HeaderValue;
 
 use data_plane::crypto;
-#[cfg(feature = "enclave")]
-use data_plane::crypto::attest;
 use data_plane::e3client::E3Client;
 use data_plane::error::AuthError;
 use data_plane::error::Result;
@@ -40,24 +38,33 @@ async fn main() {
     println!("Data plane running.");
     let data_plane_port = std::env::args()
         .next()
-        .and_then(|port_str| u16::from_str_radix(port_str.as_str(), 10).ok())
+        .and_then(|port_str| port_str.as_str().parse::<u16>().ok())
         .unwrap_or(8008);
     start(data_plane_port).await
 }
 
 #[cfg(not(feature = "network_egress"))]
 async fn start(data_plane_port: u16) {
+    use data_plane::crypto::api::CryptoApi;
+
     println!("Running data plane with egress disabled");
-    start_data_plane(data_plane_port).await;
+    let (_, e3_api_result) = tokio::join!(start_data_plane(data_plane_port), CryptoApi::listen());
+
+    if let Err(e) = e3_api_result {
+        eprintln!("An error occurred within the E3 API server — {:?}", e);
+    }
 }
 
 #[cfg(feature = "network_egress")]
 async fn start(data_plane_port: u16) {
+    use data_plane::crypto::api::CryptoApi;
+
     println!("Running data plane with egress enabled");
-    let (_, dns_result, egress_result) = tokio::join!(
+    let (_, dns_result, egress_result, e3_api_result) = tokio::join!(
         start_data_plane(data_plane_port),
         EnclaveDns::bind_server(),
-        EgressProxy::listen()
+        EgressProxy::listen(),
+        CryptoApi::listen()
     );
 
     if let Err(e) = dns_result {
@@ -66,6 +73,10 @@ async fn start(data_plane_port: u16) {
 
     if let Err(e) = egress_result {
         eprintln!("An error occurred within the egress server — {:?}", e);
+    }
+
+    if let Err(e) = e3_api_result {
+        eprintln!("An error occurred within the E3 API server — {:?}", e);
     }
 }
 
@@ -277,10 +288,8 @@ async fn handle_standard_request(
     let mut bytes_vec = request_bytes.to_vec();
     if !decryption_payload.is_empty() {
         println!("{} Ciphertexts found in payload", decryption_payload.len());
-        let decrypted: DecryptRequest = match e3_client
-            .decrypt(&api_key, (decryption_payload, cage_context.as_ref()).into())
-            .await
-        {
+        let payload: DecryptRequest = (decryption_payload, cage_context.as_ref()).into();
+        let decrypted: DecryptRequest = match e3_client.decrypt(&api_key, payload).await {
             Ok(decrypted) => decrypted,
             Err(e) => {
                 eprintln!("Failed to decrypt — {:?}", e);

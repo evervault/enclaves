@@ -40,22 +40,15 @@ pub enum AttestationError {
     SigningCertParseFailed(openssl::error::ErrorStack),
 }
 
-pub fn get_attestation_doc(public_key_hash: Option<Vec<u8>>) -> Result<Vec<u8>, AttestationError> {
+pub fn get_attestation_doc(
+    challenge: Option<Vec<u8>>,
+    nonce: Option<Vec<u8>>,
+) -> Result<Vec<u8>, AttestationError> {
     let nsm_fd: i32 = nitro::driver::nsm_init();
-    let nonce = match nitro::driver::nsm_process_request(nsm_fd, nitro::api::Request::GetRandom) {
-        nitro::api::Response::GetRandom {
-            random: random_bytes,
-        } => random_bytes,
-        unexpected_response => {
-            return Err(AttestationError::UnexpectedResponse(
-                DriverCalls::GetRandom,
-                unexpected_response,
-            ))
-        }
-    };
+    let nonce = get_nonce(nonce, nsm_fd)?;
 
     let nsm_request = nitro::api::Request::Attestation {
-        user_data: public_key_hash.map(ByteBuf::from),
+        user_data: challenge.map(ByteBuf::from),
         nonce: Some(ByteBuf::from(nonce)),
         public_key: None,
     };
@@ -70,18 +63,33 @@ pub fn get_attestation_doc(public_key_hash: Option<Vec<u8>>) -> Result<Vec<u8>, 
     }
 }
 
+fn get_nonce(nonce: Option<Vec<u8>>, nsm_fd: i32) -> Result<Vec<u8>, AttestationError> {
+    match nonce {
+        Some(nonce) => Ok(nonce),
+        None => match nitro::driver::nsm_process_request(nsm_fd, nitro::api::Request::GetRandom) {
+            nitro::api::Response::GetRandom {
+                random: random_bytes,
+            } => Ok(random_bytes),
+            unexpected_response => Err(AttestationError::UnexpectedResponse(
+                DriverCalls::GetRandom,
+                unexpected_response,
+            )),
+        },
+    }
+}
+
 pub fn get_expiry_time(cose_sign_1_bytes: &[u8]) -> Result<SystemTime, AttestationError> {
     let cose_sign_1: cose::CoseSign1 = serde_cbor::from_slice(cose_sign_1_bytes)
-        .map_err(|e| AttestationError::CoseSign1ParseFailed(e))?;
+        .map_err(AttestationError::CoseSign1ParseFailed)?;
     // Can only return an error if verification fails, and we aren't doing verification
     let attestation_doc_bytes = cose_sign_1
         .get_payload::<cose::crypto::Openssl>(None)
         .unwrap();
     let attestation_doc: nitro::api::AttestationDoc =
         serde_cbor::from_slice(&attestation_doc_bytes)
-            .map_err(|e| AttestationError::AttestationDocParseFailed(e))?;
+            .map_err(AttestationError::AttestationDocParseFailed)?;
     let signing_cert = X509::from_der(&attestation_doc.certificate[..])
-        .map_err(|e| AttestationError::SigningCertParseFailed(e))?;
+        .map_err(AttestationError::SigningCertParseFailed)?;
     let chrono_expiry_time = Utc
         .datetime_from_str(
             &signing_cert.not_after().to_string(),

@@ -1,3 +1,4 @@
+pub mod api;
 #[cfg(feature = "enclave")]
 pub mod attest;
 #[cfg(feature = "enclave")]

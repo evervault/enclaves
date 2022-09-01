@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum Error {
+pub enum E3Error {
     #[error("IO Error — {0:?}")]
     IoError(#[from] std::io::Error),
     #[error("Hyper Error — {0:?}")]

@@ -7,6 +7,7 @@ use shared::server::TcpServer;
 #[cfg(feature = "enclave")]
 use shared::server::VsockServer;
 use std::net::{IpAddr, Ipv4Addr};
+#[cfg(not(feature = "enclave"))]
 use tokio::io::AsyncWriteExt;
 use trust_dns_resolver::config::ResolverOpts;
 use trust_dns_resolver::config::{NameServerConfigGroup, ResolverConfig};

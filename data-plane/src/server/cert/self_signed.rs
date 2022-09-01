@@ -1,8 +1,5 @@
 use super::async_trait;
 
-#[cfg(feature = "enclave")]
-use rcgen::{CertificateParams, CustomExtension, KeyPair};
-
 use super::{CertProvider, ServerResult};
 use rcgen::Certificate as SelfSignedCertificate;
 use tokio_rustls::rustls::{Certificate, PrivateKey};

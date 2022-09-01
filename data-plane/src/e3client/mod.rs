@@ -1,5 +1,5 @@
-mod error;
-pub use error::Error as E3Error;
+pub mod error;
+pub use error::E3Error;
 mod tls_verifier;
 
 use hyper::client::conn::{Connection as HyperConnection, SendRequest};
@@ -133,7 +133,7 @@ impl E3Client {
         Ok(response)
     }
 
-    pub async fn decrypt<T, V>(&self, api_key: V, payload: DecryptRequest) -> Result<T, E3Error>
+    pub async fn decrypt<T, V, P: E3Payload>(&self, api_key: V, payload: P) -> Result<T, E3Error>
     where
         T: DeserializeOwned,
         HeaderValue: TryFrom<V>,
@@ -145,7 +145,7 @@ impl E3Client {
         self.parse_response(response).await
     }
 
-    pub async fn encrypt<T, V>(&self, api_key: V, payload: EncryptRequest) -> Result<T, E3Error>
+    pub async fn encrypt<T, V, P: E3Payload>(&self, api_key: V, payload: P) -> Result<T, E3Error>
     where
         T: DeserializeOwned,
         HeaderValue: TryFrom<V>,
@@ -239,20 +239,20 @@ impl std::convert::From<(Vec<EncryptedDataEntry>, &crate::CageContext)> for Decr
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct EncryptRequest {
+pub struct CryptoRequest {
     team_uuid: String,
     app_uuid: String,
     data: Value,
 }
 
-impl E3Payload for EncryptRequest {}
-impl EncryptRequest {
+impl E3Payload for CryptoRequest {}
+impl CryptoRequest {
     pub fn data(&self) -> &Value {
         &self.data
     }
 }
 
-impl std::convert::From<(Value, &crate::CageContext)> for EncryptRequest {
+impl std::convert::From<(Value, &crate::CageContext)> for CryptoRequest {
     fn from((val, context): (Value, &crate::CageContext)) -> Self {
         Self {
             data: val,
@@ -266,4 +266,9 @@ pub trait E3Payload: Sized + Serialize {
     fn try_into_body(self) -> Result<hyper::Body, E3Error> {
         Ok(hyper::Body::from(serde_json::to_vec(&self)?))
     }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CryptoResponse {
+    pub data: Value,
 }
