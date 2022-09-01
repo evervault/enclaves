@@ -19,10 +19,6 @@ pub struct TlsServer<S: Listener + Send + Sync> {
 }
 
 impl<S: Listener + Send + Sync> TlsServer<S> {
-    pub fn builder() -> TlsServerBuilder {
-        TlsServerBuilder
-    }
-
     fn new(
         server_config: ServerConfig,
         tcp_server: S,
@@ -104,6 +100,7 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
         Ok(tls_server)
     }
 
+    #[allow(unused)]
     pub async fn with_remote_cert(self) -> ServerResult<TlsServer<S>> {
         unimplemented!()
     }

@@ -5,19 +5,54 @@ on:
       - .github/workflows/lint-and-test-data-plane.yml
 name: Lint and Test Data Plane
 jobs:
-  clippy_check_data_plane:
+  lint_data_plane:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-          components: rustfmt 
-      - name: Compile project feature -enclave
-        run: cargo build --features enclave -p data-plane
-      - name: Compile project feature -not_enclave
-        run: cargo build --features not_enclave -p data-plane  
-      - name: Test project
-        run: cargo test -p data-plane
+          components: rustfmt
       - name: Format project
         run: cargo fmt --check
+  check_data_plane:
+    needs: [lint_data_plane]
+    strategy:
+      matrix:
+        feature-flags: [
+          "tls_termination,enclave",
+          "tls_termination,not_enclave",
+          "enclave",
+          "not_enclave",
+          "tls_termination,enclave,network_egress",
+          "tls_termination,not_enclave,network_egress",
+          "enclave,network_egress",
+          "not_enclave,network_egress",
+        ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Compile project with features ${{ matrix.feature-flags }}
+        run: cargo check -p data-plane --no-default-features --features ${{ matrix.feature-flags }}
+  
+  test_data_plane:
+    needs: [lint_data_plane, check_data_plane]
+    strategy:
+      matrix:
+        feature-flags: [
+          "not_enclave",
+          "not_enclave,network_egress",
+          "not_enclave,tls_termination",
+          "not_enclave,tls_termination,network_egress"
+        ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Test project with features ${{ matrix.feature-flags }}
+        run: cargo test -p data-plane --no-default-features --features ${{ matrix.feature-flags }}

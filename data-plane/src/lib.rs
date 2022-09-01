@@ -4,6 +4,7 @@ pub mod crypto;
 pub mod dns;
 pub mod e3client;
 pub mod error;
+#[cfg(feature = "tls_termination")]
 pub mod server;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

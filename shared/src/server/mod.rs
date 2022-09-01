@@ -13,7 +13,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 #[async_trait]
 pub trait Listener: Sized {
     type Connection: AsyncRead + AsyncWrite + Send + Sync + Unpin;
-    type Error;
+    type Error: std::fmt::Debug;
     async fn accept(&mut self) -> Result<Self::Connection, Self::Error>;
 }
 

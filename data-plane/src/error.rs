@@ -1,4 +1,3 @@
-use crate::crypto::stream::IncomingStreamError;
 use shared::server::error::ServerError;
 use thiserror::Error;
 
@@ -33,8 +32,9 @@ pub enum Error {
     DNS(#[from] crate::dns::error::DNSError),
     #[error("{0}")]
     Auth(#[from] AuthError),
+    #[cfg(feature = "tls_termination")]
     #[error("An error occurred while parsing the incoming stream for ciphertexts — {0}")]
-    ParseError(#[from] IncomingStreamError),
+    ParseError(#[from] crate::crypto::stream::IncomingStreamError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

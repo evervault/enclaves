@@ -4,6 +4,8 @@ pub mod attest;
 #[cfg(feature = "enclave")]
 pub mod common;
 pub mod mem;
+#[cfg(feature = "tls_termination")]
 pub mod parser;
 pub mod rand;
+#[cfg(feature = "tls_termination")]
 pub mod stream;

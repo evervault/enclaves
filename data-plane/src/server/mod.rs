@@ -1,4 +1,7 @@
 mod cert;
+#[cfg(feature = "tls_termination")]
+pub mod data_plane_server;
 pub mod error;
 pub mod http;
-pub mod tls;
+#[cfg(feature = "tls_termination")]
+mod tls;
