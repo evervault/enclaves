@@ -1,5 +1,5 @@
 use hyper::http::HeaderValue;
-use hyper::{self, body, Body, StatusCode};
+use hyper::{self, body, Body};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_json::{self};
@@ -44,6 +44,25 @@ pub enum CryptoApiError {
     #[error("Attestation Error — {0:?}")]
     #[cfg(feature = "enclave")]
     Attestation(#[from] attest::AttestationError),
+    #[error("Not Found")]
+    NotFound,
+}
+
+impl From<CryptoApiError> for hyper::Response<hyper::Body> {
+    fn from(err: CryptoApiError) -> Self {
+        match err {
+            CryptoApiError::MissingApiKey => build_response(401, Body::from(err.to_string())),
+            CryptoApiError::SerdeError(error) => build_response(400, Body::from(error.to_string())),
+            _ => build_response(500, Body::from(err.to_string())),
+        }
+    }
+}
+
+fn build_response(status: u16, body: Body) -> hyper::Response<hyper::Body> {
+    hyper::Response::builder()
+        .status(status)
+        .body(body)
+        .expect("Failed to build response")
 }
 
 impl CryptoApi {
@@ -68,22 +87,19 @@ impl CryptoApi {
     }
 
     async fn api(self, req: Request<Body>) -> Result<hyper::Response<hyper::Body>, CryptoApiError> {
-        let mut response = Response::new(Body::empty());
-        match (req.method(), req.uri().path()) {
-            (&Method::POST, "/encrypt") => {
-                *response.body_mut() = self.encrypt(req).await?;
-            }
-            (&Method::POST, "/decrypt") => {
-                *response.body_mut() = self.decrypt(req).await?;
-            }
-            (&Method::GET, "/attestation-doc") => {
-                *response.body_mut() = self.get_attestation_doc(req).await?;
-            }
-            _ => {
-                *response.status_mut() = StatusCode::NOT_FOUND;
-            }
+        let response = match (req.method(), req.uri().path()) {
+            (&Method::POST, "/encrypt") => self.encrypt(req).await,
+            (&Method::POST, "/decrypt") => self.decrypt(req).await,
+            (&Method::POST, "/attestation-doc") => self.get_attestation_doc(req).await,
+            _ => Err(CryptoApiError::NotFound),
         };
-        Ok(response)
+
+        match response {
+            Ok(body) => Ok(Response::builder()
+                .body(body)
+                .expect("Failed to build response")),
+            Err(error) => Ok(error.into()),
+        }
     }
 
     async fn build_request(
@@ -121,7 +137,7 @@ impl CryptoApi {
             let body = _req.body_mut();
             let bytes = body::to_bytes(body).await?;
             let body: Value = serde_json::from_slice(&bytes)?;
-            let ad_request: AttestationRequest = serde_json::from_value(body).unwrap();
+            let ad_request: AttestationRequest = serde_json::from_value(body)?;
             let challenge = ad_request.challenge.map(|chal| chal.as_bytes().to_vec());
             let nonce = ad_request.nonce.map(|non| non.as_bytes().to_vec());
             let doc = attest::get_attestation_doc(challenge, nonce)?;
