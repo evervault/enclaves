@@ -2,6 +2,7 @@ use shared::utils::pipe_streams;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 #[cfg(not(feature = "enclave"))]
 use tokio::net::TcpStream;
+use tokio::sync::mpsc;
 use tokio::{io::AsyncWriteExt, net::TcpListener};
 
 use crate::error::Result;
@@ -10,6 +11,10 @@ use tokio_vsock::VsockStream;
 
 mod e3proxy;
 mod error;
+use control_plane::{
+    clients::sns::{ControlPlaneSnsClient, DeregistrationMessage},
+    configuration::{self, Environment},
+};
 
 #[cfg(feature = "enclave")]
 const CONTROL_PLANE_PORT: u16 = 443;
@@ -26,6 +31,7 @@ async fn main() -> Result<()> {
     let e3_proxy = e3proxy::E3Proxy::new();
     #[cfg(not(feature = "network_egress"))]
     {
+        listen_for_shutdown_signal();
         let (tcp_result, e3_result) = tokio::join!(tcp_server(), e3_proxy.listen());
         if let Err(err) = tcp_result {
             eprintln!("Error running TCP server on host: {:?}", err);
@@ -38,6 +44,7 @@ async fn main() -> Result<()> {
 
     #[cfg(feature = "network_egress")]
     {
+        listen_for_shutdown_signal();
         let (tcp_result, dns_result, egress_result, e3_result) = tokio::join!(
             tcp_server(),
             control_plane::dnsproxy::DnsProxy::listen(),
@@ -123,4 +130,51 @@ async fn tcp_server() -> Result<()> {
             });
         }
     }
+}
+
+// Listen for SIGTERM and deregister task before shutting down
+fn listen_for_shutdown_signal() {
+    println!("Setting up listener for SIGTERM");
+    tokio::spawn(async {
+        let sns_client = ControlPlaneSnsClient::new(configuration::get_deregistration_topic_arn());
+
+        if configuration::get_rust_env() == Environment::Development {
+            //Don't start ctrl-c listener is running locally
+            return;
+        };
+
+        let ec2_instance_id = configuration::get_ec2_instance_id();
+        let cage_uuid = configuration::get_cage_uuid();
+        let cage_name = configuration::get_cage_name();
+        let app_uuid = configuration::get_app_uuid();
+
+        let (tx, mut rx) = mpsc::unbounded_channel();
+
+        let _ = ctrlc::set_handler(move || {
+            tx.send(()).unwrap_or_else(|err| {
+                println!("Could not broadcast sigterm to channel: {:?}", err);
+            })
+        })
+        .map_err(|err| {
+            eprintln!("Error setting up Sigterm handler: {:?}", err);
+            std::io::Error::new(std::io::ErrorKind::Other, err)
+        });
+
+        match rx.recv().await {
+            Some(_) => {
+                println!("Received SIGTERM - sending message to SNS");
+                let sns_message = serde_json::to_string(&DeregistrationMessage::new(
+                    ec2_instance_id,
+                    cage_uuid,
+                    cage_name,
+                    app_uuid,
+                ))
+                .expect("Error deserialising SNS message with serde");
+                sns_client.publish_message(sns_message).await;
+            }
+            None => {
+                eprintln!("Signal watcher returned None.");
+            }
+        };
+    });
 }

@@ -1,3 +1,5 @@
+pub mod clients;
+pub mod configuration;
 #[cfg(feature = "network_egress")]
 pub mod dnsproxy;
 pub mod e3proxy;
