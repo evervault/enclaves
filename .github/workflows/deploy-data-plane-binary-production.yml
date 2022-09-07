@@ -39,29 +39,55 @@ jobs:
           aws-region: us-east-1
 
 
-      - name: Build data-plane (egress enabled)
+      - name: Build data-plane (egress enabled, tls termination enabled)
         uses: evervault/cargo-static-build@master
         with:
           cmd: cargo build -p data-plane --features enclave,network_egress --release --target ${{ env.LINUX_TARGET }}
 
-      - name: Upload data-plane to S3 (egress enabled)
+      - name: Upload data-plane to S3 (egress enabled, tls termination enabled)
         env:
           VERSION_TAG: ${{ needs.get-version.outputs.version }}
-          FEATURE_LABEL: egress-enabled
+          FEATURE_LABEL: egress-enabled/tls-termination-enabled
         run: |
           aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
           aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/latest/data-plane/${{ env.FEATURE_LABEL }}
 
+      - name: Build data-plane (egress enabled, tls termination disabled)
+        uses: evervault/cargo-static-build@master
+        with:
+          cmd: cargo build -p data-plane --no-default-features --features enclave,network_egress --release --target ${{ env.LINUX_TARGET }}
 
-      - name: Build data-plane (egress disabled)
+      - name: Upload data-plane to S3 (egress enabled, tls termination disabled)
+        env:
+          VERSION_TAG: ${{ needs.get-version.outputs.version }}
+          FEATURE_LABEL: egress-enabled/tls-termination-disabled
+        run: |
+          aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
+          aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/latest/data-plane/${{ env.FEATURE_LABEL }}
+
+      - name: Build data-plane (egress disabled, tls termination enabled)
         uses: evervault/cargo-static-build@master
         with:
           cmd: cargo build -p data-plane --features enclave --release --target ${{ env.LINUX_TARGET }}
 
-      - name: Upload data-plane to S3 (egress disabled)
+      - name: Upload data-plane to S3 (egress disabled, tls termination enabled)
         env:
           VERSION_TAG: ${{ needs.get-version.outputs.version }}
-          FEATURE_LABEL: egress-disabled
+          FEATURE_LABEL: egress-disabled/tls-termination-enabled
         run: |
           aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
           aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/latest/data-plane/${{ env.FEATURE_LABEL }}
+
+      - name: Build data-plane (egress disabled, tls termination disabled)
+        uses: evervault/cargo-static-build@master
+        with:
+          cmd: cargo build -p data-plane --no-default-features --features enclave --release --target ${{ env.LINUX_TARGET }}
+
+      - name: Upload data-plane to S3 (egress disabled, tls termination disabled)
+        env:
+          VERSION_TAG: ${{ needs.get-version.outputs.version }}
+          FEATURE_LABEL: egress-disabled/tls-termination-disabled
+        run: |
+          aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
+          aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/latest/data-plane/${{ env.FEATURE_LABEL }}
+
