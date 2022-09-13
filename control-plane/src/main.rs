@@ -21,12 +21,14 @@ const CONTROL_PLANE_PORT: u16 = 443;
 #[cfg(not(feature = "enclave"))]
 const CONTROL_PLANE_PORT: u16 = 3031;
 
+use shared::print_version;
 #[cfg(feature = "enclave")]
 use shared::ENCLAVE_CID;
 use shared::ENCLAVE_CONNECT_PORT;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    print_version!("Control Plane");
     println!("Starting control plane on {}", CONTROL_PLANE_PORT);
     let e3_proxy = e3proxy::E3Proxy::new();
     #[cfg(not(feature = "network_egress"))]

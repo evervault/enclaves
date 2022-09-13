@@ -1,3 +1,4 @@
+use shared::print_version;
 #[cfg(not(feature = "tls_termination"))]
 use shared::server::Listener;
 
@@ -36,6 +37,7 @@ pub async fn get_tcp_server() -> std::result::Result<VsockServer, shared::server
 #[tokio::main]
 async fn main() {
     println!("Data plane running.");
+    print_version!("Data Plane");
     let data_plane_port = std::env::args()
         .next()
         .and_then(|port_str| port_str.as_str().parse::<u16>().ok())

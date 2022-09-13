@@ -34,6 +34,15 @@ impl<'a> std::convert::From<&'a [u8]> for HexSlice<'a> {
     }
 }
 
+#[macro_export]
+macro_rules! print_version {
+    ($label:tt) => {
+        if let Ok(version) = std::env::var("CARGO_PKG_VERSION") {
+            println!("{} Version: {version}", $label);
+        }
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::HexSlice;
