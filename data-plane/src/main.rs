@@ -83,7 +83,7 @@ async fn start(data_plane_port: u16) {
 }
 
 async fn start_data_plane(data_plane_port: u16) {
-    println!("Data plane starting on {}", shared::ENCLAVE_CONNECT_PORT);
+    println!("Data plane starting up. Forwarding traffic to {data_plane_port}");
     let server = match get_tcp_server().await {
         Ok(server) => server,
         Err(error) => return eprintln!("Error creating server: {error}"),
@@ -99,13 +99,13 @@ async fn start_data_plane(data_plane_port: u16) {
 #[cfg(not(feature = "tls_termination"))]
 async fn run_tcp_passthrough<L: Listener>(mut server: L, port: u16) {
     use shared::utils::pipe_streams;
-    println!("Piping TCP streams directly to customer");
+    println!("Piping TCP streams directly to user process");
     loop {
         let incoming_conn = match server.accept().await {
             Ok(incoming_conn) => incoming_conn,
             Err(e) => {
                 eprintln!(
-                    "An error occurred while accepting the incoming connection — {:?}",
+                    "An error occurred while accepting the incoming connection — {}",
                     e
                 );
                 continue;
@@ -116,7 +116,7 @@ async fn run_tcp_passthrough<L: Listener>(mut server: L, port: u16) {
             Ok(customer_stream) => customer_stream,
             Err(e) => {
                 eprintln!(
-                    "An error occurred while connecting to the customer process — {:?}",
+                    "An error occurred while connecting to the customer process — {}",
                     e
                 );
                 continue;

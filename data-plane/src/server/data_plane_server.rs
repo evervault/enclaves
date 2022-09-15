@@ -24,10 +24,7 @@ macro_rules! create_tls_server_or_return {
             .with_self_signed_cert($cert_name)
             .await
         {
-            Ok(tls_server) => {
-                println!("TLS upgrade complete");
-                tls_server
-            }
+            Ok(tls_server) => tls_server,
             Err(error) => return eprintln!("Error performing TLS upgrade: {error}"),
         }
     };
@@ -48,7 +45,7 @@ where
             Ok(Ok(stream)) => stream,
             Ok(Err(tls_err)) => {
                 eprintln!(
-                    "An error occurred while accepting the incoming connection — {:?}",
+                    "An error occurred while accepting the incoming connection — {}",
                     tls_err
                 );
                 continue;
@@ -66,7 +63,6 @@ where
         tokio::spawn(async move {
             let e3_client_for_tcp = e3_client_for_connection.clone();
             let cage_context_for_tcp = cage_context_for_connection.clone();
-            println!("Accepted tls connection");
             let sent_response = server
                 .serve_connection(
                     stream,
@@ -88,7 +84,7 @@ where
 
             if let Err(processing_err) = sent_response {
                 eprintln!(
-                    "An error occurred while processing your request — {:?}",
+                    "An error occurred while processing your request — {}",
                     processing_err
                 );
             }
@@ -114,9 +110,8 @@ async fn handle_incoming_request(
         Err(e) => return Ok(e.into()),
     };
 
-    println!("Extracted API key from request");
     let is_auth = if cfg!(feature = "enclave") {
-        println!("Authenticating request using E3");
+        println!("Authenticating request");
         match e3_client
             .authenticate(&api_key, cage_context.as_ref().into())
             .await
@@ -138,7 +133,7 @@ async fn handle_incoming_request(
     };
 
     if !is_auth {
-        println!("Request is not authenticated");
+        println!("Failed to authenticate request using provided API Key");
         return Ok(AuthError::FailedToAuthenticateApiKey.into());
     }
 
@@ -200,11 +195,9 @@ pub async fn handle_standard_request(
                 .expect("Hardcoded response"))
         }
     };
-    println!("Ciphertexts extracted: {:?}", decryption_payload);
 
     let mut bytes_vec = request_bytes.to_vec();
     if !decryption_payload.is_empty() {
-        println!("{} Ciphertexts found in payload", decryption_payload.len());
         let request_payload = e3client::CryptoRequest::from((
             serde_json::Value::Array(decryption_payload),
             cage_context.as_ref(),
@@ -212,7 +205,7 @@ pub async fn handle_standard_request(
         let decrypted: DecryptRequest = match e3_client.decrypt(&api_key, request_payload).await {
             Ok(decrypted) => decrypted,
             Err(e) => {
-                eprintln!("Failed to decrypt — {:?}", e);
+                eprintln!("Failed to decrypt — {}", e);
                 return Ok(Response::builder()
                     .status(500)
                     .body(Body::empty())
@@ -220,14 +213,13 @@ pub async fn handle_standard_request(
             }
         };
 
-        println!("Decrypt complete");
+        println!("Decryption complete");
         decrypted.data().iter().rev().for_each(|entry| {
             let range = entry.range();
             let _: Vec<u8> = bytes_vec
                 .splice(range.0..range.1, entry.value().bytes())
                 .collect();
         });
-        println!("Payload updated");
     }
 
     // Build processed request
@@ -247,7 +239,7 @@ pub async fn handle_standard_request(
     let customer_response = match http_client.request(decrypted_request).await {
         Ok(res) => res,
         Err(e) => {
-            let msg = format!("Error requesting customer process - {:?}", e);
+            let msg = format!("Error requesting user process - {}", e);
             eprintln!("{}", msg);
             let res_body = Body::from(msg);
             Response::builder()
@@ -256,7 +248,6 @@ pub async fn handle_standard_request(
                 .expect("Hardcoded response")
         }
     };
-    println!("Response received from customer");
 
     Ok(customer_response)
 }

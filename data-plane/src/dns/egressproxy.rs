@@ -86,8 +86,6 @@ impl EgressProxy {
     async fn handle_egress_connection<T: AsyncRead + AsyncWrite + Unpin>(
         mut external_stream: T,
     ) -> Result<(), DNSError> {
-        println!("Forwarding over 443");
-
         let mut buf = vec![0u8; 4096];
 
         let n = external_stream.read(&mut buf).await?;
