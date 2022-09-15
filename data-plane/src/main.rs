@@ -38,7 +38,9 @@ pub async fn get_tcp_server() -> std::result::Result<VsockServer, shared::server
 async fn main() {
     println!("Data plane running.");
     print_version!("Data Plane");
-    let data_plane_port = std::env::args()
+    let mut args = std::env::args();
+    let _ = args.next(); // ignore path to executable
+    let data_plane_port = args
         .next()
         .and_then(|port_str| port_str.as_str().parse::<u16>().ok())
         .unwrap_or(8008);
