@@ -207,6 +207,7 @@ dependencies = [
  "ctrlc",
  "dashmap",
  "dns-message-parser",
+ "hyper",
  "rand",
  "rusoto_core",
  "rusoto_sns",

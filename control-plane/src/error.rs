@@ -7,6 +7,7 @@ pub enum ServerError {
     Io(#[from] std::io::Error),
     Rpc(#[from] shared::rpc::error::RpcError),
     Server(#[from] shared::server::error::ServerError),
+    Hyper(#[from] hyper::http::Error),
     DNSError(#[from] ResolveError),
 }
 

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio = { version = "1.18.0", features = ["net", "macros", "rt", "rt-multi-thread", "io-util", "time"] }
+tokio = { version = "1.18.0", features = ["net", "macros", "rt", "rt-multi-thread", "io-util", "time", "fs"] }
 dashmap = "4.0.2"
 trust-dns-resolver = { version = "*" }
 dns-message-parser = { version = "~0.6.0" }
@@ -19,6 +19,7 @@ rusoto_sns = "0.48.0"
 rusoto_core = "0.48.0"
 serde = { version = "1.0.126", features = ["derive"] }
 serde_json = "1.0.64"
+hyper = { version = "0.14.4", features = ["server", "client", "http1", "tcp" ] }
 
 
 [features]

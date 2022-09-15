@@ -1,6 +1,5 @@
 use crate::server::error::ServerError;
-use std::net::SocketAddr;
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 
 use super::Listener;
 use async_trait::async_trait;
@@ -10,7 +9,7 @@ pub struct TcpServer {
 }
 
 impl TcpServer {
-    pub async fn bind(addr: SocketAddr) -> super::error::ServerResult<Self> {
+    pub async fn bind(addr: impl ToSocketAddrs) -> super::error::ServerResult<Self> {
         let listener = TcpListener::bind(addr).await?;
         Ok(Self { inner: listener })
     }

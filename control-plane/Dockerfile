@@ -6,6 +6,7 @@ RUN yum -y update
 COPY ./control-plane .
 RUN chmod a+x ./control-plane
 
+COPY ./scripts/health-check.sh .
 COPY ./scripts/start-cage.sh .
 RUN chmod a+x ./start-cage.sh
 

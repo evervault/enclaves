@@ -1,30 +1,21 @@
-use shared::utils::pipe_streams;
+use shared::{print_version, utils::pipe_streams, ENCLAVE_CONNECT_PORT};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-#[cfg(not(feature = "enclave"))]
-use tokio::net::TcpStream;
+
 use tokio::sync::mpsc;
 use tokio::{io::AsyncWriteExt, net::TcpListener};
 
-use crate::error::Result;
-#[cfg(feature = "enclave")]
-use tokio_vsock::VsockStream;
-
-mod e3proxy;
-mod error;
 use control_plane::{
     clients::sns::{ControlPlaneSnsClient, DeregistrationMessage},
     configuration::{self, Environment},
+    e3proxy, enclave_connection,
+    error::Result,
+    health,
 };
 
 #[cfg(feature = "enclave")]
 const CONTROL_PLANE_PORT: u16 = 443;
 #[cfg(not(feature = "enclave"))]
 const CONTROL_PLANE_PORT: u16 = 3031;
-
-use shared::print_version;
-#[cfg(feature = "enclave")]
-use shared::ENCLAVE_CID;
-use shared::ENCLAVE_CONNECT_PORT;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -34,7 +25,10 @@ async fn main() -> Result<()> {
     #[cfg(not(feature = "network_egress"))]
     {
         listen_for_shutdown_signal();
-        let (tcp_result, e3_result) = tokio::join!(tcp_server(), e3_proxy.listen());
+        let mut health_check_server = health::HealthCheckServer::new().await?;
+        let (tcp_result, e3_result, health_check_result) =
+            tokio::join!(tcp_server(), e3_proxy.listen(), health_check_server.start(),);
+
         if let Err(err) = tcp_result {
             eprintln!("Error running TCP server on host: {:?}", err);
         };
@@ -42,16 +36,22 @@ async fn main() -> Result<()> {
         if let Err(err) = e3_result {
             eprintln!("Error running E3 proxy on host: {:?}", err);
         }
+
+        if let Err(err) = health_check_result {
+            eprintln!("Error running health check server on host: {:?}", err);
+        }
     }
 
     #[cfg(feature = "network_egress")]
     {
         listen_for_shutdown_signal();
-        let (tcp_result, dns_result, egress_result, e3_result) = tokio::join!(
+        let mut health_check_server = health::HealthCheckServer::new().await?;
+        let (tcp_result, dns_result, egress_result, e3_result, health_check_result) = tokio::join!(
             tcp_server(),
             control_plane::dnsproxy::DnsProxy::listen(),
             control_plane::egressproxy::EgressProxy::listen(),
-            e3_proxy.listen()
+            e3_proxy.listen(),
+            health_check_server.start(),
         );
 
         if let Err(tcp_err) = tcp_result {
@@ -69,28 +69,13 @@ async fn main() -> Result<()> {
         if let Err(e3_err) = e3_result {
             eprintln!("An error occurred in the e3 server - {:?}", e3_err);
         }
+
+        if let Err(err) = health_check_result {
+            eprintln!("Error running health check server on host: {:?}", err);
+        }
     }
 
     Ok(())
-}
-
-#[cfg(not(feature = "enclave"))]
-async fn get_connection_to_enclave() -> std::io::Result<TcpStream> {
-    let ip_addr = std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0));
-    println!(
-        "Connecting to tcp data plane on ({},{})",
-        ip_addr, ENCLAVE_CONNECT_PORT
-    );
-    TcpStream::connect(std::net::SocketAddr::new(ip_addr, ENCLAVE_CONNECT_PORT)).await
-}
-
-#[cfg(feature = "enclave")]
-async fn get_connection_to_enclave() -> std::io::Result<VsockStream> {
-    println!(
-        "Connecting to enclave on ({},{})",
-        ENCLAVE_CID, ENCLAVE_CONNECT_PORT
-    );
-    VsockStream::connect(ENCLAVE_CID, ENCLAVE_CONNECT_PORT.into()).await
 }
 
 async fn tcp_server() -> Result<()> {
@@ -108,20 +93,22 @@ async fn tcp_server() -> Result<()> {
         if let Ok((mut connection, _client_socket_addr)) = tcp_listener.accept().await {
             tokio::spawn(async move {
                 println!("Accepted incoming TCP stream — {:?}", _client_socket_addr);
-                let enclave_stream = match get_connection_to_enclave().await {
-                    Ok(enclave_stream) => enclave_stream,
-                    Err(e) => {
-                        eprintln!(
-                            "An error occurred while connecting to the enclave — {:?}",
-                            e
-                        );
-                        connection
-                            .shutdown()
-                            .await
-                            .expect("Failed to close connection to client");
-                        return;
-                    }
-                };
+                let enclave_stream =
+                    match enclave_connection::get_connection_to_enclave(ENCLAVE_CONNECT_PORT).await
+                    {
+                        Ok(enclave_stream) => enclave_stream,
+                        Err(e) => {
+                            eprintln!(
+                                "An error occurred while connecting to the enclave — {:?}",
+                                e
+                            );
+                            connection
+                                .shutdown()
+                                .await
+                                .expect("Failed to close connection to client");
+                            return;
+                        }
+                    };
 
                 if let Err(e) = pipe_streams(connection, enclave_stream).await {
                     eprintln!(
