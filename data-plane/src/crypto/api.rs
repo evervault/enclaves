@@ -46,6 +46,8 @@ pub enum CryptoApiError {
     Attestation(#[from] attest::AttestationError),
     #[error("Not Found")]
     NotFound,
+    #[error("Could not deserialize your payload")]
+    SerializationError,
 }
 
 impl From<CryptoApiError> for hyper::Response<hyper::Body> {
@@ -53,6 +55,7 @@ impl From<CryptoApiError> for hyper::Response<hyper::Body> {
         match err {
             CryptoApiError::MissingApiKey => build_response(401, Body::from(err.to_string())),
             CryptoApiError::SerdeError(error) => build_response(400, Body::from(error.to_string())),
+            CryptoApiError::SerializationError => build_response(400, Body::from(err.to_string())),
             _ => build_response(500, Body::from(err.to_string())),
         }
     }
@@ -113,8 +116,8 @@ impl CryptoApi {
 
         let body = req.body_mut();
         let bytes = body::to_bytes(body).await?;
-
-        let body: Value = serde_json::from_slice(&bytes)?;
+        let body: Value =
+            serde_json::from_slice(&bytes).map_err(|_| CryptoApiError::SerializationError)?;
         let payload = CryptoRequest::from((body, &cage_context));
         Ok((api_key, payload))
     }
