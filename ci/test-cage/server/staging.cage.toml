@@ -1,0 +1,14 @@
+name = "synthetic-cage"
+uuid = "cage_a471b693f91d"
+app_uuid = "app_1bba8ba15402"
+team_uuid = "team_478144181bec"
+debug = true
+dockerfile = "./Dockerfile"
+disable_tls_termination = false
+
+[egress]
+enabled = true
+
+[signing]
+certPath = "./cert.pem"
+keyPath = "./key.pem"
