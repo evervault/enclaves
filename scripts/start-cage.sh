@@ -10,22 +10,23 @@ nitro-cli terminate-enclave --all
 echo "[HOST] Enclave terminated. Waiting 10s..."
 sleep 10
 
-DEBUG_MODE="$(cat enclave.json | jq .debug_mode)"
-
 # Provision new enclave using customer config
 echo "[HOST] Starting enclave..."
 
-if [ "$DEBUG_MODE" = true ] ; then
+enclave_run_command="nitro-cli run-enclave --cpu-count $ENCLAVE_NUM_CPUS --memory $ENCLAVE_RAM_SIZE_MIB --enclave-cid 2021 --eif-path enclave.eif"
+
+if [ "$ENCLAVE_DEBUG_MODE" = "true" ] ; then
   echo "[HOST] Debug mode enabled..."
+  eval "$enclave_run_command --debug-mode"
 else
   echo "[HOST] Debug mode disabled..."
+  eval "$enclave_run_command"
 fi
 
-nitro-cli run-enclave --config enclave.json
 echo "[HOST] Enclave started... Waiting 10 seconds for warmup."
 sleep 10
 
-if [ "$DEBUG_MODE" = true ] ; then
+if [ "$ENCLAVE_DEBUG_MODE" = "true" ] ; then
   # Create stdout streams for any running enclaves
   echo "[HOST] Attaching headless console for running enclaves..."
   for id in $(nitro-cli describe-enclaves | jq -r ".[] | .EnclaveID")
