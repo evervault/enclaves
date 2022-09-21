@@ -100,19 +100,16 @@ impl E3Client {
         Ok(connection_info)
     }
 
-    async fn send<V>(
+    async fn send(
         &self,
-        api_key: V,
+        api_key: &HeaderValue,
         path: &str,
         payload: hyper::Body,
-    ) -> Result<Response<Body>, E3Error>
-    where
-        HeaderValue: TryFrom<V>,
-        hyper::http::Error: From<<HeaderValue as TryFrom<V>>::Error>,
-    {
+    ) -> Result<Response<Body>, E3Error> {
         let decrypt_request = hyper::Request::builder()
             .uri(self.uri(path))
             .header("api-key", api_key)
+            .header("Content-Type", "application/json")
             .method("POST")
             .body(payload)
             .expect("Failed to create request");
@@ -133,11 +130,13 @@ impl E3Client {
         Ok(response)
     }
 
-    pub async fn decrypt<T, V, P: E3Payload>(&self, api_key: V, payload: P) -> Result<T, E3Error>
+    pub async fn decrypt<T, P: E3Payload>(
+        &self,
+        api_key: &HeaderValue,
+        payload: P,
+    ) -> Result<T, E3Error>
     where
         T: DeserializeOwned,
-        HeaderValue: TryFrom<V>,
-        hyper::http::Error: From<<HeaderValue as TryFrom<V>>::Error>,
     {
         let response = self
             .send(api_key, "/decrypt", payload.try_into_body()?)
@@ -145,11 +144,13 @@ impl E3Client {
         self.parse_response(response).await
     }
 
-    pub async fn encrypt<T, V, P: E3Payload>(&self, api_key: V, payload: P) -> Result<T, E3Error>
+    pub async fn encrypt<T, P: E3Payload>(
+        &self,
+        api_key: &HeaderValue,
+        payload: P,
+    ) -> Result<T, E3Error>
     where
         T: DeserializeOwned,
-        HeaderValue: TryFrom<V>,
-        hyper::http::Error: From<<HeaderValue as TryFrom<V>>::Error>,
     {
         let response = self
             .send(api_key, "/encrypt", payload.try_into_body()?)
@@ -157,11 +158,11 @@ impl E3Client {
         self.parse_response(response).await
     }
 
-    pub async fn authenticate<V>(&self, api_key: V, payload: AuthRequest) -> Result<bool, E3Error>
-    where
-        HeaderValue: TryFrom<V>,
-        hyper::http::Error: From<<HeaderValue as TryFrom<V>>::Error>,
-    {
+    pub async fn authenticate(
+        &self,
+        api_key: &HeaderValue,
+        payload: AuthRequest,
+    ) -> Result<bool, E3Error> {
         let response = self
             .send(api_key, "/authenticate", payload.try_into_body()?)
             .await?;

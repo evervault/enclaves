@@ -26,10 +26,21 @@ RUN mkdir $CONTROL_PLANE_SERVICE_PATH
 COPY ./e2e-tests/scripts/start-control-plane.sh $CONTROL_PLANE_SERVICE_PATH/run
 RUN chmod +x $CONTROL_PLANE_SERVICE_PATH/run
 
-COPY ./e2e-tests/customerProcess.js /customer-services/customerProcess.js
-COPY ./e2e-tests/package.json /customer-services/package.json
+ENV PCR0 000
+ENV PCR1 000
+ENV PCR2 000
+ENV PCR8 000
+ENV MOCK_CRYPTO_CERT /node-services/testing.crt
+ENV MOCK_CRYPTO_KEY /node-services/testing.key
 
-COPY ./e2e-tests/node_modules /customer-services/node_modules
+COPY ./e2e-tests/testing-certs/testing.key /node-services/testing.key
+COPY ./e2e-tests/testing-certs/testing.crt /node-services/testing.crt 
+COPY ./e2e-tests/mockCryptoApi.js /node-services/mockCryptoApi.js
+COPY ./e2e-tests/customerProcess.js /node-services/customerProcess.js
+COPY ./e2e-tests/package.json /node-services/package.json
+COPY ./e2e-tests/package-lock.json /node-services/package-lock.json
+
+RUN cd node-services && npm i
 
 RUN mkdir /etc/service/customer_process \
     && /bin/sh -c "echo -e '"'#!/bin/sh\nexec /customer_process/customer_process\n'"' > /etc/service/customer_process/run" \
@@ -39,5 +50,14 @@ RUN mkdir /customer_process
 
 COPY ./e2e-tests/scripts/start_customer_process /customer_process/customer_process
 RUN chmod +x /customer_process/customer_process 
+
+RUN mkdir /etc/service/mock_process \
+    && /bin/sh -c "echo -e '"'#!/bin/sh\nexec /mock_process/mock_process\n'"' > /etc/service/mock_process/run" \
+    && chmod +x /etc/service/mock_process/run
+
+RUN mkdir /mock_process
+
+COPY ./e2e-tests/scripts/start_mock_process /mock_process/mock_process
+RUN chmod +x /mock_process/mock_process
 
 CMD ["runsvdir", "/etc/service"]

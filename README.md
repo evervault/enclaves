@@ -35,6 +35,12 @@ dig evervault.com @127.0.0.1
 
 ## Temp Running Instructions
 
+Generate certs for TLS in the mock API
+```
+mkdir e2e-tests/testing-certs && cd e2e-tests/testing-certs
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout ./testing.key -out testing.crt
+```
+
 Run end-to-end tests
 
 ```

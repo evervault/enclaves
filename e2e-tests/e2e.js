@@ -1,6 +1,7 @@
 const { expect } = require('chai');
 const axios = require('axios').default;
 const https = require('https');
+const CBOR = require('cbor-sync')
 
 describe('POST data to enclave', () => {
     const allowAllCerts = axios.create({
@@ -27,4 +28,25 @@ describe('POST data to enclave', () => {
                 body :"quia et suscipit\nsuscipit recusandae consequuntur expedita et cum\nreprehenderit molestiae ut ut quas totam\nnostrum rerum est autem sunt rem eveniet architecto"});
         });
     });
+
+    it('encrypts and decrypt via E3', async () => {
+        const data = { test: "test" }
+        const encrypted =  await allowAllCerts.post('https://localhost:443/encrypt', data, { headers: { 'api-key': 'placeholder' } })
+        const decrypted =  await allowAllCerts.post('https://localhost:443/decrypt', encrypted.data, { headers: { 'api-key': 'placeholder' } })
+        expect(data).to.deep.equal(decrypted.data)
+    });
+
+    it('attestation doc', async () => {
+        const doc =  await allowAllCerts.post('https://localhost:443/attestation-doc', {}, { headers: { 'api-key': 'placeholder' }, responseType: "arraybuffer" })
+        const result = CBOR.decode(doc.data);
+        expect(result).to.deep.equal({
+            "Measurements": {
+                "PCR0": "000",
+                "PCR1": "000", 
+                "PCR2": "000",
+                "PCR8": "000"
+            }
+        })
+    });
+
 });

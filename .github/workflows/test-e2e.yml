@@ -24,3 +24,6 @@ jobs:
         env:
           CI: true
         run: sh e2e-tests/run.sh
+        with:
+         MOCK_CRYPTO_CERT: ${{ secrets.MOCK_CRYPTO_CERT }}
+         MOCK_CRYPTO_KEY: ${{ secrets.MOCK_CRYPTO_KEY }}

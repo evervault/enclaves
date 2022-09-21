@@ -6,7 +6,7 @@ use shared::server::Listener;
 use shared::server::TcpServer;
 #[cfg(feature = "enclave")]
 use shared::server::VsockServer;
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 #[cfg(not(feature = "enclave"))]
 use tokio::io::AsyncWriteExt;
 use trust_dns_resolver::config::ResolverOpts;
@@ -93,7 +93,7 @@ impl E3Proxy {
             }; // TODO: cache
             println!("IP for E3 obtained");
             tokio::spawn(async move {
-                let e3_stream = match tokio::net::TcpStream::connect((e3_ip, 443)).await {
+                let e3_stream = match tokio::net::TcpStream::connect(e3_ip).await {
                     Ok(e3_stream) => e3_stream,
                     Err(e) => {
                         eprintln!("Failed to connect to E3 — {:?}", e);
@@ -113,19 +113,23 @@ impl E3Proxy {
     }
 
     #[cfg(feature = "enclave")]
-    async fn get_ip_for_e3(&self) -> Result<Option<IpAddr>> {
+    async fn get_ip_for_e3(&self) -> Result<Option<SocketAddr>> {
         let ip = self
             .dns_resolver
             .lookup_ip("e3.cages-e3.internal.")
             .await?
             .iter()
-            .choose(&mut rand::thread_rng());
+            .choose(&mut rand::thread_rng())
+            .map(|ip| SocketAddr::new(ip, 443));
         Ok(ip)
     }
 
     // supporting local env
     #[cfg(not(feature = "enclave"))]
-    async fn get_ip_for_e3(&self) -> Result<Option<IpAddr>> {
-        Ok(Some(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))))
+    async fn get_ip_for_e3(&self) -> Result<Option<SocketAddr>> {
+        Ok(Some(SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+            7676,
+        )))
     }
 }

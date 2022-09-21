@@ -1,3 +1,0 @@
-#!/bin/sh
-
-exec $DATA_PLANE_EXECUTABLE_PATH

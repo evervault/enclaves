@@ -152,7 +152,7 @@ async fn handle_incoming_request(
             .expect("Hardcoded response"))
     } else {
         handle_standard_request(
-            api_key,
+            &api_key,
             req_info,
             req_body,
             compression,
@@ -165,7 +165,7 @@ async fn handle_incoming_request(
 }
 
 pub async fn handle_standard_request(
-    api_key: hyper::header::HeaderValue,
+    api_key: &HeaderValue,
     mut req_info: Parts,
     req_body: Body,
     _compression: Option<super::http::ContentEncoding>,
@@ -202,7 +202,7 @@ pub async fn handle_standard_request(
             serde_json::Value::Array(decryption_payload),
             cage_context.as_ref(),
         ));
-        let decrypted: DecryptRequest = match e3_client.decrypt(&api_key, request_payload).await {
+        let decrypted: DecryptRequest = match e3_client.decrypt(api_key, request_payload).await {
             Ok(decrypted) => decrypted,
             Err(e) => {
                 eprintln!("Failed to decrypt — {}", e);

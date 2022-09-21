@@ -134,20 +134,30 @@ impl CryptoApi {
         Ok(hyper::Body::from(serde_json::to_vec(&e3_response.data)?))
     }
 
-    async fn get_attestation_doc(self, mut _req: Request<Body>) -> Result<Body, CryptoApiError> {
-        #[cfg(feature = "enclave")]
-        {
-            let body = _req.body_mut();
-            let bytes = body::to_bytes(body).await?;
-            let body: Value = serde_json::from_slice(&bytes)?;
-            let ad_request: AttestationRequest = serde_json::from_value(body)?;
-            let challenge = ad_request.challenge.map(|chal| chal.as_bytes().to_vec());
-            let nonce = ad_request.nonce.map(|non| non.as_bytes().to_vec());
-            let doc = attest::get_attestation_doc(challenge, nonce)?;
-            Ok(Body::from(doc))
-        }
-        #[cfg(not(feature = "enclave"))]
-        Ok(Body::from("No attestation available outside enclave"))
+    #[cfg(feature = "enclave")]
+    async fn get_attestation_doc(self, mut req: Request<Body>) -> Result<Body, CryptoApiError> {
+        let body = req.body_mut();
+        let bytes = body::to_bytes(body).await?;
+        let body: Value = serde_json::from_slice(&bytes)?;
+        let ad_request: AttestationRequest = serde_json::from_value(body)?;
+        let challenge = ad_request.challenge.map(|chal| chal.as_bytes().to_vec());
+        let nonce = ad_request.nonce.map(|non| non.as_bytes().to_vec());
+        let doc = attest::get_attestation_doc(challenge, nonce)?;
+        Ok(Body::from(doc))
+    }
+
+    #[cfg(not(feature = "enclave"))]
+    async fn get_attestation_doc(self, req: Request<Body>) -> Result<Body, CryptoApiError> {
+        use hyper::Client;
+
+        let client = Client::new();
+        let request = Request::builder()
+            .uri("http://127.0.0.1:7677/attestation-doc")
+            .method("POST")
+            .body(req.into_body())
+            .expect("Couldnt build request");
+        let resp = client.request(request).await?;
+        Ok(resp.into_body())
     }
 }
 
