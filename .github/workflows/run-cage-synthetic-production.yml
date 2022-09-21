@@ -1,0 +1,42 @@
+on:
+  push:
+    branches:
+      - 'main'
+    paths:
+      - .github/workflows/run-cage-synthetic-production.yml
+  schedule:
+    - cron: 0 9,18 * * * # run twice daily
+
+name: Deploy and Test Cage Production
+jobs:
+  deploy-testing-cage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Deploy Cage
+        env:
+          EV_API_KEY: ${{ secrets.EV_API_KEY_PRODUCTION }}
+          EV_API_URL: https://api.evervault.com
+          EV_CERT: ${{ secrets.SYNTHETIC_CERT_PRODUCTION }}
+          EV_KEY: ${{ secrets.SYNTHETIC_KEY_PRODUCTION }}
+          TMPDIR: /tmp/
+        run: |
+          sh <(curl https://cage-build-assets.evervault.com/cli/install -sL)
+          cd ci/test-cage/server
+          echo "$EV_CERT" > cert.pem
+          echo "$EV_KEY" > key.pem
+          ev-cage deploy -c production.cage.toml --build-arg API_KEY="$EV_API_KEY" .
+  run-testing-script:
+    runs-on: ubuntu-latest
+    needs: [deploy-testing-cage]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run testing client
+        env:
+          ENVIRONMENT: production
+          CAGE_NAME: synthetic-cage
+          APP_UUID: app_f5f084041a7e
+          EV_API_KEY: ${{ secrets.EV_API_KEY_PRODUCTION }}
+          NODE_TLS_REJECT_UNAUTHORIZED: 0
+        run: |
+          cd ci/test-cage/client ; npm ci ; npm start
