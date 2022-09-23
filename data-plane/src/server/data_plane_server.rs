@@ -93,7 +93,7 @@ where
 }
 
 async fn handle_incoming_request(
-    mut req: Request<Body>,
+    req: Request<Body>,
     customer_port: u16,
     e3_client: Arc<E3Client>,
     cage_context: Arc<CageContext>,
@@ -102,9 +102,10 @@ async fn handle_incoming_request(
     // Run parser over payload
     // Serialize request onto socket
     let api_key = match req
-        .headers_mut()
-        .remove(hyper::http::header::HeaderName::from_static("api-key"))
+        .headers()
+        .get(hyper::http::header::HeaderName::from_static("api-key"))
         .ok_or(AuthError::NoApiKeyGiven)
+        .map(|api_key_header| api_key_header.to_owned())
     {
         Ok(api_key_header) => api_key_header,
         Err(e) => return Ok(e.into()),
