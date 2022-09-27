@@ -1,0 +1,44 @@
+on:
+  workflow_run:
+    workflows: ["Deploy and Test Cage Production", "Deploy and Test Cage Staging"]
+    types: [completed]
+
+name: Send slack alert on synthetic failure
+jobs:
+  send-alert-on-failure:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    steps:
+      - name: Notify slack of failure
+        uses: slackapi/slack-github-action@v1.18.0
+        with:
+          payload: |
+            {
+              "text": "An error occurred while running a Cage synthetic",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "An error occurred while running a Cage synthetic"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "Failed action: <${{ github.event.workflow.html_url }} | ${{ github.event.workflow.name }}>"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "<${{ github.event.workflow_run.html_url }} | Link to run →>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

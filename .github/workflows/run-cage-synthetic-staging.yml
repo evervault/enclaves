@@ -2,8 +2,6 @@ on:
   push:
     branches:
       - 'main'
-    paths:
-      - .github/workflows/run-cage-synthetic-staging.yml
   schedule:
     - cron: 0 9,18 * * * # run twice daily
 
