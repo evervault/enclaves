@@ -34,7 +34,14 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "<${{ github.event.workflow_run.html_url }} | Link to run →>"
+                    "text": "<${{ github.event.workflow_run.html_url }} | View workflow run →>"
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "<${{ github.event.repository.html_url }}/tree/${{ github.event.workflow_run.head_sha }}|View repo at head →>"
                   }
                 }
               ]

@@ -1,3 +1,6 @@
+![Staging Synthetic Deployments](https://github.com/evervault/cages/actions/workflows/run-cage-synthetic-staging.yml/badge.svg)
+![Production Synthetic Deployments](https://github.com/evervault/cages/actions/workflows/run-cage-synthetic-production.yml/badge.svg)
+
 # Cages
 
 Run code on TEEs (Trusted Execution Environments)
