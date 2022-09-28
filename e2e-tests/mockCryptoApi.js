@@ -12,9 +12,11 @@ app.use(express.urlencoded({extended : true}));
 const httpsPort = 7676;
 const port = 7677;
 
+console.log("Starting uppp", { isCi: process.env.CI, key: process.env.MOCK_CRYPTO_KEY })
+
 const serverOpt = {
-  key: process.env.CI ? process.env.MOCK_CRYPTO_KEY : fs.readFileSync(process.env.MOCK_CRYPTO_KEY),
-  cert: process.env.CI ? process.env.MOCK_CRYPTO_CERT: fs.readFileSync(process.env.MOCK_CRYPTO_CERT)
+  key: process.env.CI === "true" ? process.env.MOCK_CRYPTO_KEY : fs.readFileSync(process.env.MOCK_CRYPTO_KEY),
+  cert: process.env.CI === "true" ? process.env.MOCK_CRYPTO_CERT: fs.readFileSync(process.env.MOCK_CRYPTO_CERT)
 };
 
 const cryptoOpt = {

@@ -3,7 +3,7 @@ const express = require('express')
 const app = express()
 const port = 8008
 app.use(express.json())
-var CBOR = require('cbor-sync');
+
 
 app.all('/hello', async (req, res) => {
   res.send({response: "Hello from enclave", ...req.body})

@@ -30,12 +30,15 @@ ENV PCR0 000
 ENV PCR1 000
 ENV PCR2 000
 ENV PCR8 000
-ENV MOCK_CRYPTO_CERT /node-services/testing.crt
-ENV MOCK_CRYPTO_KEY /node-services/testing.key
+ARG CI
+ENV CI $CI
 
-COPY ./e2e-tests/testing-certs/testing.key /node-services/testing.key
-COPY ./e2e-tests/testing-certs/testing.crt /node-services/testing.crt 
-COPY ./e2e-tests/mockCryptoApi.js /node-services/mockCryptoApi.js
+ARG MOCK_CRYPTO_CERT
+ARG MOCK_CRYPTO_KEY
+ENV MOCK_CRYPTO_CERT $MOCK_CRYPTO_CERT
+ENV MOCK_CRYPTO_KEY $MOCK_CRYPTO_KEY
+
+COPY ./e2e-tests/mockCryptoApi.js ./e2e-tests/testing-certs/testing.key* ./e2e-tests/testing-certs/testing.crt* /node-services/
 COPY ./e2e-tests/customerProcess.js /node-services/customerProcess.js
 COPY ./e2e-tests/package.json /node-services/package.json
 COPY ./e2e-tests/package-lock.json /node-services/package-lock.json

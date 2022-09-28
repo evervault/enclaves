@@ -4,13 +4,15 @@ set -e
 cd e2e-tests && npm install && cd ..
 
 # if not in CI, build in this script
-if [[ -z "${CI}" ]]; then
-    cargo build --features network_egress --release --target x86_64-unknown-linux-musl
+if [[ -z "${CI}" ]];
+then
+  cargo build --features network_egress --release --target x86_64-unknown-linux-musl
+  echo "Building cage container"
+  docker build --platform=linux/amd64 --build-arg MOCK_CRYPTO_CERT=/node-services/testing.crt --build-arg MOCK_CRYPTO_KEY=/node-services/testing.key -f e2e-tests/Dockerfile -t cages-test .
+else
+  echo "Building cage container CI"
+  docker build --build-arg=CI=true --build-arg MOCK_CRYPTO_CERT="$MOCK_CRYPTO_CERT" --build-arg MOCK_CRYPTO_KEY="$MOCK_CRYPTO_KEY" --platform=linux/amd64 -f e2e-tests/Dockerfile -t cages-test .
 fi
-
-echo "Building cage container"
-# build container which has control plane, data-plane and sample user process
-docker build --platform=linux/amd64 -f e2e-tests/Dockerfile -t cages-test .
 
 echo "Running cage container"
 # run the container

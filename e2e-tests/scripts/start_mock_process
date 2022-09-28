@@ -1,3 +1,4 @@
 #!/bin/sh
 
+
 node /node-services/mockCryptoApi.js
