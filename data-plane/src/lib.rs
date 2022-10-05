@@ -4,8 +4,14 @@ pub mod crypto;
 pub mod dns;
 pub mod e3client;
 pub mod error;
+pub mod health;
 #[cfg(feature = "tls_termination")]
 pub mod server;
+
+#[cfg(not(feature = "enclave"))]
+use shared::server::TcpServer;
+#[cfg(feature = "enclave")]
+use shared::{server::VsockServer, ENCLAVE_CID};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CageContext {
@@ -41,4 +47,21 @@ impl CageContext {
     pub fn get_cert_name(&self) -> String {
         format!("{}.{}", &self.cage_name, &self.app_uuid)
     }
+}
+
+#[cfg(not(feature = "enclave"))]
+pub async fn get_tcp_server(
+    port: u16,
+) -> std::result::Result<TcpServer, shared::server::error::ServerError> {
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+    TcpServer::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), port)).await
+}
+
+#[cfg(feature = "enclave")]
+pub async fn get_tcp_server(
+    port: u16,
+) -> std::result::Result<VsockServer, shared::server::error::ServerError> {
+    println!("Creating VSock server");
+    VsockServer::bind(ENCLAVE_CID, port.into()).await
 }

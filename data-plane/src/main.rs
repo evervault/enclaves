@@ -7,32 +7,9 @@ use data_plane::dns::egressproxy::EgressProxy;
 #[cfg(feature = "network_egress")]
 use data_plane::dns::enclavedns::EnclaveDns;
 
-use shared::ENCLAVE_CONNECT_PORT;
-
-#[cfg(not(feature = "enclave"))]
-use shared::server::TcpServer;
-#[cfg(feature = "enclave")]
-use shared::{server::VsockServer, ENCLAVE_CID};
-
-#[cfg(not(feature = "enclave"))]
-pub async fn get_tcp_server() -> std::result::Result<TcpServer, shared::server::error::ServerError>
-{
-    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-
-    println!("Creating tcp server");
-    TcpServer::bind(SocketAddr::new(
-        IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-        ENCLAVE_CONNECT_PORT,
-    ))
-    .await
-}
-
-#[cfg(feature = "enclave")]
-pub async fn get_tcp_server() -> std::result::Result<VsockServer, shared::server::error::ServerError>
-{
-    println!("Creating VSock server");
-    VsockServer::bind(ENCLAVE_CID, ENCLAVE_CONNECT_PORT.into()).await
-}
+use data_plane::get_tcp_server;
+use data_plane::health::start_health_check_server;
+use shared::{env_var_present_and_true, ENCLAVE_CONNECT_PORT};
 
 #[tokio::main]
 async fn main() {
@@ -44,7 +21,12 @@ async fn main() {
         .next()
         .and_then(|port_str| port_str.as_str().parse::<u16>().ok())
         .unwrap_or(8008);
-    start(data_plane_port).await
+
+    if env_var_present_and_true!("DATA_PLANE_HEALTH_CHECKS") {
+        tokio::join!(start(data_plane_port), start_health_check_server(),);
+    } else {
+        start(data_plane_port).await;
+    }
 }
 
 #[cfg(not(feature = "network_egress"))]
@@ -86,7 +68,7 @@ async fn start(data_plane_port: u16) {
 
 async fn start_data_plane(data_plane_port: u16) {
     println!("Data plane starting up. Forwarding traffic to {data_plane_port}");
-    let server = match get_tcp_server().await {
+    let server = match get_tcp_server(ENCLAVE_CONNECT_PORT).await {
         Ok(server) => server,
         Err(error) => return eprintln!("Error creating server: {error}"),
     };

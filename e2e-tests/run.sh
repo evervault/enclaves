@@ -1,5 +1,8 @@
 set -e 
 
+# kill container if it is left running by hanging test
+docker kill cages-test-container || true
+
 # install the node modules for customer process and test script
 cd e2e-tests && npm install && cd ..
 
@@ -14,14 +17,31 @@ else
   docker build --build-arg=CI=true --build-arg MOCK_CRYPTO_CERT="$MOCK_CRYPTO_CERT" --build-arg MOCK_CRYPTO_KEY="$MOCK_CRYPTO_KEY" --platform=linux/amd64 -f e2e-tests/Dockerfile -t cages-test .
 fi
 
+docker_run_args="-d --dns 127.0.0.1 -p 0.0.0.0:443:3031 -p 0.0.0.0:3032:3032 --rm --name cages-test-container"
+
 echo "Running cage container"
 # run the container
-docker run -d --dns 127.0.0.1 -p 0.0.0.0:443:3031 --rm --name cages-test-container cages-test
+docker run $docker_run_args cages-test
 
 sleep 2
 
-echo "Running tests"
+echo "Running end-to-end tests"
 cd e2e-tests && npm run test
+
+echo "Running tests for health-check configurations"
+
+echo "data-plane health checks ON, control-plane ON, data-plane ON"
+npm run health-check-tests "should succeed"
+
+echo "data-plane health checks ON, control-plane ON, data-plane OFF"
+docker exec cages-test-container sh -c "sv down data-plane"
+npm run health-check-tests "should fail"
+
+echo "data-plane health checks OFF, control-plane ON, data-plane OFF"
+docker kill cages-test-container
+docker run $docker_run_args --env DATA_PLANE_HEALTH_CHECKS=false cages-test
+docker exec cages-test-container sh -c "sv down data-plane"
+npm run health-check-tests "should succeed"
 
 echo "Tests complete"
 docker kill cages-test-container

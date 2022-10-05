@@ -5,6 +5,7 @@ ENV DATA_PLANE_SERVICE_PATH=/etc/service/data-plane
 ENV CONTROL_PLANE_EXECUTABLE_PATH=/control-plane
 ENV CONTROL_PLANE_SERVICE_PATH=/etc/service/control-plane
 ENV START_EV_SERVICES_PATH=/etc/service/ev-services-entrypoint
+ENV DATA_PLANE_HEALTH_CHECKS=true
 
 EXPOSE 443
 

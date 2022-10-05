@@ -43,6 +43,16 @@ macro_rules! print_version {
     };
 }
 
+#[macro_export]
+macro_rules! env_var_present_and_true {
+    ($var_name:tt) => {
+        match std::env::var("DATA_PLANE_HEALTH_CHECKS") {
+            Ok(s) if s.as_str() == "true" => true,
+            _ => false,
+        }
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::HexSlice;

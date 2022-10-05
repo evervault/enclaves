@@ -1,4 +1,5 @@
 pub mod error;
+pub mod health;
 pub mod tcp;
 pub use tcp::TcpServer;
 
