@@ -7,8 +7,9 @@ use shared::server::tcp::TcpServer;
 use shared::server::vsock::VsockServer;
 use shared::server::Listener;
 use shared::utils::pipe_streams;
+use std::net::Ipv4Addr;
 #[cfg(not(feature = "enclave"))]
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, SocketAddr};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
@@ -32,13 +33,7 @@ lazy_static! {
 impl EgressProxy {
     pub async fn listen() -> Result<()> {
         println!("Egress proxy started");
-        #[cfg(all(test, not(feature = "enclave")))]
-        let mut server = TcpServer::bind(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-            4433,
-        ))
-        .await?;
-        #[cfg(not(any(test, feature = "enclave")))]
+        #[cfg(not(feature = "enclave"))]
         let mut server =
             TcpServer::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 4433)).await?;
 
