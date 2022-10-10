@@ -4,6 +4,7 @@ on:
       - control-plane/**
       - .github/workflows/deploy-control-plane-image-staging.yml
       - scripts/start-cage.sh
+      - scripts/health-check.sh
     branches:
       - main
 name: Deploy new control plane image

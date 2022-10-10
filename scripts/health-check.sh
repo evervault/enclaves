@@ -1,1 +1,1 @@
-curl localhost:3032 -H 'User-Agent: ECS-HealthCheck' -s
+curl localhost:3032 --fail -H 'User-Agent: ECS-HealthCheck'
