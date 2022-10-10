@@ -208,6 +208,7 @@ dependencies = [
  "dashmap",
  "dns-message-parser",
  "hyper",
+ "lazy_static",
  "rand",
  "rusoto_core",
  "rusoto_sns",

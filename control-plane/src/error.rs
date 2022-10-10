@@ -1,20 +1,22 @@
-use std::fmt::Formatter;
 use thiserror::Error;
 use trust_dns_resolver::error::ResolveError;
 
 #[derive(Error, Debug)]
 pub enum ServerError {
+    #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[error(transparent)]
     Rpc(#[from] shared::rpc::error::RpcError),
+    #[error(transparent)]
     Server(#[from] shared::server::error::ServerError),
+    #[error(transparent)]
     Hyper(#[from] hyper::http::Error),
+    #[error(transparent)]
     DNSError(#[from] ResolveError),
-}
-
-impl std::fmt::Display for ServerError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
+    #[error("Request to internal IP ({0}) blocked")]
+    IllegalInternalIp(std::net::Ipv4Addr),
+    #[error("Invalid IP included in egress request — {0}")]
+    InvalidIp(#[from] std::net::AddrParseError),
 }
 
 pub type Result<T> = std::result::Result<T, ServerError>;
