@@ -14,6 +14,5 @@ pub async fn get_connection_to_enclave(port: u16) -> std::io::Result<TcpStream> 
 
 #[cfg(feature = "enclave")]
 pub async fn get_connection_to_enclave(port: u16) -> std::io::Result<VsockStream> {
-    println!("Connecting to enclave on ({ENCLAVE_CID},{port})");
     VsockStream::connect(ENCLAVE_CID, port.into()).await
 }

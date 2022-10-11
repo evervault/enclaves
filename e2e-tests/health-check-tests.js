@@ -1,15 +1,22 @@
-const chai = require('chai');
-chai.use(require('chai-http'));
-const { expect, request } = chai;
+const { expect } = require('chai');
+const { spawn } = require('child_process');
 
 describe('Run health-check request', () => {
-    it('should succeed', async () => {
-        const result =  await request('http://localhost:3032').get('/').set('User-Agent', 'ECS-HealthCheck');
-        expect(result).to.have.status(200);
+
+    const runHealthCheckScript = async () => {
+        const cmd = spawn('sh', ['../scripts/health-check.sh']);
+        return await new Promise((resolve) => cmd.on('exit', code => {
+            resolve(code)
+        }));
+    };
+
+    it('should output success exit code', async () => {
+        const exitCode = await runHealthCheckScript();
+        expect(exitCode).to.equal(0);
     });
 
-    it('should fail', async () => {
-        const result =  await request('http://localhost:3032').get('/').set('User-Agent', 'ECS-HealthCheck');
-        expect(result).to.have.status(500);
+    it('should fail with non-zero exit code', async () => {
+        const exitCode = await runHealthCheckScript();
+        expect(exitCode).to.not.equal(0);
     });
 });
