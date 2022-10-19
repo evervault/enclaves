@@ -27,6 +27,12 @@ The data plane and control plane can be compiled and run without network egress 
 cargo run --features network_egress 
 ```
 
+To build with the `enclave` feature flag, you will have to specify the target, like so:
+
+```
+sudo cargo clippy --features enclave --target x86_64-unknown-linux-musl
+```
+
 ## Query Local DNS Server
 
 The enclave DNS forwarder is listening on 53. To test lookup from data plane -> control plane -> remote DNS server use the following command:

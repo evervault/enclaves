@@ -1,3 +1,5 @@
+#[cfg(feature = "enclave")]
+use crate::configuration;
 use crate::error::Result;
 use crate::internal_dns;
 use shared::server::Listener;
@@ -15,21 +17,21 @@ use trust_dns_resolver::AsyncResolver;
 
 type AsyncDnsResolver = AsyncResolver<GenericConnection, GenericConnectionProvider<TokioRuntime>>;
 
-pub struct E3Proxy {
+pub struct CertProxy {
     #[allow(unused)]
     dns_resolver: AsyncDnsResolver,
 }
 
-impl std::default::Default for E3Proxy {
+impl std::default::Default for CertProxy {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl E3Proxy {
+impl CertProxy {
     pub fn new() -> Self {
-        let dns_resolver = internal_dns::get_internal_dns_resolver()
-            .expect("Failed to create internal dns resolver");
+        let dns_resolver =
+            internal_dns::get_internal_dns_resolver().expect("Couldn't get internal DNS resolver");
         Self { dns_resolver }
     }
 
@@ -50,51 +52,57 @@ impl E3Proxy {
     pub async fn listen(self) -> Result<()> {
         #[cfg(feature = "enclave")]
         let mut enclave_conn =
-            VsockServer::bind(shared::PARENT_CID, shared::ENCLAVE_CRYPTO_PORT.into()).await?;
+            VsockServer::bind(shared::PARENT_CID, shared::ENCLAVE_CERT_PORT.into()).await?;
 
         #[cfg(not(feature = "enclave"))]
         let mut enclave_conn = TcpServer::bind(std::net::SocketAddr::new(
             IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-            shared::ENCLAVE_CRYPTO_PORT,
+            shared::ENCLAVE_CERT_PORT,
         ))
         .await?;
 
-        println!("Running e3 proxy on {}", shared::ENCLAVE_CRYPTO_PORT);
+        println!("Running cert proxy on {}", shared::ENCLAVE_CERT_PORT);
         loop {
             let connection = match enclave_conn.accept().await {
                 Ok(conn) => conn,
                 Err(e) => {
-                    eprintln!("Error accepting crypto request — {:?}", e);
+                    eprintln!("Error accepting cert request — {:?}", e);
                     continue;
                 }
             };
-            println!("Crypto request received");
-            let e3_ip = match self.get_ip_for_e3().await {
+            println!("Cert request received - forwarding stream to cert provisioner");
+            let cert_provisioner_ip = match self.get_ip_for_cert_provisioner().await {
                 Ok(Some(ip)) => ip,
                 Ok(None) => {
-                    eprintln!("No ip returned for E3");
+                    eprintln!("No IP returned for Cert Provisioner");
                     Self::shutdown_conn(connection).await;
                     continue;
                 }
                 Err(e) => {
-                    eprintln!("Error obtaining IP for E3 — {:?}", e);
+                    eprintln!("Error obtaining IP for Cert Provisioner — {:?}", e);
                     Self::shutdown_conn(connection).await;
                     continue;
                 }
-            }; // TODO: cache
-            println!("IP for E3 obtained");
-            tokio::spawn(async move {
-                let e3_stream = match tokio::net::TcpStream::connect(e3_ip).await {
-                    Ok(e3_stream) => e3_stream,
-                    Err(e) => {
-                        eprintln!("Failed to connect to E3 — {:?}", e);
-                        Self::shutdown_conn(connection).await;
-                        return;
-                    }
-                };
+            };
 
-                if let Err(e) = shared::utils::pipe_streams(connection, e3_stream).await {
-                    eprintln!("Error streaming from Data Plane to e3 — {:?}", e);
+            tokio::spawn(async move {
+                let cert_provisioner_stream =
+                    match tokio::net::TcpStream::connect(cert_provisioner_ip).await {
+                        Ok(stream) => stream,
+                        Err(e) => {
+                            eprintln!("Failed to connect to Cert Provisioner — {:?}", e);
+                            Self::shutdown_conn(connection).await;
+                            return;
+                        }
+                    };
+
+                if let Err(e) =
+                    shared::utils::pipe_streams(connection, cert_provisioner_stream).await
+                {
+                    eprintln!(
+                        "Error streaming from Data Plane to Cert Provisioner — {:?}",
+                        e
+                    );
                 }
             });
         }
@@ -104,18 +112,18 @@ impl E3Proxy {
     }
 
     #[cfg(feature = "enclave")]
-    async fn get_ip_for_e3(&self) -> Result<Option<SocketAddr>> {
+    async fn get_ip_for_cert_provisioner(&self) -> Result<Option<SocketAddr>> {
+        let cert_pro_host = format!("{}.", configuration::get_cert_provisoner_host());
         internal_dns::get_ip_for_host_with_dns_resolver(
             &self.dns_resolver,
-            "e3.cages-e3.internal.",
+            cert_pro_host.as_str(),
             443,
         )
         .await
     }
 
-    // supporting local env
     #[cfg(not(feature = "enclave"))]
-    async fn get_ip_for_e3(&self) -> Result<Option<SocketAddr>> {
-        internal_dns::get_ip_for_localhost(7676)
+    async fn get_ip_for_cert_provisioner(&self) -> Result<Option<SocketAddr>> {
+        internal_dns::get_ip_for_localhost(7675)
     }
 }

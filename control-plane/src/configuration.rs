@@ -58,3 +58,12 @@ pub fn get_deregistration_topic_arn() -> String {
 pub fn get_app_uuid() -> String {
     std::env::var("EV_APP_UUID").expect("EV_APP_UUID is not set in env")
 }
+
+pub fn get_cert_provisoner_host() -> String {
+    match get_rust_env() {
+        Environment::Staging | Environment::Production => {
+            "cert_provisioner.cages.internal".to_string()
+        }
+        _ => "localhost".to_string(),
+    }
+}
