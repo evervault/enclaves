@@ -2,7 +2,7 @@ use super::error::TlsError;
 use super::http::ContentEncoding;
 use super::tls::TlsServerBuilder;
 
-use crate::e3client::{self, DecryptRequest, E3Client, E3Error};
+use crate::e3client::{self, AuthRequest, DecryptRequest, E3Client, E3Error};
 use crate::error::{AuthError, Result};
 use crate::CageContext;
 
@@ -17,43 +17,26 @@ use hyper::{Body, Request, Response};
 use shared::server::Listener;
 use std::sync::Arc;
 
-macro_rules! create_tls_server_or_return {
-    ($server:expr, $cert_name:expr) => {
-        match TlsServerBuilder
-            .with_server($server)
-            .with_self_signed_cert($cert_name)
-            .await
-        {
-            Ok(tls_server) => tls_server,
-            Err(error) => return eprintln!("Error performing TLS upgrade: {error}"),
-        }
-    };
-}
-
 pub async fn run<L: Listener + Send + Sync>(tcp_server: L, port: u16)
 where
     TlsError: From<<L as Listener>::Error>,
     <L as Listener>::Connection: 'static,
 {
-    let cage_context =
-        Arc::new(CageContext::new().expect("Missing required Cage context elements"));
-    let mut server = create_tls_server_or_return!(tcp_server, cage_context.get_cert_name());
+    let cage_context = CageContext::try_from_env().expect("Missing required Cage context elements");
+    let mut server = TlsServerBuilder::new()
+        .with_server(tcp_server)
+        .with_self_signed_cert(cage_context.clone())
+        .expect("Failed to create tls server");
     let http_server = conn::Http::new();
     let e3_client = Arc::new(E3Client::new());
     loop {
-        let stream = match tokio::time::timeout(server.time_till_expiry(), server.accept()).await {
-            Ok(Ok(stream)) => stream,
-            Ok(Err(tls_err)) => {
+        let stream = match server.accept().await {
+            Ok(stream) => stream,
+            Err(tls_err) => {
                 eprintln!(
                     "An error occurred while accepting the incoming connection — {}",
                     tls_err
                 );
-                continue;
-            }
-            Err(_) => {
-                println!("Attestation document signing cert expired, recreating server...");
-                server =
-                    create_tls_server_or_return!(server.into_inner(), cage_context.get_cert_name());
                 continue;
             }
         };
@@ -96,7 +79,7 @@ async fn handle_incoming_request(
     req: Request<Body>,
     customer_port: u16,
     e3_client: Arc<E3Client>,
-    cage_context: Arc<CageContext>,
+    cage_context: CageContext,
 ) -> Result<Response<Body>> {
     // Extract API Key header and authenticate request
     // Run parser over payload
@@ -114,7 +97,7 @@ async fn handle_incoming_request(
     let is_auth = if cfg!(feature = "enclave") {
         println!("Authenticating request");
         match e3_client
-            .authenticate(&api_key, cage_context.as_ref().into())
+            .authenticate(&api_key, AuthRequest::from(&cage_context))
             .await
         {
             Ok(auth_status) => auth_status,
@@ -159,7 +142,7 @@ async fn handle_incoming_request(
             compression,
             customer_port,
             e3_client,
-            cage_context,
+            &cage_context,
         )
         .await
     }
@@ -172,7 +155,7 @@ pub async fn handle_standard_request(
     _compression: Option<super::http::ContentEncoding>,
     customer_port: u16,
     e3_client: Arc<E3Client>,
-    cage_context: Arc<CageContext>,
+    cage_context: &CageContext,
 ) -> crate::error::Result<Response<Body>> {
     let request_bytes = match hyper::body::to_bytes(req_body).await {
         Ok(body_bytes) => body_bytes,
@@ -201,7 +184,7 @@ pub async fn handle_standard_request(
     if !decryption_payload.is_empty() {
         let request_payload = e3client::CryptoRequest::from((
             serde_json::Value::Array(decryption_payload),
-            cage_context.as_ref(),
+            cage_context,
         ));
         let decrypted: DecryptRequest = match e3_client.decrypt(api_key, request_payload).await {
             Ok(decrypted) => decrypted,

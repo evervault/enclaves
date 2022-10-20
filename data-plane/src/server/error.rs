@@ -3,6 +3,7 @@ use crate::crypto::attest::AttestationError;
 use rcgen::RcgenError;
 use std::fmt::Formatter;
 use thiserror::Error;
+use tokio_rustls::rustls::sign::SignError;
 
 #[derive(Error, Debug)]
 pub enum TlsError {
@@ -14,6 +15,9 @@ pub enum TlsError {
     #[cfg(feature = "enclave")]
     Attestation(#[from] AttestationError),
     CertGenError(#[from] RcgenError),
+    OpensslError(#[from] openssl::error::ErrorStack),
+    SignError(#[from] SignError),
+    PemError(#[from] pem::PemError),
 }
 
 impl std::fmt::Display for TlsError {

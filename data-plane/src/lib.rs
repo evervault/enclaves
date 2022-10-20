@@ -21,7 +21,7 @@ pub struct CageContext {
 }
 
 impl CageContext {
-    pub fn new() -> std::result::Result<Self, std::env::VarError> {
+    pub fn try_from_env() -> std::result::Result<Self, std::env::VarError> {
         let app_uuid = std::env::var("EV_APP_UUID")?;
         let team_uuid = std::env::var("EV_TEAM_UUID")?;
         let cage_name = std::env::var("EV_CAGE_NAME")?;
@@ -30,6 +30,14 @@ impl CageContext {
             team_uuid,
             cage_name,
         })
+    }
+
+    pub fn new(app_uuid: String, team_uuid: String, cage_name: String) -> Self {
+        Self {
+            app_uuid,
+            team_uuid,
+            cage_name,
+        }
     }
 
     pub fn cage_name(&self) -> &str {
@@ -45,7 +53,7 @@ impl CageContext {
     }
 
     pub fn get_cert_name(&self) -> String {
-        format!("{}.{}", &self.cage_name, &self.app_uuid)
+        format!("{}.{}.cages.evervault.com", &self.cage_name, &self.app_uuid)
     }
 }
 

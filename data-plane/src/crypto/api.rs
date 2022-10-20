@@ -108,7 +108,8 @@ impl CryptoApi {
     async fn build_request(
         mut req: Request<Body>,
     ) -> Result<(HeaderValue, CryptoRequest), CryptoApiError> {
-        let cage_context = CageContext::new().map_err(CryptoApiError::MissingCageContext)?;
+        let cage_context =
+            CageContext::try_from_env().map_err(CryptoApiError::MissingCageContext)?;
         let api_key = req
             .headers_mut()
             .remove(hyper::http::header::HeaderName::from_static("api-key"))
