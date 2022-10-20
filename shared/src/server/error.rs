@@ -4,6 +4,7 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum ServerError {
     IoError(#[from] std::io::Error),
+    Hyper(#[from] hyper::Error),
 }
 
 impl std::fmt::Display for ServerError {

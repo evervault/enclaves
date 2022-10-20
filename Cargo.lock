@@ -218,6 +218,7 @@ dependencies = [
  "thiserror",
  "tls-parser",
  "tokio",
+ "tokio-rustls",
  "tokio-vsock",
  "trust-dns-resolver",
 ]
@@ -1687,6 +1688,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "byteorder",
+ "hyper",
  "rmp-serde",
  "serde",
  "serde_derive",

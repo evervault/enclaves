@@ -10,13 +10,19 @@ pub enum ServerError {
     #[error(transparent)]
     Server(#[from] shared::server::error::ServerError),
     #[error(transparent)]
-    Hyper(#[from] hyper::http::Error),
+    Hyper(#[from] hyper::Error),
+    #[error(transparent)]
+    HyperHttp(#[from] hyper::http::Error),
     #[error(transparent)]
     DNSError(#[from] ResolveError),
     #[error("Request to internal IP ({0}) blocked")]
     IllegalInternalIp(std::net::Ipv4Addr),
     #[error("Invalid IP included in egress request — {0}")]
     InvalidIp(#[from] std::net::AddrParseError),
+    #[error("Failed sending request - {0}")]
+    FailedRequest(String),
+    #[error(transparent)]
+    JsonError(#[from] serde_json::Error),
 }
 
 pub type Result<T> = std::result::Result<T, ServerError>;

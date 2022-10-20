@@ -11,6 +11,7 @@ dns-message-parser = { version = "~0.6.0" }
 bytes = "1"
 thiserror = "1.0"
 tokio-vsock = { version = "0.3.2", optional = true }
+tokio-rustls = { version = "0.23.4", features = ["dangerous_configuration"] }
 tls-parser = "*"
 shared = { path = "../shared" }
 rand = { version = "0.8.5" }

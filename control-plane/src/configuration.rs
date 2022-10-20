@@ -43,6 +43,10 @@ pub fn get_cage_uuid() -> String {
     std::env::var("CAGE_UUID").expect("CAGE_UUID is not set in env")
 }
 
+pub fn get_cage_version() -> String {
+    std::env::var("EV_CAGE_VERSION_ID").expect("EV_CAGE_VERSION_ID is not set in env")
+}
+
 pub fn get_cage_name() -> String {
     std::env::var("EV_CAGE_NAME").expect("EV_CAGE_NAME is not set in env")
 }
