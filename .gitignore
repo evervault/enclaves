@@ -8,3 +8,4 @@ data-plane/*.pem
 e2e-tests/testing-certs/*
 e2e-tests/health-check-response.txt
 ci/**/node_modules
+.vscode

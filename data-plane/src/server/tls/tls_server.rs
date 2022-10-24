@@ -69,6 +69,17 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
 
         Ok(TlsServer::new(config, self.tcp_server))
     }
+
+    #[allow(unused)]
+    pub async fn with_attestable_cert(self, cage_ctx: CageContext) -> ServerResult<TlsServer<S>> {
+        let (ca_cert, ca_private_key) = super::provisioner::generate_ca()?;
+        let attestable_cert_resolver =
+            super::cert_resolver::AttestableCertResolver::new(ca_cert, ca_private_key, cage_ctx)?;
+        let tls_config =
+            Self::get_base_config().with_cert_resolver(Arc::new(attestable_cert_resolver));
+
+        Ok(TlsServer::new(tls_config, self.tcp_server))
+    }
 }
 
 #[async_trait]

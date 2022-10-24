@@ -310,6 +310,7 @@ dependencies = [
  "async-trait",
  "aws-nitro-enclaves-cose",
  "aws-nitro-enclaves-nsm-api",
+ "base64",
  "bytes 1.1.0",
  "chrono",
  "dashmap",
