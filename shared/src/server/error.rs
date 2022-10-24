@@ -5,6 +5,8 @@ use thiserror::Error;
 pub enum ServerError {
     IoError(#[from] std::io::Error),
     Hyper(#[from] hyper::Error),
+    JsonError(#[from] serde_json::Error),
+    InvalidPath(String),
 }
 
 impl std::fmt::Display for ServerError {
@@ -13,4 +15,4 @@ impl std::fmt::Display for ServerError {
     }
 }
 
-pub type ServerResult<T> = Result<T, ServerError>;
+pub type ServerResult<T> = std::result::Result<T, ServerError>;
