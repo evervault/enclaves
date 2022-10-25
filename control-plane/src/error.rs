@@ -23,6 +23,10 @@ pub enum ServerError {
     FailedRequest(String),
     #[error(transparent)]
     JsonError(#[from] serde_json::Error),
+    #[error("Error Setting up Mtls for Cert Provisioner: {0}")]
+    CertProvisionerMtls(String),
+    #[error(transparent)]
+    EnvError(#[from] std::env::VarError),
 }
 
 pub type Result<T> = std::result::Result<T, ServerError>;

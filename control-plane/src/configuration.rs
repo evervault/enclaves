@@ -71,3 +71,15 @@ pub fn get_cert_provisoner_host() -> String {
         _ => "localhost".to_string(),
     }
 }
+
+pub fn get_cert_provisioner_mtls_cert_env() -> Result<String, std::env::VarError> {
+    std::env::var("CERT_PROVISIONER_MTLS_CLIENT_CERT")
+}
+
+pub fn get_cert_provisioner_mtls_key_env() -> Result<String, std::env::VarError> {
+    std::env::var("CERT_PROVISIONER_MTLS_CLIENT_KEY")
+}
+
+pub fn get_cert_provisioner_mtls_root_cert_env() -> Result<String, std::env::VarError> {
+    std::env::var("CERT_PROVISIONER_MTLS_ROOT_CERT")
+}
