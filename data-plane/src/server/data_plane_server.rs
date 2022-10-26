@@ -2,7 +2,8 @@ use super::error::TlsError;
 use super::http::ContentEncoding;
 use super::tls::TlsServerBuilder;
 
-use crate::e3client::{self, AuthRequest, DecryptRequest, E3Client, E3Error};
+use crate::base_tls_client::ClientError;
+use crate::e3client::{self, AuthRequest, DecryptRequest, E3Client};
 use crate::error::{AuthError, Result};
 use crate::CageContext;
 
@@ -101,7 +102,7 @@ async fn handle_incoming_request(
             .await
         {
             Ok(auth_status) => auth_status,
-            Err(E3Error::FailedRequest(status)) if status.as_u16() == 401 => {
+            Err(ClientError::FailedRequest(status)) if status.as_u16() == 401 => {
                 return Ok(AuthError::FailedToAuthenticateApiKey.into());
             }
             Err(e) => {

@@ -62,6 +62,10 @@ pub mod requests {
     impl ConfigServerPayload for GetCertRequestDataPlane {}
 
     impl GetCertRequestDataPlane {
+        pub fn new(attestation_doc: String) -> Self {
+            Self { attestation_doc }
+        }
+
         pub fn attestation_doc(&self) -> String {
             self.attestation_doc.clone()
         }

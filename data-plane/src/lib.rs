@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
 
+pub mod base_tls_client;
+pub mod cert_provisioner_client;
+pub mod configuration;
 pub mod crypto;
 pub mod dns;
 pub mod e3client;

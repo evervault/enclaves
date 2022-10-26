@@ -1,44 +1,17 @@
-pub mod error;
-pub use error::E3Error;
 mod tls_verifier;
 
-use hyper::client::conn::{Connection as HyperConnection, SendRequest};
 use hyper::header::HeaderValue;
 use hyper::{Body, Response};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::value::Value;
-use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, ServerName};
-use tokio_rustls::{client::TlsStream, TlsConnector};
+use tokio_rustls::rustls::ServerName;
+use tokio_rustls::TlsConnector;
 
-fn get_tls_client_config() -> ClientConfig {
-    let config_builder = tokio_rustls::rustls::ClientConfig::builder().with_safe_defaults();
-    let mut root_store = tokio_rustls::rustls::RootCertStore::empty();
-    root_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
-        OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
-        )
-    }));
-    let mut client_config = config_builder
-        .with_root_certificates(root_store)
-        .with_no_client_auth();
-    let mut dangerous = client_config.dangerous();
-    dangerous.set_certificate_verifier(std::sync::Arc::new(tls_verifier::E3CertVerifier));
-    client_config
-}
-
-#[cfg(not(feature = "enclave"))]
-type Connection = tokio::net::TcpStream;
-#[cfg(feature = "enclave")]
-use tokio_vsock::VsockStream;
-#[cfg(feature = "enclave")]
-type Connection = tokio_vsock::VsockStream;
+type E3Error = ClientError;
 
 pub struct E3Client {
-    tls_connector: TlsConnector,
-    e3_server_name: ServerName,
+    base_client: BaseClient,
 }
 
 impl std::default::Default for E3Client {
@@ -47,87 +20,31 @@ impl std::default::Default for E3Client {
     }
 }
 
-#[cfg(not(feature = "enclave"))]
-use tokio::net::TcpStream;
-
-#[cfg(not(feature = "enclave"))]
-async fn get_socket() -> Result<Connection, tokio::io::Error> {
-    TcpStream::connect(std::net::SocketAddr::new(
-        std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
-        shared::ENCLAVE_CRYPTO_PORT,
-    ))
-    .await
-}
-
-#[cfg(feature = "enclave")]
-async fn get_socket() -> Result<Connection, tokio::io::Error> {
-    VsockStream::connect(shared::PARENT_CID, shared::ENCLAVE_CRYPTO_PORT.into()).await
-}
+use crate::base_tls_client::tls_client_config::get_tls_client_config;
+use crate::base_tls_client::{BaseClient, ClientError};
+use crate::configuration;
 
 impl E3Client {
     pub fn new() -> Self {
-        let tls_config = get_tls_client_config();
+        let verifier = std::sync::Arc::new(tls_verifier::E3CertVerifier);
+        let tls_connector =
+            TlsConnector::from(std::sync::Arc::new(get_tls_client_config(verifier)));
+
+        let server_name = ServerName::try_from(configuration::get_e3_host().as_str())
+            .expect("Hardcoded hostname");
+
         Self {
-            tls_connector: TlsConnector::from(std::sync::Arc::new(tls_config)),
-            e3_server_name: ServerName::try_from("e3.cages-e3.internal")
-                .expect("Hardcoded hostname"),
+            base_client: BaseClient::new(tls_connector, server_name, shared::ENCLAVE_CRYPTO_PORT),
         }
     }
 
     fn uri(&self, path: &str) -> String {
-        format!("https://e3.cages-e3.internal{}", path)
-    }
-
-    async fn get_conn(
-        &self,
-    ) -> Result<
-        (
-            SendRequest<hyper::Body>,
-            HyperConnection<TlsStream<Connection>, hyper::Body>,
-        ),
-        E3Error,
-    > {
-        let client_connection: Connection = get_socket().await?;
-        let connection = self
-            .tls_connector
-            .connect(self.e3_server_name.clone(), client_connection)
-            .await?;
-
-        let connection_info = hyper::client::conn::Builder::new()
-            .handshake::<TlsStream<Connection>, hyper::Body>(connection)
-            .await?;
-
-        Ok(connection_info)
-    }
-
-    async fn send(
-        &self,
-        api_key: &HeaderValue,
-        path: &str,
-        payload: hyper::Body,
-    ) -> Result<Response<Body>, E3Error> {
-        let decrypt_request = hyper::Request::builder()
-            .uri(self.uri(path))
-            .header("api-key", api_key)
-            .header("Content-Type", "application/json")
-            .method("POST")
-            .body(payload)
-            .expect("Failed to create request");
-
-        // TODO: connection pooling
-        let (mut request_sender, connection) = self.get_conn().await?;
-        tokio::spawn(async move {
-            if let Err(e) = connection.await {
-                eprintln!("Error in e3 connection: {}", e);
-            }
-        });
-
-        let response = request_sender.send_request(decrypt_request).await?;
-        if !response.status().is_success() {
-            return Err(E3Error::FailedRequest(response.status()));
-        }
-
-        Ok(response)
+        format!(
+            "https://{}:{}{}",
+            configuration::get_e3_host(),
+            shared::ENCLAVE_CRYPTO_PORT,
+            path
+        )
     }
 
     pub async fn decrypt<T, P: E3Payload>(
@@ -139,7 +56,13 @@ impl E3Client {
         T: DeserializeOwned,
     {
         let response = self
-            .send(api_key, "/decrypt", payload.try_into_body()?)
+            .base_client
+            .send(
+                Some(api_key),
+                "POST",
+                &self.uri("/decrypt"),
+                payload.try_into_body()?,
+            )
             .await?;
         self.parse_response(response).await
     }
@@ -153,7 +76,13 @@ impl E3Client {
         T: DeserializeOwned,
     {
         let response = self
-            .send(api_key, "/encrypt", payload.try_into_body()?)
+            .base_client
+            .send(
+                Some(api_key),
+                "POST",
+                &self.uri("/encrypt"),
+                payload.try_into_body()?,
+            )
             .await?;
         self.parse_response(response).await
     }
@@ -164,7 +93,13 @@ impl E3Client {
         payload: AuthRequest,
     ) -> Result<bool, E3Error> {
         let response = self
-            .send(api_key, "/authenticate", payload.try_into_body()?)
+            .base_client
+            .send(
+                Some(api_key),
+                "POST",
+                &self.uri("/authenticate"),
+                payload.try_into_body()?,
+            )
             .await?;
 
         Ok(response.status().is_success())
