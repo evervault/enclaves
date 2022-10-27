@@ -33,6 +33,16 @@ To build with the `enclave` feature flag, you will have to specify the target, l
 sudo cargo clippy --features enclave --target x86_64-unknown-linux-musl
 ```
 
+You may need to install musl-cross if not done already (Note: this will take a while, ~30+ minutes):
+```bash
+brew install FiloSottile/musl-cross/musl-cross
+```
+
+You will also need the x86_64-unknown-linux-musl target:
+```bash
+rustup target add x86_64-unknown-linux-musl
+```
+
 ## Query Local DNS Server
 
 The enclave DNS forwarder is listening on 53. To test lookup from data plane -> control plane -> remote DNS server use the following command:
@@ -54,6 +64,12 @@ Run end-to-end tests
 
 ```
 sh e2e-tests/run.sh
+```
+
+The mock crypto API depends on the rust crypto crate hosted on cloudsmith. To run the tests locally, you will need to add a registries section to your `.cargo/config.toml` file:
+```toml
+[registries]
+evervault-rust-libraries = { index = <CLOUDSMITH_INDEX> }
 ```
 
 ## Runtime

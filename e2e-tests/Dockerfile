@@ -39,12 +39,14 @@ ARG MOCK_CRYPTO_KEY
 ENV MOCK_CRYPTO_CERT $MOCK_CRYPTO_CERT
 ENV MOCK_CRYPTO_KEY $MOCK_CRYPTO_KEY
 
-COPY ./e2e-tests/mockCryptoApi.js ./e2e-tests/testing-certs/testing.key* ./e2e-tests/testing-certs/testing.crt* /node-services/
-COPY ./e2e-tests/customerProcess.js /node-services/customerProcess.js
-COPY ./e2e-tests/package.json /node-services/package.json
-COPY ./e2e-tests/package-lock.json /node-services/package-lock.json
+COPY ./e2e-tests/mock-crypto/target/x86_64-unknown-linux-musl/release/mock-crypto ./e2e-tests/testing-certs/testing.key* ./e2e-tests/testing-certs/testing.crt* /services/
+RUN chmod +x /services/mock-crypto
 
-RUN cd node-services && npm i
+COPY ./e2e-tests/customerProcess.js /services/customerProcess.js
+COPY ./e2e-tests/package.json /services/package.json
+COPY ./e2e-tests/package-lock.json /services/package-lock.json
+
+RUN cd services && npm i
 
 RUN mkdir /etc/service/customer_process \
     && /bin/sh -c "echo -e '"'#!/bin/sh\nexec /customer_process/customer_process\n'"' > /etc/service/customer_process/run" \

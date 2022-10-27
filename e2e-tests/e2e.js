@@ -14,6 +14,9 @@ describe('POST data to enclave', () => {
         return allowAllCerts.post('https://localhost:443/hello',{ secret: 'ev:123' }, { headers: { 'api-key': 'placeholder' } }).then((result) => {
             console.log('Post request sent to the enclave');
             expect(result.data).to.deep.equal({ response: 'Hello from enclave',  secret: 'ev:123'});
+        }).catch((err) => {
+          console.error(err);
+          throw err;
         });
     });
 
@@ -26,18 +29,30 @@ describe('POST data to enclave', () => {
                 id:1,
                 title:"sunt aut facere repellat provident occaecati excepturi optio reprehenderit",
                 body :"quia et suscipit\nsuscipit recusandae consequuntur expedita et cum\nreprehenderit molestiae ut ut quas totam\nnostrum rerum est autem sunt rem eveniet architecto"});
+        }).catch((err) => {
+          console.error(err);
+          throw err;
         });
     });
 
     it('encrypts and decrypt via E3', async () => {
         const data = { test: "test" }
-        const encrypted =  await allowAllCerts.post('https://localhost:443/encrypt', data, { headers: { 'api-key': 'placeholder' } })
-        const decrypted =  await allowAllCerts.post('https://localhost:443/decrypt', encrypted.data, { headers: { 'api-key': 'placeholder' } })
+        const encrypted =  await allowAllCerts.post('https://localhost:443/encrypt', data, { headers: { 'api-key': 'placeholder' } }).catch((err) => {
+          console.error(err);
+          throw err;
+        })
+        const decrypted =  await allowAllCerts.post('https://localhost:443/decrypt', encrypted.data, { headers: { 'api-key': 'placeholder' } }).catch((err) => {
+          console.error(err);
+          throw err;
+        })
         expect(data).to.deep.equal(decrypted.data)
     });
 
     it('attestation doc', async () => {
-        const doc =  await allowAllCerts.post('https://localhost:443/attestation-doc', {}, { headers: { 'api-key': 'placeholder' }, responseType: "arraybuffer" })
+        const doc =  await allowAllCerts.post('https://localhost:443/attestation-doc', {}, { headers: { 'api-key': 'placeholder' }, responseType: "arraybuffer" }).catch((err) => {
+          console.error(err);
+          throw err;
+        })
         const result = CBOR.decode(doc.data);
         expect(result).to.deep.equal({
             "Measurements": {

@@ -1,4 +1,4 @@
 #!/bin/sh
 
 
-node /node-services/customerProcess.js
+node /services/customerProcess.js

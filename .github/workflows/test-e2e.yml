@@ -14,6 +14,11 @@ jobs:
       - uses: evervault/cargo-static-build@v2
         with:
           cmd: cargo build --features network_egress --release --target x86_64-unknown-linux-musl
+      - uses: evervault/cargo-static-build@v2
+        with:
+          cmd: cd e2e-tests/mock-crypto ; cargo build --release --target x86_64-unknown-linux-musl
+        env:
+          CARGO_REGISTRIES_EVERVAULT_RUST_LIBRARIES_INDEX: ${{ secrets.RUST_CRYPTO_REGISTRY }}
       - uses: actions-hub/docker/cli@f5fdbfc3f9d2a9265ead8962c1314108a7b7ec5d
         env:
           SKIP_LOGIN: true
@@ -25,4 +30,5 @@ jobs:
           CI: true
           MOCK_CRYPTO_CERT: ${{ secrets.MOCK_CRYPTO_CERT }}
           MOCK_CRYPTO_KEY: ${{ secrets.MOCK_CRYPTO_KEY }}
+          RUST_CRYPTO_REGISTRY: ${{ secrets.RUST_CRYPTO_REGISTRY }}
         run: sh e2e-tests/run.sh
