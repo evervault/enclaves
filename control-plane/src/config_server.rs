@@ -6,7 +6,7 @@ use hyper::service::service_fn;
 use hyper::{Body, Request, Response};
 
 use shared::server::cert::{ConfigServerPayload, GetCertTokenResponseDataPlane};
-use shared::server::config_server::routes::ConfigServerPaths;
+use shared::server::config_server::routes::ConfigServerPath;
 use shared::server::Listener;
 #[cfg(not(feature = "enclave"))]
 use shared::server::TcpServer;
@@ -88,8 +88,8 @@ async fn handle_incoming_request(
 ) -> Result<Response<Body>> {
     let (req_info, _) = req.into_parts();
 
-    match ConfigServerPaths::from_str(req_info.uri.path()) {
-        Ok(ConfigServerPaths::GetCertToken) => {
+    match ConfigServerPath::from_str(req_info.uri.path()) {
+        Ok(ConfigServerPath::GetCertToken) => {
             Ok(handle_cert_token_request(cert_provisioner_client).await)
         }
         _ => Ok(build_bad_request_response()),

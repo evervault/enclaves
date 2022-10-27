@@ -35,6 +35,10 @@ pub enum Error {
     #[cfg(feature = "tls_termination")]
     #[error("An error occurred while parsing the incoming stream for ciphertexts — {0}")]
     ParseError(#[from] crate::crypto::stream::IncomingStreamError),
+    #[error("{0}")]
+    Hyper(#[from] hyper::Error),
+    #[error("An error occurred — {0}")]
+    ConfigServer(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -7,7 +7,7 @@ pub trait ConfigServerPayload: Sized + Serialize {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct GetCertTokenRequestDataPlane;
 
 impl ConfigServerPayload for GetCertTokenRequestDataPlane {

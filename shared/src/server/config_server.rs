@@ -5,18 +5,26 @@ pub mod routes {
     use super::error::{ServerError, ServerResult};
 
     use std::str::FromStr;
-    pub enum ConfigServerPaths {
+
+    pub enum ConfigServerPath {
         GetCertToken,
-        GetCert,
     }
 
-    impl FromStr for ConfigServerPaths {
+    impl FromStr for ConfigServerPath {
         type Err = ServerError;
 
-        fn from_str(input: &str) -> ServerResult<ConfigServerPaths> {
+        fn from_str(input: &str) -> ServerResult<ConfigServerPath> {
             match input {
-                "/cert/token" => Ok(ConfigServerPaths::GetCertToken),
+                "/cert/token" => Ok(Self::GetCertToken),
                 _ => Err(ServerError::InvalidPath(input.to_string())),
+            }
+        }
+    }
+
+    impl std::fmt::Display for ConfigServerPath {
+        fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            match self {
+                Self::GetCertToken => write!(f, "/cert/token"),
             }
         }
     }

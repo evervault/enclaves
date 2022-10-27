@@ -8,10 +8,7 @@ use hyper::{Body, Response};
 use tokio_rustls::rustls::ServerName;
 use tokio_rustls::{client::TlsStream, TlsConnector};
 
-#[cfg(not(feature = "enclave"))]
-type Connection = tokio::net::TcpStream;
-#[cfg(feature = "enclave")]
-type Connection = tokio_vsock::VsockStream;
+use crate::connection::{self, Connection};
 
 pub struct BaseClient {
     tls_connector: TlsConnector,
@@ -28,20 +25,6 @@ impl BaseClient {
         }
     }
 
-    #[cfg(not(feature = "enclave"))]
-    async fn get_socket(&self) -> Result<Connection, tokio::io::Error> {
-        Connection::connect(std::net::SocketAddr::new(
-            std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
-            self.port,
-        ))
-        .await
-    }
-
-    #[cfg(feature = "enclave")]
-    async fn get_socket(&self) -> Result<Connection, tokio::io::Error> {
-        Connection::connect(shared::PARENT_CID, self.port.into()).await
-    }
-
     async fn get_conn(
         &self,
     ) -> Result<
@@ -51,7 +34,7 @@ impl BaseClient {
         ),
         ClientError,
     > {
-        let client_connection: Connection = self.get_socket().await?;
+        let client_connection: Connection = connection::get_socket(self.port).await?;
         let connection = self
             .tls_connector
             .connect(self.server_name.clone(), client_connection)
