@@ -16,27 +16,40 @@ app.get('/egress', async (req, res) => {
     res.send({...result.data})
   } catch (e) {
     console.log("Failed", e)
+    res.status(500).send(e)
   }
 })
+
+async function encrypt(payload) {
+  const result = await axios.post("http://127.0.0.1:9999/encrypt", payload, { headers: { 'api-key': 'placeholder' } });
+  return result.data;
+}
 
 app.post('/encrypt', async (req, res) => {
   try {
-    const result = await axios.post("http://127.0.0.1:9999/encrypt", req.body, { headers: { 'api-key': 'placeholder' } })
-    console.log("Encrypt result", result.data)
-    res.send(result.data)
+    const result = await encrypt(req.body);
+    res.send(result)
   } catch (e) {
     console.log("Failed", e)
+    res.status(500).send(e)
   }
 })
 
-app.post('/decrypt', async (req, res) => {
+async function decrypt(payload) {
+  const result = await axios.post("http://127.0.0.1:9999/decrypt", payload, { headers: { 'api-key': 'placeholder' } });
+  return result.data;
+}
+
+app.post('/crypto', async (req, res) => {
   try {
-    const result = await axios.post("http://127.0.0.1:9999/decrypt", req.body, { headers: { 'api-key': 'placeholder' } })
-    res.send({...result.data})
+    const encrypted = await encrypt(req.body);
+    const decrypted = await decrypt(encrypted);
+    res.send({ encrypted, decrypted });
   } catch (e) {
     console.log("Failed", e)
+    res.status(500).send(e)
   }
-})
+});
 
 app.post('/attestation-doc', async (req, res) => {
   try {
@@ -44,6 +57,7 @@ app.post('/attestation-doc', async (req, res) => {
     res.send(result.data)
   } catch (e) {
     console.log("Failed", e)
+    res.status(500).send(e)
   }
 })
 

@@ -36,16 +36,19 @@ describe('POST data to enclave', () => {
     });
 
     it('encrypts and decrypt via E3', async () => {
-        const data = { test: "test" }
-        const encrypted =  await allowAllCerts.post('https://localhost:443/encrypt', data, { headers: { 'api-key': 'placeholder' } }).catch((err) => {
-          console.error(err);
-          throw err;
-        })
-        const decrypted =  await allowAllCerts.post('https://localhost:443/decrypt', encrypted.data, { headers: { 'api-key': 'placeholder' } }).catch((err) => {
-          console.error(err);
-          throw err;
-        })
-        expect(data).to.deep.equal(decrypted.data)
+        const data = { test: "test", number: 123, bool: true }
+        // test full cycle crypto in the customer process
+        const { data: { decrypted } } =  await allowAllCerts.post('https://localhost:443/crypto', data, { headers: { 'api-key': 'placeholder' } })
+        expect(data).to.deep.equal(decrypted)
+    });
+
+    it('decrypts the request as it enters the enclave', async () => {
+      const data = { test: "test", number: 123, bool: true, obj: { nested: "yes" }, arr: [456] }
+      // test data plane stream decryption
+      const encryptResult =  await allowAllCerts.post('https://localhost:443/encrypt', data, { headers: { 'api-key': 'placeholder' } })
+      const decryptResult = await allowAllCerts.post('https://localhost:443/hello', encryptResult.data, { headers: { 'api-key': 'placeholder' } });
+      const { response, ...echoPayload } = decryptResult.data;
+      expect(data).to.deep.equal(echoPayload)
     });
 
     it('attestation doc', async () => {

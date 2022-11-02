@@ -1,5 +1,6 @@
 use super::parser;
 use crate::crypto::parser::Ciphertext;
+use bytes::BufMut;
 use bytes::{Buf, BytesMut};
 use thiserror::Error;
 use tokio_util::codec::Decoder;
@@ -18,9 +19,12 @@ pub enum IncomingStreamError {
     NomError,
     #[error("Failure occurred while parsing")]
     NomFailure,
+    #[error("Insufficient bytes given to stream decoder to complete parsing")]
+    Incomplete(Option<usize>),
     #[error("An IO error occurred")]
     IoError(#[from] std::io::Error),
 }
+
 #[derive(Default)]
 pub struct IncomingStreamDecoder {
     offset: usize,
@@ -50,13 +54,11 @@ impl IncomingStreamDecoder {
     pub fn create_reader<R: tokio::io::AsyncRead>(src: R) -> FramedRead<R, Self> {
         FramedRead::new(src, Self::default())
     }
-}
 
-impl Decoder for IncomingStreamDecoder {
-    type Item = IncomingFrame;
-    type Error = IncomingStreamError;
-
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+    fn decode_ciphertexts(
+        &mut self,
+        src: &mut BytesMut,
+    ) -> Result<Option<IncomingFrame>, IncomingStreamError> {
         if src.is_empty() {
             return Ok(None);
         }
@@ -69,13 +71,21 @@ impl Decoder for IncomingStreamDecoder {
 
         let (potential_ciphertext, prefix) = next_candidate.unwrap();
         let prefix_len = prefix.len();
-        if prefix_len > 0 {
-            let plaintext_bytes = self.create_slice(src, prefix_len);
+        // leave the quote in the buffer to match it in the ciphertext parser
+        let quote_precedes_cipher = (prefix_len > 0) && (&prefix[prefix_len - 1..] == b"\"");
+        let plaintext_len = if quote_precedes_cipher {
+            prefix_len - 1
+        } else {
+            prefix_len
+        };
+        if plaintext_len > 0 {
+            let plaintext_bytes = self.create_slice(src, plaintext_len);
             return Ok(Some(IncomingFrame::Plaintext(plaintext_bytes)));
         }
 
         return match parser::parse_ciphertexts(potential_ciphertext) {
-            Ok((_, Some(ciphertext))) => {
+            Ok((_, Some(mut ciphertext))) => {
+                ciphertext.set_leading_quote(quote_precedes_cipher);
                 src.advance(ciphertext.len());
                 let ciphertext_start = self.offset;
                 self.offset += ciphertext.len();
@@ -95,25 +105,56 @@ impl Decoder for IncomingStreamDecoder {
                     Ok(Some(IncomingFrame::Plaintext(entire_buffer.to_vec())))
                 }
             }
-            Err(nom::Err::Incomplete(_)) => Ok(None),
+            Err(nom::Err::Incomplete(nom::Needed::Size(known_size))) => {
+                Err(IncomingStreamError::Incomplete(Some(known_size.get())))
+            }
+            Err(nom::Err::Incomplete(_)) => Err(IncomingStreamError::Incomplete(None)),
             Err(nom::Err::Error(_)) => Err(IncomingStreamError::NomError),
             Err(nom::Err::Failure(_)) => Err(IncomingStreamError::NomFailure),
         };
     }
+}
 
-    fn decode_eof(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        if buf.remaining() == 0 {
+impl Decoder for IncomingStreamDecoder {
+    type Item = IncomingFrame;
+    type Error = IncomingStreamError;
+
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        self.decode_ciphertexts(src).or_else(|err| match err {
+            IncomingStreamError::Incomplete(_) => Ok(None),
+            err => Err(err),
+        })
+    }
+
+    fn decode_eof(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        if src.remaining() == 0 {
             return Ok(None);
         }
-        match self.decode(buf) {
-            Ok(Some(frame)) => Ok(Some(frame)),
-            // We've hit EOF, can assume any remainder is plaintext
-            Ok(None) => {
-                let remainder = buf.copy_to_bytes(buf.remaining());
-                Ok(Some(IncomingFrame::Plaintext(remainder.to_vec())))
+
+        self.decode_ciphertexts(src).or_else(|err| {
+            match err {
+                // handle edge case of ciphertext terminating file by appending a
+                // single character to trigger force a result from the optional quote parser
+                IncomingStreamError::Incomplete(Some(1)) => {
+                    src.put_bytes(0, 1);
+                    self.decode_ciphertexts(src)
+                        .or_else(|second_err| match second_err {
+                            IncomingStreamError::Incomplete(_) => {
+                                let remainder_less_injected_byte =
+                                    src.copy_to_bytes(src.remaining() - 1);
+                                Ok(Some(IncomingFrame::Plaintext(
+                                    remainder_less_injected_byte.to_vec(),
+                                )))
+                            }
+                            _ => Err(second_err),
+                        })
+                }
+                IncomingStreamError::Incomplete(_) => Ok(Some(IncomingFrame::Plaintext(
+                    self.create_slice(src, src.len()),
+                ))),
+                err => Err(err),
             }
-            Err(err) => Err(err),
-        }
+        })
     }
 }
 
@@ -272,5 +313,62 @@ mod tests {
             second_ciphertext,
             Some(IncomingFrame::Ciphertext((_second_ciphertext_range, _)))
         ));
+    }
+
+    #[tokio::test]
+    async fn test_stream_decoder_matching_ciphertexts_in_json() {
+        let ciphertext1 = "ev:Tk9D:GN/T3pluS6KLUdid:A+RiktKZbS4bBYTBN8nOpGIIJbeJ1vTIPhIcvD7XLQ/X:VdnTBKfoP+vzhfdcNawB1aRh7MQ:$";
+        let ciphertext2 = "ev:Tk9D:boolean:YGJVktHhdj3ds3wC:A6rkaTU8lez7NSBT8nTqbhBIu3tX4/lyH3aJVBUcGmLh:8hI5qEp32kWcVK367yaC09bDRbk:$";
+        let payload = serde_json::json!({
+          "a": ciphertext1,
+          "b": "foo bar baz",
+          "c": ciphertext2
+        });
+        let json_string = serde_json::to_string(&payload).unwrap();
+        // --------------------------------------------------------------------------------------------------------
+        // NOTE: serde_json sorts maps by their keys when serializing, tests are asserting the data in that order.
+        //       changing the keys will likely break the tests.
+        // --------------------------------------------------------------------------------------------------------
+        let mut mock_builder = Builder::new();
+        mock_builder.read(json_string.as_bytes());
+        let mock = mock_builder.build();
+
+        let mut reader = FramedRead::new(mock, IncomingStreamDecoder::default());
+        let first_key_in_json = reader.next().await.transpose().unwrap();
+        assert!(matches!(
+            first_key_in_json,
+            Some(IncomingFrame::Plaintext(_))
+        ));
+
+        let first_ciphertext = reader.next().await.transpose().unwrap(); // don't expect errors
+        assert!(matches!(
+            first_ciphertext,
+            Some(IncomingFrame::Ciphertext((_first_ciphertext_range, _)))
+        ));
+        if let IncomingFrame::Ciphertext((range, _)) = first_ciphertext.unwrap() {
+            let cipher = &json_string[range.0..range.1];
+            let ciphertext1_with_quotes = format!("\"{ciphertext1}\"");
+            assert_eq!(cipher, ciphertext1_with_quotes);
+        }
+
+        let second_plaintext = reader.next().await.transpose().unwrap(); // don't expect errors
+        assert!(matches!(
+            second_plaintext,
+            Some(IncomingFrame::Plaintext(_))
+        ));
+        let second_ciphertext = reader.next().await.transpose().unwrap(); // don't expect errors
+        assert!(matches!(
+            second_ciphertext,
+            Some(IncomingFrame::Ciphertext((_second_ciphertext_range, _)))
+        ));
+        // should remove the quotes here, so assert that the start and end positions are quotes
+        if let IncomingFrame::Ciphertext((range, _)) = second_ciphertext.unwrap() {
+            let second_cipher = &json_string[range.0..range.1];
+            let ciphertext2_with_quotes = format!("\"{ciphertext2}\"");
+            assert_eq!(second_cipher, ciphertext2_with_quotes);
+        } else {
+            // second match should be a ciphertext
+            assert!(false);
+        }
     }
 }

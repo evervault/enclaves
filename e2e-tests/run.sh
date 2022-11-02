@@ -1,7 +1,10 @@
 set -e 
 
 # kill container if it is left running by hanging test
-docker kill cages-test-container || true
+if [[ -z "${CI}" ]];
+then
+  docker kill cages-test-container || true
+fi
 
 # install the node modules for customer process and test script
 cd e2e-tests && npm install && cd ..
@@ -19,7 +22,7 @@ if [[ -z "${CI}" ]];
 then
   cargo build --features network_egress --release --target x86_64-unknown-linux-musl
   echo "Building cage container"
-  docker build --no-cache --platform=linux/amd64 --build-arg MOCK_CRYPTO_CERT=/services/testing.crt --build-arg MOCK_CRYPTO_KEY=/services/testing.key -f e2e-tests/Dockerfile -t cages-test .
+  docker build --platform=linux/amd64 --build-arg MOCK_CRYPTO_CERT=/services/testing.crt --build-arg MOCK_CRYPTO_KEY=/services/testing.key -f e2e-tests/Dockerfile -t cages-test .
 else
   echo "Building cage container CI"
   docker build --build-arg=CI=true --build-arg MOCK_CRYPTO_CERT="$MOCK_CRYPTO_CERT" --build-arg MOCK_CRYPTO_KEY="$MOCK_CRYPTO_KEY" --platform=linux/amd64 -f e2e-tests/Dockerfile -t cages-test .

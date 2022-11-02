@@ -201,9 +201,15 @@ pub async fn handle_standard_request(
         println!("Decryption complete");
         decrypted.data().iter().rev().for_each(|entry| {
             let range = entry.range();
-            let _: Vec<u8> = bytes_vec
-                .splice(range.0..range.1, entry.value().bytes())
-                .collect();
+            let value_in_bytes = serde_json::to_vec(entry.value());
+            match value_in_bytes {
+                Ok(value) => {
+                    let _: Vec<u8> = bytes_vec.splice(range.0..range.1, value).collect();
+                }
+                Err(err) => {
+                    eprintln!("Failed to convert Json Value into bytes. Error {}", err);
+                }
+            }
         });
     }
 

@@ -74,11 +74,34 @@ fn get_router() -> Router {
     .route("/attestation-doc", post(attestation_handler))
 }
 
-fn object_map<F>(obj: &mut Value, map_fn: F) 
-  where
-    F: FnMut(&mut Value) -> ()
-{
-  obj.as_object_mut().unwrap().values_mut().for_each(map_fn);
+fn encrypt(value: &mut Value) {
+  if value.is_object() {
+    value.as_object_mut().unwrap().values_mut().for_each(encrypt);
+  } else if value.is_array() {
+    value.as_array_mut().unwrap().iter_mut().for_each(encrypt);
+  } else {
+    let mut val = value.clone();
+    let to_encrypt = convert_value_to_string(&value);
+    let encrypted_data_result = KEY_PAIR.encrypt(
+      to_encrypt, 
+      Datatype::try_from(&mut val).unwrap(), 
+      false
+    ).unwrap();
+    *value = Value::String(encrypted_data_result);
+  }
+}
+
+fn decrypt(value: &mut Value) {
+  if value.is_object() {
+    value.as_object_mut().unwrap().values_mut().for_each(decrypt);
+  } else if value.is_array() {
+    value.as_array_mut().unwrap().iter_mut().for_each(decrypt);
+  } else if value.is_string() { // all encrypted values are strings
+    let to_decrypt = convert_value_to_string(&value); // convert from serde value string to std string
+    if let Ok(decrypted) = KEY_PAIR.decrypt(to_decrypt) {
+      *value = decrypted;
+    }
+  }
 }
 
 fn convert_value_to_string(value: &Value) -> String {
@@ -90,30 +113,14 @@ fn convert_value_to_string(value: &Value) -> String {
 async fn encryption_handler(
   extract::Json(mut request_payload): extract::Json<RequestPayload>
 ) -> Result<Json<RequestPayload>, Infallible> {
-  object_map(request_payload.data_mut(), |value| {
-    let mut val = value.clone();
-    let to_encrypt = convert_value_to_string(&value);
-    let encrypted_data_result = KEY_PAIR.encrypt(
-      to_encrypt, 
-      Datatype::try_from(&mut val).unwrap(), 
-      true
-    ).unwrap();
-    *value = Value::String(encrypted_data_result);
-  });
-  
+  encrypt(request_payload.data_mut());
   Ok(Json(request_payload))
 }
 
 async fn decryption_handler(
   extract::Json(mut request_payload): extract::Json<RequestPayload>
 ) -> Result<Json<RequestPayload>, Infallible> {
-  object_map(request_payload.data_mut(), |value| {
-    let to_decrypt = convert_value_to_string(&value);
-    let decrypted = KEY_PAIR.decrypt(
-      to_decrypt
-    ).unwrap();
-    *value = decrypted;
-  });
+  decrypt(request_payload.data_mut());
   Ok(Json(request_payload))
 }
 
@@ -133,7 +140,7 @@ async fn attestation_handler() -> Result<Vec<u8>, Infallible> {
   Ok(serde_cbor::to_vec(&ad).unwrap())
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct RequestPayload {
   app_uuid: String,
   team_uuid: String,
