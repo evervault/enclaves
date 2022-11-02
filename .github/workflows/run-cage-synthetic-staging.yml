@@ -32,7 +32,7 @@ jobs:
       - name: Run testing client
         env:
           ENVIRONMENT: staging
-          CAGE_NAME: synthetic-cage
+          CAGE_NAME: synthetic-testing-cage
           APP_UUID: app_1bba8ba15402
           EV_API_KEY: ${{ secrets.EV_API_KEY_STAGING }}
           NODE_TLS_REJECT_UNAUTHORIZED: 0

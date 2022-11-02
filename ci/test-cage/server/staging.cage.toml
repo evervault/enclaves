@@ -1,5 +1,5 @@
-name = "synthetic-cage"
-uuid = "cage_a471b693f91d"
+name = "synthetic-testing-cage"
+uuid = "cage_25ba0d91fee4"
 app_uuid = "app_1bba8ba15402"
 team_uuid = "team_478144181bec"
 debug = true
