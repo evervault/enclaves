@@ -1,5 +1,8 @@
 FROM amazonlinux:2
 
+#Patch vuln https://alas.aws.amazon.com/AL2/ALAS-2022-1776.html
+yum update golang
+
 RUN amazon-linux-extras install -y aws-nitro-enclaves-cli
 RUN yum -y update ; yum install wget -y
 
