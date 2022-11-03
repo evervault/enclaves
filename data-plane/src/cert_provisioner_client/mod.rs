@@ -2,7 +2,9 @@ mod tls_verifier;
 
 use hyper::{Body, Response};
 use serde::de::DeserializeOwned;
-use shared::server::config_server::requests::{ConfigServerPayload, GetCertRequestDataPlane};
+use shared::server::config_server::requests::{
+    ConfigServerPayload, GetCertRequestDataPlane, GetCertResponseDataPlane,
+};
 use tokio_rustls::rustls::ServerName;
 use tokio_rustls::TlsConnector;
 
@@ -64,7 +66,7 @@ impl CertProvisionerClient {
     pub async fn get_cert(
         &self,
         token: String,
-    ) -> Result<GetCertRequestDataPlane, CertProvisionerError> {
+    ) -> Result<GetCertResponseDataPlane, CertProvisionerError> {
         let attestation_doc = self.get_attestation_doc(token)?;
 
         let body = GetCertRequestDataPlane::new(attestation_doc)

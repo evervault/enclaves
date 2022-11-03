@@ -3,8 +3,9 @@ use hyper::client::conn::{Connection as HyperConnection, SendRequest};
 use hyper::{Body, Response};
 
 use serde::de::DeserializeOwned;
-use shared::server::cert::{ConfigServerPayload, GetCertTokenRequestDataPlane};
-use shared::server::config_server::requests::GetCertTokenResponseDataPlane;
+use shared::server::config_server::requests::{
+    ConfigServerPayload, GetCertTokenRequestDataPlane, GetCertTokenResponseDataPlane,
+};
 use shared::server::config_server::routes::ConfigServerPath;
 
 use crate::connection;
@@ -14,7 +15,17 @@ use connection::Connection;
 
 pub struct ConfigClient {}
 
+impl Default for ConfigClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConfigClient {
+    pub fn new() -> Self {
+        Self {}
+    }
+
     fn get_uri(&self, path: ConfigServerPath) -> String {
         format!("http://127.0.0.1:{}{}", shared::ENCLAVE_CONFIG_PORT, path)
     }
@@ -71,7 +82,7 @@ impl ConfigClient {
     }
 
     pub async fn get_cert_token(&self) -> Result<GetCertTokenResponseDataPlane> {
-        let payload = GetCertTokenRequestDataPlane::default().into_body()?;
+        let payload = GetCertTokenRequestDataPlane::new().into_body()?;
 
         let response = self
             .send(ConfigServerPath::GetCertToken, "GET", payload)

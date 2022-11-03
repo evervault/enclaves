@@ -18,6 +18,7 @@ pub enum TlsError {
     OpensslError(#[from] openssl::error::ErrorStack),
     SignError(#[from] SignError),
     PemError(#[from] pem::PemError),
+    CertProvisionerError(String),
 }
 
 impl std::fmt::Display for TlsError {

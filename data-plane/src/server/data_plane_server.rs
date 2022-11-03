@@ -26,7 +26,8 @@ where
     let cage_context = CageContext::try_from_env().expect("Missing required Cage context elements");
     let mut server = TlsServerBuilder::new()
         .with_server(tcp_server)
-        .with_self_signed_cert(cage_context.clone())
+        .with_attestable_cert(cage_context.clone())
+        .await
         .expect("Failed to create tls server");
     let http_server = conn::Http::new();
     let e3_client = Arc::new(E3Client::new());

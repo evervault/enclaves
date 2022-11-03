@@ -43,6 +43,18 @@ pub mod requests {
     #[derive(Serialize, Deserialize, Debug)]
     pub struct GetCertTokenRequestDataPlane;
 
+    impl Default for GetCertTokenRequestDataPlane {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
+    impl GetCertTokenRequestDataPlane {
+        pub fn new() -> Self {
+            Self {}
+        }
+    }
+
     impl ConfigServerPayload for GetCertTokenRequestDataPlane {
         fn into_body(self) -> ServerResult<hyper::Body> {
             Ok(hyper::Body::empty())
@@ -59,6 +71,10 @@ pub mod requests {
     impl GetCertTokenResponseDataPlane {
         pub fn new(token: String) -> Self {
             Self { token }
+        }
+
+        pub fn token(&self) -> String {
+            self.token.clone()
         }
     }
 
@@ -81,14 +97,26 @@ pub mod requests {
 
     #[derive(Serialize, Deserialize, Debug)]
     pub struct GetCertResponseDataPlane {
-        cert: String,
+        intermediate_cert: String,
+        key_pair: String,
     }
 
     impl ConfigServerPayload for GetCertResponseDataPlane {}
 
     impl GetCertResponseDataPlane {
-        pub fn new(cert: String) -> Self {
-            Self { cert }
+        pub fn new(intermediate_cert: String, key_pair: String) -> Self {
+            Self {
+                intermediate_cert,
+                key_pair,
+            }
+        }
+
+        pub fn cert(&self) -> String {
+            self.intermediate_cert.clone()
+        }
+
+        pub fn key_pair(&self) -> String {
+            self.key_pair.clone()
         }
     }
 }

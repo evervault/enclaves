@@ -7,14 +7,13 @@ use hyper::{
     Body, Response,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::net::SocketAddr;
 use tokio::net::TcpStream;
 use tokio_rustls::{
     client::TlsStream,
     rustls::{Certificate, PrivateKey, RootCertStore, ServerName},
 };
 
-const CERT_PROVISIONER_MTLS_PORT: i32 = 444;
+const CERT_PROVISIONER_MTLS_PORT: i32 = 3443;
 
 async fn get_socket() -> Result<TcpStream> {
     let addr = format!(
@@ -22,16 +21,8 @@ async fn get_socket() -> Result<TcpStream> {
         configuration::get_cert_provisoner_host(),
         CERT_PROVISIONER_MTLS_PORT
     );
-    let socket_addr: SocketAddr = addr.as_str().parse().unwrap_or_else(|_| {
-        panic!(
-            "Unable to create socket address from host and port {}",
-            addr
-        );
-    });
 
-    TcpStream::connect(socket_addr)
-        .await
-        .map_err(ServerError::Io)
+    TcpStream::connect(addr).await.map_err(ServerError::Io)
 }
 
 fn get_mtls_connector(
@@ -138,8 +129,13 @@ impl CertProvisionerClient {
 
     pub async fn get_token(&self) -> Result<GetCertTokenResponseControlPlane> {
         let cage_uuid = configuration::get_cage_uuid();
-        let cage_version = configuration::get_cage_version();
-        let body = GetCertTokenRequestControlPlane::new(cage_uuid, cage_version).into_body()?;
+        let version_uuid = configuration::get_cage_version();
+        let cage_name = configuration::get_cage_name();
+        let app_uuid = configuration::get_app_uuid();
+
+        let body =
+            GetCertTokenRequestControlPlane::new(cage_uuid, version_uuid, cage_name, app_uuid)
+                .into_body()?;
 
         let response = self.send("/cert/token", "GET", body, true).await?;
         let result: GetCertTokenResponseControlPlane = self.parse_response(response).await?;
@@ -164,15 +160,19 @@ pub trait CertProvisionerPayload: Sized + Serialize {
 pub struct GetCertTokenRequestControlPlane {
     cage_uuid: String,
     version_uuid: String,
+    cage_name: String,
+    app_uuid: String,
 }
 
 impl CertProvisionerPayload for GetCertTokenRequestControlPlane {}
 
 impl GetCertTokenRequestControlPlane {
-    fn new(cage_uuid: String, version_uuid: String) -> Self {
+    fn new(cage_uuid: String, version_uuid: String, cage_name: String, app_uuid: String) -> Self {
         Self {
             cage_uuid,
             version_uuid,
+            cage_name,
+            app_uuid,
         }
     }
 }

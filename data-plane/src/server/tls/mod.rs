@@ -1,4 +1,5 @@
 mod cert_resolver;
+mod inter_ca_retreiver;
 mod tls_server;
 
 pub use tls_server::*;
@@ -14,6 +15,7 @@ pub mod provisioner {
     use openssl::pkey::{PKey, Private};
     use openssl::x509::extension::{BasicConstraints, KeyUsage, SubjectKeyIdentifier};
     use openssl::x509::{X509NameBuilder, X509};
+    #[allow(unused)]
     pub fn generate_ca() -> Result<(X509, PKey<Private>), ErrorStack> {
         let ec_group = EcGroup::from_curve_name(Nid::SECP384R1)?;
         let ec_key = EcKey::generate(ec_group.as_ref())?;

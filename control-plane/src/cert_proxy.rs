@@ -117,13 +117,13 @@ impl CertProxy {
         internal_dns::get_ip_for_host_with_dns_resolver(
             &self.dns_resolver,
             cert_pro_host.as_str(),
-            443,
+            3000,
         )
         .await
     }
 
     #[cfg(not(feature = "enclave"))]
     async fn get_ip_for_cert_provisioner(&self) -> Result<Option<SocketAddr>> {
-        internal_dns::get_ip_for_localhost(7675)
+        internal_dns::get_ip_for_localhost(3000)
     }
 }

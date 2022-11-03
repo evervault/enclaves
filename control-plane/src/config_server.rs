@@ -4,8 +4,7 @@ use crate::error::Result;
 use hyper::server::conn;
 use hyper::service::service_fn;
 use hyper::{Body, Request, Response};
-
-use shared::server::cert::{ConfigServerPayload, GetCertTokenResponseDataPlane};
+use shared::server::config_server::requests::{ConfigServerPayload, GetCertTokenResponseDataPlane};
 use shared::server::config_server::routes::ConfigServerPath;
 use shared::server::Listener;
 #[cfg(not(feature = "enclave"))]
@@ -99,14 +98,14 @@ async fn handle_incoming_request(
 async fn handle_cert_token_request(
     cert_provisioner_client: CertProvisionerClient,
 ) -> Response<Body> {
-    println!("Received request from to get token from cert provisioner");
     let token_response = match cert_provisioner_client.get_token().await {
         Ok(res) => res,
         Err(err) => {
+            println!("Request to cert provisioner for token failed. Err: {}", err);
             return build_error_response(format!(
                 "Request to cert provisioner for token failed. Err: {}",
                 err
-            ))
+            ));
         }
     };
 
@@ -114,7 +113,7 @@ async fn handle_cert_token_request(
         Ok(body) => body,
         Err(err) => {
             return build_error_response(format!(
-                "Failed to serialise client provisoiner token response: {}",
+                "Failed to serialise client provisioner token response: {}",
                 err
             ))
         }
@@ -125,7 +124,7 @@ async fn handle_cert_token_request(
         .header("Content-Type", "application/json")
         .body(body);
 
-    println!("Token returned from cert provisioner, sending in response back to enclave");
+    println!("Token returned from cert provisioner, sending it back to the cage");
 
     res.unwrap_or_else(|err| {
         build_error_response(format!(
@@ -144,6 +143,7 @@ fn build_bad_request_response() -> Response<Body> {
 }
 
 fn build_error_response(body_msg: String) -> Response<Body> {
+    println!("Request failed: {}", body_msg);
     Response::builder()
         .status(500)
         .header("Content-Type", "application/json")

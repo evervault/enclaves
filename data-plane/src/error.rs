@@ -39,6 +39,8 @@ pub enum Error {
     Hyper(#[from] hyper::Error),
     #[error("An error occurred — {0}")]
     ConfigServer(String),
+    #[error("An error occurred requesting intermediate cert from the cert provisioner — {0}")]
+    CertServer(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

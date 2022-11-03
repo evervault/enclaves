@@ -8,6 +8,7 @@ use tokio_rustls::server::TlsStream;
 use tokio_rustls::TlsAcceptor;
 
 use super::cert_resolver::SelfSignedCertResolver;
+use super::inter_ca_retreiver;
 
 use crate::server::error::ServerResult;
 use crate::server::error::TlsError;
@@ -62,6 +63,7 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
     }
 
     /// Use self signed cert resolver to handle incoming connections
+    #[allow(unused)]
     pub fn with_self_signed_cert(self, cage_ctx: CageContext) -> ServerResult<TlsServer<S>> {
         let self_signed_cert_resolver = SelfSignedCertResolver::new(cage_ctx)?;
         let config =
@@ -70,9 +72,13 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
         Ok(TlsServer::new(config, self.tcp_server))
     }
 
-    #[allow(unused)]
     pub async fn with_attestable_cert(self, cage_ctx: CageContext) -> ServerResult<TlsServer<S>> {
-        let (ca_cert, ca_private_key) = super::provisioner::generate_ca()?;
+        let inter_ca_retriever = inter_ca_retreiver::InterCaRetreiver::new();
+        let (ca_cert, ca_private_key) = inter_ca_retriever
+            .get_intermediate_ca()
+            .await
+            .map_err(|err| TlsError::CertProvisionerError(err.to_string()))?;
+        println!("Received intermediate CA from cert provisioner. Using it with TLS Server.");
         let attestable_cert_resolver =
             super::cert_resolver::AttestableCertResolver::new(ca_cert, ca_private_key, cage_ctx)?;
         let tls_config =

@@ -1,4 +1,3 @@
-pub mod cert;
 pub mod config_server;
 pub mod error;
 pub mod health;

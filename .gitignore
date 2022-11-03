@@ -6,6 +6,8 @@ e2e-tests/customer-process/node_modules
 data-plane/*.pem
 .cargo
 e2e-tests/testing-certs/*
+e2e-tests/mtls-testing-certs/ca/*
+!e2e-tests/mtls-testing-certs/ca/generate-certs.sh
 e2e-tests/health-check-response.txt
 ci/**/node_modules
 .vscode

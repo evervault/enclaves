@@ -1,3 +1,5 @@
+use control_plane::clients::{cert_provisioner, mtls_config};
+use control_plane::{cert_proxy, config_server};
 use shared::{print_version, utils::pipe_streams, ENCLAVE_CONNECT_PORT};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
@@ -22,12 +24,31 @@ async fn main() -> Result<()> {
     print_version!("Control Plane");
     println!("Starting control plane on {}", CONTROL_PLANE_PORT);
     let e3_proxy = e3proxy::E3Proxy::new();
+    let cert_proxy = cert_proxy::CertProxy::new();
+
+    let mtls_config = mtls_config::CertProvisionerMtlsCerts::from_env_vars()
+        .expect("Couldn't read in env vars for mtls certs");
+
+    println!("MTLS Certs loaded for Cert Provisioner");
+
+    let cert_provisioner_client = cert_provisioner::CertProvisionerClient::new(
+        mtls_config.client_key_pair(),
+        mtls_config.root_cert(),
+    );
+    let config_server = config_server::ConfigServer::new(cert_provisioner_client);
+
     #[cfg(not(feature = "network_egress"))]
     {
         listen_for_shutdown_signal();
         let mut health_check_server = health::HealthCheckServer::new().await?;
-        let (tcp_result, e3_result, health_check_result) =
-            tokio::join!(tcp_server(), e3_proxy.listen(), health_check_server.start(),);
+
+        let (tcp_result, e3_result, health_check_result, config_server_result, cert_proxy_result) = tokio::join!(
+            tcp_server(),
+            e3_proxy.listen(),
+            health_check_server.start(),
+            config_server.listen(),
+            cert_proxy.listen()
+        );
 
         if let Err(err) = tcp_result {
             eprintln!("Error running TCP server on host: {:?}", err);
@@ -40,6 +61,14 @@ async fn main() -> Result<()> {
         if let Err(err) = health_check_result {
             eprintln!("Error running health check server on host: {:?}", err);
         }
+
+        if let Err(err) = config_server_result {
+            eprintln!("Error running config server on host: {:?}", err);
+        }
+
+        if let Err(err) = cert_proxy_result {
+            eprintln!("Error running cert proxy on host: {:?}", err);
+        }
     }
 
     #[cfg(feature = "network_egress")]
@@ -49,12 +78,22 @@ async fn main() -> Result<()> {
         let parsed_ip = control_plane::dnsproxy::read_dns_server_ip_from_env_var()
             .unwrap_or(control_plane::dnsproxy::CLOUDFLARE_DNS_SERVER);
         let dns_proxy_server = control_plane::dnsproxy::DnsProxy::new(parsed_ip);
-        let (tcp_result, dns_result, egress_result, e3_result, health_check_result) = tokio::join!(
+        let (
+            tcp_result,
+            dns_result,
+            egress_result,
+            e3_result,
+            health_check_result,
+            config_server_result,
+            cert_proxy_result,
+        ) = tokio::join!(
             tcp_server(),
             dns_proxy_server.listen(),
             control_plane::egressproxy::EgressProxy::listen(),
             e3_proxy.listen(),
             health_check_server.start(),
+            config_server.listen(),
+            cert_proxy.listen()
         );
 
         if let Err(tcp_err) = tcp_result {
@@ -75,6 +114,14 @@ async fn main() -> Result<()> {
 
         if let Err(err) = health_check_result {
             eprintln!("Error running health check server on host: {:?}", err);
+        }
+
+        if let Err(err) = config_server_result {
+            eprintln!("Error running config server on host: {:?}", err);
+        }
+
+        if let Err(err) = cert_proxy_result {
+            eprintln!("Error running cert proxy on host: {:?}", err);
         }
     }
 

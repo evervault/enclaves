@@ -11,7 +11,7 @@ describe('POST data to enclave', () => {
     });
     it('enclave responds and echos back body', () => {
         console.log('Sending post request to enclave');
-        return allowAllCerts.post('https://localhost:443/hello',{ secret: 'ev:123' }, { headers: { 'api-key': 'placeholder' } }).then((result) => {
+        return allowAllCerts.post('https://cage.localhost:443/hello',{ secret: 'ev:123' }, { headers: { 'api-key': 'placeholder' } }).then((result) => {
             console.log('Post request sent to the enclave');
             expect(result.data).to.deep.equal({ response: 'Hello from enclave',  secret: 'ev:123'});
         }).catch((err) => {
@@ -22,7 +22,7 @@ describe('POST data to enclave', () => {
 
     it('calls out to the internet', () => {
         console.log('Sending get request to the enclave');
-        return allowAllCerts.get('https://localhost:443/egress', { headers: { 'api-key': 'placeholder' } }).then((result) => {
+        return allowAllCerts.get('https://cage.localhost:443/egress', { headers: { 'api-key': 'placeholder' } }).then((result) => {
             console.log('Get request sent to the enclave');
             expect(result.data).to.deep.equal({
                 userId :1,
@@ -38,21 +38,21 @@ describe('POST data to enclave', () => {
     it('encrypts and decrypt via E3', async () => {
         const data = { test: "test", number: 123, bool: true }
         // test full cycle crypto in the customer process
-        const { data: { decrypted } } =  await allowAllCerts.post('https://localhost:443/crypto', data, { headers: { 'api-key': 'placeholder' } })
+        const { data: { decrypted } } =  await allowAllCerts.post('https://cage.localhost:443/crypto', data, { headers: { 'api-key': 'placeholder' } })
         expect(data).to.deep.equal(decrypted)
     });
 
     it('decrypts the request as it enters the enclave', async () => {
       const data = { test: "test", number: 123, bool: true, obj: { nested: "yes" }, arr: [456] }
       // test data plane stream decryption
-      const encryptResult =  await allowAllCerts.post('https://localhost:443/encrypt', data, { headers: { 'api-key': 'placeholder' } })
-      const decryptResult = await allowAllCerts.post('https://localhost:443/hello', encryptResult.data, { headers: { 'api-key': 'placeholder' } });
+      const encryptResult =  await allowAllCerts.post('https://cage.localhost:443/encrypt', data, { headers: { 'api-key': 'placeholder' } })
+      const decryptResult = await allowAllCerts.post('https://cage.localhost:443/hello', encryptResult.data, { headers: { 'api-key': 'placeholder' } });
       const { response, ...echoPayload } = decryptResult.data;
       expect(data).to.deep.equal(echoPayload)
     });
 
     it('attestation doc', async () => {
-        const doc =  await allowAllCerts.post('https://localhost:443/attestation-doc', {}, { headers: { 'api-key': 'placeholder' }, responseType: "arraybuffer" }).catch((err) => {
+        const doc =  await allowAllCerts.post('https://cage.localhost:443/attestation-doc', {}, { headers: { 'api-key': 'placeholder' }, responseType: "arraybuffer" }).catch((err) => {
           console.error(err);
           throw err;
         })

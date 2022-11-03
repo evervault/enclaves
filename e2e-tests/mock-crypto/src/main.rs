@@ -113,6 +113,7 @@ fn convert_value_to_string(value: &Value) -> String {
 async fn encryption_handler(
   extract::Json(mut request_payload): extract::Json<RequestPayload>
 ) -> Result<Json<RequestPayload>, Infallible> {
+  println!("[Mock Crypto API] - Recieved request to encrypt!");
   encrypt(request_payload.data_mut());
   Ok(Json(request_payload))
 }
@@ -120,6 +121,7 @@ async fn encryption_handler(
 async fn decryption_handler(
   extract::Json(mut request_payload): extract::Json<RequestPayload>
 ) -> Result<Json<RequestPayload>, Infallible> {
+  println!("[Mock Crypto API] - Recieved request to decrypt!");
   decrypt(request_payload.data_mut());
   Ok(Json(request_payload))
 }
