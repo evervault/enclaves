@@ -75,7 +75,10 @@ async fn start_data_plane(data_plane_port: u16) {
     println!("Data plane TCP server created");
 
     #[cfg(feature = "tls_termination")]
-    data_plane::server::data_plane_server::run(server, data_plane_port).await;
+    {
+        println!("TLS Termination enabled in dataplane. Running tls server.");
+        data_plane::server::data_plane_server::run(server, data_plane_port).await;
+    }
     #[cfg(not(feature = "tls_termination"))]
     run_tcp_passthrough(server, data_plane_port).await;
 }

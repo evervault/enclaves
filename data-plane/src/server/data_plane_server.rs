@@ -31,6 +31,7 @@ where
         .expect("Failed to create tls server");
     let http_server = conn::Http::new();
     let e3_client = Arc::new(E3Client::new());
+    println!("TLS Server Created - Listening for new connections.");
     loop {
         let stream = match server.accept().await {
             Ok(stream) => stream,

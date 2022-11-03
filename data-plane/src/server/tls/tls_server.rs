@@ -65,6 +65,7 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
     /// Use self signed cert resolver to handle incoming connections
     #[allow(unused)]
     pub fn with_self_signed_cert(self, cage_ctx: CageContext) -> ServerResult<TlsServer<S>> {
+        println!("Creating TLSServer with self signed cert");
         let self_signed_cert_resolver = SelfSignedCertResolver::new(cage_ctx)?;
         let config =
             Self::get_base_config().with_cert_resolver(Arc::new(self_signed_cert_resolver));
@@ -73,6 +74,7 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
     }
 
     pub async fn with_attestable_cert(self, cage_ctx: CageContext) -> ServerResult<TlsServer<S>> {
+        println!("Creating TLSServer with attestable cert");
         let inter_ca_retriever = inter_ca_retreiver::InterCaRetreiver::new();
         let (ca_cert, ca_private_key) = inter_ca_retriever
             .get_intermediate_ca()
