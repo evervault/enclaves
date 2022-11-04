@@ -8,7 +8,7 @@ pub enum ClientError {
     HyperError(#[from] hyper::Error),
     #[error("Deserialization Error — {0:?}")]
     SerdeError(#[from] serde_json::Error),
-    #[error("Request to E3 failed with status: {0:?}")]
+    #[error("Request to server failed with status: {0:?}")]
     FailedRequest(hyper::StatusCode),
     #[error("Client Error {0:?}")]
     General(String),
