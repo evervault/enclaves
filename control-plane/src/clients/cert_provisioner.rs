@@ -22,7 +22,15 @@ async fn get_socket() -> Result<TcpStream> {
         CERT_PROVISIONER_MTLS_PORT
     );
 
-    TcpStream::connect(addr).await.map_err(ServerError::Io)
+    println!("Attempting to get socket connection to {:?}", addr);
+
+    let socket_connection = TcpStream::connect(addr.clone())
+        .await
+        .map_err(ServerError::Io);
+
+    println!("Got socket connection to {:?}", addr);
+
+    socket_connection
 }
 
 fn get_mtls_connector(
