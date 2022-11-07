@@ -137,13 +137,12 @@ impl CertProvisionerClient {
 
     pub async fn get_token(&self) -> Result<GetCertTokenResponseControlPlane> {
         let cage_uuid = configuration::get_cage_uuid();
-        let version_uuid = configuration::get_cage_version();
+        let version_id = configuration::get_cage_version();
         let cage_name = configuration::get_cage_name();
         let app_uuid = configuration::get_app_uuid();
 
-        let body =
-            GetCertTokenRequestControlPlane::new(cage_uuid, version_uuid, cage_name, app_uuid)
-                .into_body()?;
+        let body = GetCertTokenRequestControlPlane::new(cage_uuid, version_id, cage_name, app_uuid)
+            .into_body()?;
 
         let response = self.send("/cert/token", "GET", body, true).await?;
         let result: GetCertTokenResponseControlPlane = self.parse_response(response).await?;
@@ -167,7 +166,7 @@ pub trait CertProvisionerPayload: Sized + Serialize {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GetCertTokenRequestControlPlane {
     cage_uuid: String,
-    version_uuid: String,
+    version_id: String,
     cage_name: String,
     app_uuid: String,
 }
@@ -175,10 +174,10 @@ pub struct GetCertTokenRequestControlPlane {
 impl CertProvisionerPayload for GetCertTokenRequestControlPlane {}
 
 impl GetCertTokenRequestControlPlane {
-    fn new(cage_uuid: String, version_uuid: String, cage_name: String, app_uuid: String) -> Self {
+    fn new(cage_uuid: String, version_id: String, cage_name: String, app_uuid: String) -> Self {
         Self {
             cage_uuid,
-            version_uuid,
+            version_id,
             cage_name,
             app_uuid,
         }
