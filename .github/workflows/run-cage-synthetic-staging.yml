@@ -14,7 +14,7 @@ jobs:
       - name: Deploy Cage
         env:
           EV_API_KEY: ${{ secrets.EV_API_KEY_STAGING }}
-          EV_API_URL: https://api.evervault.io
+          EV_DOMAIN: evervault.io
           EV_CERT: ${{ secrets.SYNTHETIC_CERT_STAGING }}
           EV_KEY: ${{ secrets.SYNTHETIC_KEY_STAGING }}
           TMPDIR: /tmp/
