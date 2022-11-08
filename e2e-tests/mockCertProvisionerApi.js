@@ -33,6 +33,7 @@ app.use(mutualTlsMiddleware());
 
 app.get('/cert/token', async (req, res) => {
   try {
+    console.log(req.body);
     const { cageUuid, cage_version,  app_uuid} = req.body
     console.log("Received token request from cage control plane")
     var result = {

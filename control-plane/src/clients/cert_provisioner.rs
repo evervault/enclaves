@@ -53,6 +53,17 @@ fn get_mtls_connector(
     tokio_rustls::TlsConnector::from(std::sync::Arc::new(mtls_connector_config))
 }
 
+fn get_token_request_metadata_from_env() -> (String, i32, String, String) {
+    let cage_uuid = configuration::get_cage_uuid();
+    let version_id = configuration::get_cage_version()
+        .parse::<i32>()
+        .expect("Can't parse Cage version ENV var into integer");
+    let cage_name = configuration::get_cage_name();
+    let app_uuid = configuration::get_app_uuid();
+
+    (cage_uuid, version_id, cage_name, app_uuid)
+}
+
 #[derive(Clone)]
 pub struct CertProvisionerClient {
     mtls_connector: tokio_rustls::TlsConnector,
@@ -136,10 +147,7 @@ impl CertProvisionerClient {
     }
 
     pub async fn get_token(&self) -> Result<GetCertTokenResponseControlPlane> {
-        let cage_uuid = configuration::get_cage_uuid();
-        let version_id = configuration::get_cage_version();
-        let cage_name = configuration::get_cage_name();
-        let app_uuid = configuration::get_app_uuid();
+        let (cage_uuid, version_id, cage_name, app_uuid) = get_token_request_metadata_from_env();
 
         let body = GetCertTokenRequestControlPlane::new(cage_uuid, version_id, cage_name, app_uuid)
             .into_body()?;
@@ -166,7 +174,7 @@ pub trait CertProvisionerPayload: Sized + Serialize {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GetCertTokenRequestControlPlane {
     cage_uuid: String,
-    version_id: String,
+    version_id: i32,
     cage_name: String,
     app_uuid: String,
 }
@@ -174,7 +182,7 @@ pub struct GetCertTokenRequestControlPlane {
 impl CertProvisionerPayload for GetCertTokenRequestControlPlane {}
 
 impl GetCertTokenRequestControlPlane {
-    fn new(cage_uuid: String, version_id: String, cage_name: String, app_uuid: String) -> Self {
+    fn new(cage_uuid: String, version_id: i32, cage_name: String, app_uuid: String) -> Self {
         Self {
             cage_uuid,
             version_id,
