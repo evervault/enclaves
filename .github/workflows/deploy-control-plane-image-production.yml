@@ -49,7 +49,6 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-latest
 
   deploy_control_plane_image_without_egress:
     runs-on: ubuntu-latest
@@ -93,4 +92,29 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-latest
+
+  mark_control_plane_images_as_latest:
+    run-on: ubuntu-latest
+    needs: [deploy_control_plane_image_with_egress, deploy_control_plane_image_without_egress]
+    environment:
+      name: production
+
+    steps:
+      - name: Configure Production AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PRODUCTION }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PRODUCTION }}
+          aws-region: us-east-1
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      - name: Push latest tag to image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: evervault/control-plane
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-latest
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-latest
+      
