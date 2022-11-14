@@ -7,6 +7,16 @@ name: Deploy new control plane image to production
 env:
   LINUX_TARGET: x86_64-unknown-linux-musl
 jobs:
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+    steps:
+      - id: get-version
+        run: |
+          echo "using version tag ${GITHUB_REF:11}"
+          echo ::set-output name=version::${GITHUB_REF:11}
+
   deploy_control_plane_image_with_egress:
     runs-on: ubuntu-latest
 
@@ -38,17 +48,17 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: evervault/control-plane
-          IMAGE_TAG: ${{ github.sha }}
+          VERSION_TAG: ${{ needs.get-version.outputs.version }}
         run: |
-          docker build -f ./control-plane/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-latest --pull --no-cache .
+          docker build -f ./control-plane/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$VERSION_TAG --pull --no-cache .
       - name: Push control plane image to Amazon ECR
         id: push-control-plane
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: evervault/control-plane
-          IMAGE_TAG: ${{ github.sha }}
+          VERSION_TAG: ${{ needs.get-version.outputs.version }}
         run: |
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$VERSION_TAG
 
   deploy_control_plane_image_without_egress:
     runs-on: ubuntu-latest
@@ -81,17 +91,17 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: evervault/control-plane
-          IMAGE_TAG: ${{ github.sha }}
+          VERSION_TAG: ${{ needs.get-version.outputs.version }}
         run: |
-          docker build -f ./control-plane/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-latest --pull --no-cache .
+          docker build -f ./control-plane/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$VERSION_TAG --pull --no-cache .
       - name: Push control plane image to Amazon ECR
         id: push-control-plane
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: evervault/control-plane
-          IMAGE_TAG: ${{ github.sha }}
+          VERSION_TAG: ${{ needs.get-version.outputs.version }}
         run: |
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$VERSION_TAG
 
   mark_control_plane_images_as_latest:
     run-on: ubuntu-latest
@@ -113,8 +123,8 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: evervault/control-plane
-          IMAGE_TAG: ${{ github.sha }}
+          VERSION_TAG: ${{ needs.get-version.outputs.version }}
         run: |
-          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-latest
-          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-latest
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$VERSION_TAG $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-latest
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$VERSION_TAG $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-latest
       
