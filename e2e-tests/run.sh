@@ -75,5 +75,8 @@ docker run $docker_run_args --env DATA_PLANE_HEALTH_CHECKS=false cages-test
 docker exec cages-test-container sh -c "sv down data-plane"
 npm run health-check-tests "should succeed"
 
+echo "Testing that Cage is serving trustable cert chain"
+echo "Q" | openssl s_client -verifyCAfile sample-ca/sample-root-ca-cert.pem -showcerts -connect 0.0.0.0:443 | grep "Verification: OK"
+
 echo "Tests complete"
 docker kill cages-test-container

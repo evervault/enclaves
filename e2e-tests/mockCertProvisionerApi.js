@@ -62,8 +62,8 @@ const TlsOptions = {
 const tlsApp = express()
 tlsApp.post('/cert', async (req, res) => {
   try {
-    let ca_cert = Buffer.from(fs.readFileSync('/services/sample-root-ca-cert.pem', 'utf8')).toString('base64');
-    let ca_key_pair =  Buffer.from(fs.readFileSync('/services/sample-root-ca-key.pem', 'utf8')).toString('base64');
+    let ca_cert = Buffer.from(fs.readFileSync('/services/sample-intermediate-cert.pem', 'utf8')).toString('base64');
+    let ca_key_pair =  Buffer.from(fs.readFileSync('/services/sample-intermediate-key.pem', 'utf8')).toString('base64');
 
     console.log(`Mock cert provisioner - Received cert request from cage data plane ${req}`);
     

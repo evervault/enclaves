@@ -289,8 +289,11 @@ impl AttestableCertResolver {
 
         cert_builder.sign(signing_key, MessageDigest::sha256())?;
 
-        let generated_cert_and_key =
-            Self::convert_openssl_cert_to_certified_key(cert_builder.build(), key_pair)?;
+        let generated_cert_and_key = Self::convert_openssl_cert_chain_to_certified_key(
+            cert_builder.build(),
+            signing_cert.to_owned(),
+            key_pair,
+        )?;
         Ok((expiry_time, generated_cert_and_key))
     }
 
@@ -317,14 +320,18 @@ impl AttestableCertResolver {
         Ok(expiry)
     }
 
-    fn convert_openssl_cert_to_certified_key(
-        cert: X509,
+    fn convert_openssl_cert_chain_to_certified_key(
+        leaf_cert: X509,
+        intermediate_cert: X509,
         private_key: PKey<Private>,
     ) -> ServerResult<CertifiedKey> {
         let der_encoded_private_key = private_key.private_key_to_der()?;
         let ecdsa_private_key = sign::any_ecdsa_type(&PrivateKey(der_encoded_private_key))?;
-        let pem_encoded_cert = cert.to_pem()?;
-        let parsed_pems = pem::parse_many(&pem_encoded_cert)?;
+        let pem_encoded_leaf_cert: Vec<u8> = leaf_cert.to_pem()?;
+        let pem_encoded_intermediate_cert: Vec<u8> = intermediate_cert.to_pem()?;
+        let combined_pem_encoded_certs: Vec<u8> =
+            [pem_encoded_leaf_cert, pem_encoded_intermediate_cert].concat();
+        let parsed_pems = pem::parse_many(&combined_pem_encoded_certs)?;
         let cert_chain: Vec<Certificate> = parsed_pems
             .into_iter()
             .map(|p| Certificate(p.contents))
@@ -386,8 +393,8 @@ mod tests {
     use openssl::x509::{X509Ref, X509};
 
     fn parse_x509_from_rustls_certified_key(cert: &CertifiedKey) -> X509 {
-        let mut cert_chain = cert.cert.clone();
-        let end_node = cert_chain.pop().unwrap();
+        let cert_chain = cert.cert.clone();
+        let end_node = cert_chain[0].clone();
         X509::from_der(end_node.0.as_bytes()).unwrap()
     }
 
