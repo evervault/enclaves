@@ -11,7 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "fastify": "^4.8.1",
+    "fastify": "^4.10.2",
     "phin": "^3.6.1"
   }
 }
