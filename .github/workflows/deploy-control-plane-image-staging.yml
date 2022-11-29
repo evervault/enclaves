@@ -11,7 +11,7 @@ name: Deploy new control plane image
 env:
   LINUX_TARGET: x86_64-unknown-linux-musl
 jobs:
-  deploy_control_plane_image_with_egress:
+  last_test:
     runs-on: ubuntu-latest
 
     steps:
@@ -20,8 +20,19 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "standard-cache"
       - name: Test control plane
         run: cargo test -p control-plane
+
+  deploy_control_plane_image_with_egress:
+    runs-on: ubuntu-latest
+    needs: last_test
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: Swatinem/rust-cache@v2
       - name: Build control plane
         uses: evervault/cargo-static-build@master
         with:
@@ -57,15 +68,11 @@ jobs:
   
   deploy_control_plane_image_without_egress:
     runs-on: ubuntu-latest
+    needs: last_test
 
     steps:
       - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          components: rustfmt
-      - name: Test control plane
-        run: cargo test -p control-plane
+      - uses: Swatinem/rust-cache@v2
       - name: Build control plane
         uses: evervault/cargo-static-build@master
         with:

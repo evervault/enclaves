@@ -37,6 +37,8 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PRODUCTION }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PRODUCTION }}
           aws-region: us-east-1    
+
+      - uses: Swatinem/rust-cache@v2
       
       - name: Build data-plane (egress enabled, tls termination enabled)
         uses: evervault/cargo-static-build@master

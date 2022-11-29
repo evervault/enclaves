@@ -27,6 +27,10 @@ jobs:
           aws-region: us-east-1
 
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "standard-cache"
+
       # Egress Enabled, TLS Termination Disabled
       - name: Build data-plane (egress enabled, tls termination disabled)
         uses: evervault/cargo-static-build@master

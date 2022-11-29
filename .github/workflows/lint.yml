@@ -12,6 +12,9 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - run: rustup component add clippy 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "standard-cache"
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

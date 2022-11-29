@@ -13,6 +13,9 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "standard-cache"
       - name: Compile project feature -enclave
         run: cargo build --features enclave,network_egress -p control-plane 
       - name: Compile project feature -not_enclave

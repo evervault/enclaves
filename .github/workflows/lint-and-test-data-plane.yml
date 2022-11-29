@@ -13,6 +13,9 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "standard-cache"
       - name: Format project
         run: cargo fmt --check
   check_data_plane:
@@ -35,6 +38,9 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "standard-cache"
       - name: Compile project with features ${{ matrix.feature-flags }}
         run: cargo check -p data-plane --no-default-features --features ${{ matrix.feature-flags }}
   
@@ -54,5 +60,8 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "standard-cache"
       - name: Test project with features ${{ matrix.feature-flags }}
         run: cargo test -p data-plane --no-default-features --features ${{ matrix.feature-flags }}
