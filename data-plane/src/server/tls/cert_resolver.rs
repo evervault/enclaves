@@ -6,7 +6,8 @@ use openssl::hash::MessageDigest;
 use openssl::nid::Nid;
 use openssl::pkey::{PKey, PKeyRef, Private};
 use openssl::x509::extension::{
-    AuthorityKeyIdentifier, BasicConstraints, KeyUsage, SubjectKeyIdentifier,
+    AuthorityKeyIdentifier, BasicConstraints, KeyUsage, SubjectAlternativeName,
+    SubjectKeyIdentifier,
 };
 #[cfg(feature = "enclave")]
 use openssl::x509::X509Builder;
@@ -265,6 +266,10 @@ impl AttestableCertResolver {
                 .build()?,
         )?;
 
+        let ctx = cert_builder.x509v3_context(Some(signing_cert), None);
+        let san_ext = SubjectAlternativeName::new().dns(hostname).build(&ctx)?;
+        cert_builder.append_extension(san_ext)?;
+
         #[cfg(feature = "enclave")]
         let expiry_time = Self::append_attestation_info(
             signing_cert,
@@ -306,7 +311,6 @@ impl AttestableCertResolver {
         nonce: Option<Vec<u8>>,
     ) -> ServerResult<SystemTime> {
         use crate::crypto::attest;
-        use openssl::x509::extension::SubjectAlternativeName;
 
         let attestation_doc = attest::get_attestation_doc(challenge, nonce).unwrap();
         let expiry = attest::get_expiry_time(&attestation_doc)?;
