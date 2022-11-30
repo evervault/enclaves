@@ -9,8 +9,6 @@ use openssl::x509::extension::{
     AuthorityKeyIdentifier, BasicConstraints, KeyUsage, SubjectAlternativeName,
     SubjectKeyIdentifier,
 };
-#[cfg(feature = "enclave")]
-use openssl::x509::X509Builder;
 use openssl::x509::{X509NameBuilder, X509Ref, X509Req, X509ReqBuilder, X509};
 
 use rcgen::Certificate as SelfSignedCertificate;
@@ -266,20 +264,22 @@ impl AttestableCertResolver {
                 .build()?,
         )?;
 
-        let ctx = cert_builder.x509v3_context(Some(signing_cert), None);
-        let san_ext = SubjectAlternativeName::new().dns(hostname).build(&ctx)?;
-        cert_builder.append_extension(san_ext)?;
+        let mut san_ext = SubjectAlternativeName::new();
+        san_ext.dns(hostname);
 
         #[cfg(feature = "enclave")]
         let expiry_time = Self::append_attestation_info(
-            signing_cert,
-            &mut cert_builder,
             hostname.to_string(),
             Some(key_pair.public_key_to_der()?),
             nonce,
+            &mut san_ext,
         )?;
         #[cfg(not(feature = "enclave"))]
         let expiry_time = SystemTime::now() + Duration::from_secs(60 * 60 * 24);
+
+        let ctx = cert_builder.x509v3_context(Some(signing_cert), None);
+        let san_ext = san_ext.build(&ctx)?;
+        cert_builder.append_extension(san_ext)?;
 
         let ctx = cert_builder.x509v3_context(Some(signing_cert), None);
         let spki_ext = SubjectKeyIdentifier::new().build(&ctx)?;
@@ -304,11 +304,10 @@ impl AttestableCertResolver {
 
     #[cfg(feature = "enclave")]
     fn append_attestation_info(
-        signing_cert: &X509Ref,
-        cert_builder: &mut X509Builder,
         hostname: String,
         challenge: Option<Vec<u8>>,
         nonce: Option<Vec<u8>>,
+        san_ext: &mut SubjectAlternativeName,
     ) -> ServerResult<SystemTime> {
         use crate::crypto::attest;
 
@@ -316,11 +315,7 @@ impl AttestableCertResolver {
         let expiry = attest::get_expiry_time(&attestation_doc)?;
         let hex_encoded_ad = shared::utils::HexSlice::from(attestation_doc.as_slice());
         let attestable_san = format!("{hex_encoded_ad:x}.{hostname}");
-        let ctx = cert_builder.x509v3_context(Some(signing_cert), None);
-        let san_ext = SubjectAlternativeName::new()
-            .dns(&attestable_san)
-            .build(&ctx)?;
-        cert_builder.append_extension(san_ext)?;
+        san_ext.dns(&attestable_san);
         Ok(expiry)
     }
 
