@@ -15,6 +15,7 @@ use shared::{env_var_present_and_true, ENCLAVE_CONNECT_PORT};
 async fn main() {
     println!("Data plane running.");
     print_version!("Data Plane");
+
     let mut args = std::env::args();
     let _ = args.next(); // ignore path to executable
     let data_plane_port = args

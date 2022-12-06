@@ -9,6 +9,14 @@ app.all('/hello', async (req, res) => {
   res.send({response: "Hello from enclave", ...req.body})
 })
 
+app.get('/env', async (req, res) => {
+  try {
+    res.send({ANOTHER_ENV_VAR: process.env.ANOTHER_ENV_VAR})
+  } catch (e) {
+    console.log("Failed", e)
+    res.status(500).send(e)
+  }
+})
 
 app.get('/egress', async (req, res) => {
   try {

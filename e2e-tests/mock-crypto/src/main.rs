@@ -29,9 +29,8 @@ async fn run_https_server(port: u16) {
   let tls_key = std::env::var("MOCK_CRYPTO_KEY").expect("No key given");
   let tls_cert = std::env::var("MOCK_CRYPTO_CERT").expect("No cert given");
 
-  let in_ci = std::env::var("CI").map(|ci_flag| ci_flag == "true").unwrap_or_else(|_| false);
-  let key_bytes = if in_ci { tls_key.as_bytes().to_vec() } else { fs::read(&tls_key).expect("Failed to read key") };
-  let cert_bytes = if in_ci { tls_cert.as_bytes().to_vec() } else { fs::read(&tls_cert).expect("Failed to read cert") };
+  let key_bytes = tls_key.as_bytes().to_vec();
+  let cert_bytes = tls_cert.as_bytes().to_vec();
 
   let cert_chain: Vec<rustls::Certificate> = rustls_pemfile::certs(&mut cert_bytes.as_ref())
     .map(|certs| 

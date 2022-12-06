@@ -75,17 +75,19 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
 
     pub async fn with_attestable_cert(self, cage_ctx: CageContext) -> ServerResult<TlsServer<S>> {
         println!("Creating TLSServer with attestable cert");
-        let inter_ca_retriever = inter_ca_retreiver::InterCaRetreiver::new();
+        let inter_ca_retriever = inter_ca_retreiver::InterCaRetreiver::new(cage_ctx.clone());
         let (ca_cert, ca_private_key) = inter_ca_retriever
             .get_intermediate_ca()
             .await
             .map_err(|err| TlsError::CertProvisionerError(err.to_string()))?;
         println!("Received intermediate CA from cert provisioner. Using it with TLS Server.");
-        let attestable_cert_resolver =
-            super::cert_resolver::AttestableCertResolver::new(ca_cert, ca_private_key, cage_ctx)?;
+        let attestable_cert_resolver = super::cert_resolver::AttestableCertResolver::new(
+            ca_cert,
+            ca_private_key,
+            cage_ctx.clone(),
+        )?;
         let tls_config =
             Self::get_base_config().with_cert_resolver(Arc::new(attestable_cert_resolver));
-
         Ok(TlsServer::new(tls_config, self.tcp_server))
     }
 }

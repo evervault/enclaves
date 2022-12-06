@@ -176,9 +176,9 @@ impl std::convert::From<(Vec<EncryptedDataEntry>, &crate::CageContext)> for Decr
 
 #[derive(Serialize, Deserialize)]
 pub struct CryptoRequest {
-    team_uuid: String,
-    app_uuid: String,
-    data: Value,
+    pub team_uuid: String,
+    pub app_uuid: String,
+    pub data: Value,
 }
 
 impl E3Payload for CryptoRequest {}

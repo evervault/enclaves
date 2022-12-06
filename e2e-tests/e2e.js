@@ -51,6 +51,11 @@ describe('POST data to enclave', () => {
       expect(data).to.deep.equal(echoPayload)
     });
 
+    it('returns the injected envronment', async () => {
+        const result =  await allowAllCerts.get('https://cage.localhost:443/env', { headers: { 'api-key': 'placeholder' } })
+        expect("123").to.deep.equal(result.data.ANOTHER_ENV_VAR)
+      });
+
     it('attestation doc', async () => {
         const doc =  await allowAllCerts.post('https://cage.localhost:443/attestation-doc', {}, { headers: { 'api-key': 'placeholder' }, responseType: "arraybuffer" }).catch((err) => {
           console.error(err);

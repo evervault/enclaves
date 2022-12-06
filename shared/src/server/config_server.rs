@@ -95,19 +95,31 @@ pub mod requests {
         }
     }
 
-    #[derive(Serialize, Deserialize, Debug)]
+    #[derive(Serialize, Deserialize, Debug, Clone)]
+    pub struct Secret {
+        pub name: String,
+        pub secret: String,
+    }
+
+    #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct GetCertResponseDataPlane {
         intermediate_cert: String,
         key_pair: String,
+        pub secrets: Option<Vec<Secret>>,
     }
 
     impl ConfigServerPayload for GetCertResponseDataPlane {}
 
     impl GetCertResponseDataPlane {
-        pub fn new(intermediate_cert: String, key_pair: String) -> Self {
+        pub fn new(
+            intermediate_cert: String,
+            key_pair: String,
+            secrets: Option<Vec<Secret>>,
+        ) -> Self {
             Self {
                 intermediate_cert,
                 key_pair,
+                secrets,
             }
         }
 

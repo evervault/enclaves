@@ -9,9 +9,9 @@ app.use(express.json())
 app.use(express.urlencoded({extended : true}));
 
 const options = {
-  key: process.env.CI === "true" ? process.env.MOCK_CERT_PROVISIONER_SERVER_KEY : fs.readFileSync(process.env.MOCK_CERT_PROVISIONER_SERVER_KEY, 'utf8'),
-  cert: process.env.CI === "true" ? process.env.MOCK_CERT_PROVISIONER_SERVER_CERT: fs.readFileSync(process.env.MOCK_CERT_PROVISIONER_SERVER_CERT, 'utf8'),
-  ca: process.env.CI === "true" ? process.env.MOCK_CERT_PROVISIONER_ROOT_CERT: fs.readFileSync(process.env.MOCK_CERT_PROVISIONER_ROOT_CERT, 'utf8'),
+  key: process.env.MOCK_CERT_PROVISIONER_SERVER_KEY,
+  cert: process.env.MOCK_CERT_PROVISIONER_SERVER_CERT,
+  ca: process.env.MOCK_CERT_PROVISIONER_ROOT_CERT,
   port: 3443,
   requestCert: true,
   rejectUnauthorized: false
@@ -53,9 +53,9 @@ https.createServer(options, app).listen(options.port, () => {
 
 
 const TlsOptions = {
-  key: process.env.CI === "true" ? process.env.MOCK_CERT_PROVISIONER_SERVER_KEY : fs.readFileSync(process.env.MOCK_CERT_PROVISIONER_SERVER_KEY, 'utf8'),
-  cert: process.env.CI === "true" ? process.env.MOCK_CERT_PROVISIONER_SERVER_CERT: fs.readFileSync(process.env.MOCK_CERT_PROVISIONER_SERVER_CERT, 'utf8'),
-  ca: process.env.CI === "true" ? process.env.MOCK_CERT_PROVISIONER_ROOT_CERT: fs.readFileSync(process.env.MOCK_CERT_PROVISIONER_ROOT_CERT, 'utf8'),
+  key: process.env.MOCK_CERT_PROVISIONER_SERVER_KEY,
+  cert: process.env.MOCK_CERT_PROVISIONER_SERVER_CERT,
+  ca: process.env.MOCK_CERT_PROVISIONER_ROOT_CERT,
   port: 3000,
 };
 
@@ -69,7 +69,8 @@ tlsApp.post('/cert', async (req, res) => {
     
     var result = {
       intermediate_cert: ca_cert,
-      key_pair: ca_key_pair
+      key_pair: ca_key_pair,
+      secrets: [{name: "EV_API_KEY", secret: "placeholder"}, {name: "ANOTHER_ENV_VAR", secret: "123"}, {name: "ENCRYPTED_ENV", secret: "ev:123"}]
     };
     res.status(200)
     res.send(result) 
