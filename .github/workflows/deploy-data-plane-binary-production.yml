@@ -36,15 +36,15 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PRODUCTION }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PRODUCTION }}
-          aws-region: us-east-1    
+          aws-region: us-east-1
 
       - uses: Swatinem/rust-cache@v2
-      
+
       - name: Build data-plane (egress enabled, tls termination enabled)
         uses: evervault/cargo-static-build@master
         with:
           cmd: cargo build -p data-plane --features enclave,network_egress --release --target ${{ env.LINUX_TARGET }}
-      
+
       - name: Upload data-plane to S3 (egress enabled, tls termination enabled)
         env:
           VERSION_TAG: ${{ needs.get-version.outputs.version }}
@@ -56,7 +56,7 @@ jobs:
         uses: evervault/cargo-static-build@master
         with:
           cmd: cargo build -p data-plane --no-default-features --features enclave,network_egress --release --target ${{ env.LINUX_TARGET }}
-      
+
       - name: Upload data-plane to S3 (egress enabled, tls termination disabled)
         env:
           VERSION_TAG: ${{ needs.get-version.outputs.version }}
@@ -68,14 +68,14 @@ jobs:
         uses: evervault/cargo-static-build@master
         with:
           cmd: cargo build -p data-plane --features enclave --release --target ${{ env.LINUX_TARGET }}
-      
+
       - name: Upload data-plane to S3 (egress disabled, tls termination enabled)
         env:
           VERSION_TAG: ${{ needs.get-version.outputs.version }}
           FEATURE_LABEL: egress-disabled/tls-termination-enabled
         run: |
           aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
-      
+
       - name: Build data-plane (egress disabled, tls termination disabled)
         uses: evervault/cargo-static-build@master
         with:
@@ -87,15 +87,21 @@ jobs:
           FEATURE_LABEL: egress-disabled/tls-termination-disabled
         run: |
           aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
-  
+
   mark-new-data-plane-binary-as-latest:
     needs: [get-version, build-data-plane-binary]
     runs-on: ubuntu-latest
-    environment: 
+    environment:
       name: production
     strategy:
       matrix:
-        feature: [egress-enabled/tls-termination-enabled, egress-enabled/tls-termination-disabled, egress-disabled/tls-termination-enabled, egress-disabled/tls-termination-disabled]
+        feature:
+          [
+            egress-enabled/tls-termination-enabled,
+            egress-enabled/tls-termination-disabled,
+            egress-disabled/tls-termination-enabled,
+            egress-disabled/tls-termination-disabled,
+          ]
     steps:
       - name: Configure Production AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
@@ -110,3 +116,27 @@ jobs:
         run: |
           aws s3 cp s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ matrix.feature }} s3://cage-build-assets-${{ env.STAGE }}/runtime/latest/data-plane/${{ matrix.feature }}
 
+  update-latest-with-new-data-plane-version-tag:
+    needs:
+      [
+        get-version,
+        build-data-plane-binary,
+        mark-new-data-plane-binary-as-latest,
+      ]
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+      - name: Configure Production AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PRODUCTION }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PRODUCTION }}
+          aws-region: us-east-1
+
+      - name: Upload version tag to latest
+        env:
+          VERSION_TAG: ${{ needs.get-version.outputs.version }}
+        run: |
+          echo "{ \"data-plane\": \"${{ env.VERSION_TAG }}\" }" > latest.txt
+          aws s3 cp ./latest.txt s3://cage-build-assets-${{ env.STAGE }}/runtime/latest

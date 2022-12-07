@@ -26,7 +26,6 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}
           aws-region: us-east-1
 
-
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: "standard-cache"
@@ -87,6 +86,13 @@ jobs:
           aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
           aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/latest/data-plane/${{ env.FEATURE_LABEL }}
 
+      - name: Upload version tag to latest file
+        env:
+          VERSION_TAG: ${{ github.sha }}
+        run: |
+          echo "{ \"data-plane\": \"${{ env.VERSION_TAG }}\" }" > latest.txt
+          aws s3 cp ./latest.txt s3://cage-build-assets-${{ env.STAGE }}/runtime/latest
+
       - name: Cloudfront Cache Invalidation
         run: |
-          aws cloudfront create-invalidation --distribution-id ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_STAGING }} --paths "/runtime/latest/data-plane/*"
+          aws cloudfront create-invalidation --distribution-id ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_STAGING }} --paths "/runtime/latest/data-plane/*" "/runtime/latest"
