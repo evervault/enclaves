@@ -402,8 +402,9 @@ mod tests {
     ) -> (X509, SelfSignedCertResolver) {
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
+        let cage_uuid = "cage_123".to_string();
         let cage_name = "my-sick-cage".to_string();
-        let ctx = CageContext::new(app_uuid, team_uuid, cage_name);
+        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name);
         let (_, cert) =
             super::SelfSignedCertResolver::generate_self_signed_cert(ctx.get_cert_name()).unwrap();
         let parsed_initial_cert = parse_x509_from_rustls_certified_key(&cert);
@@ -509,8 +510,9 @@ mod tests {
     fn test_base_cert_used_without_nonce() {
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
+        let cage_uuid = "cage_123".to_string();
         let cage_name = "my-sick-cage".to_string();
-        let ctx = CageContext::new(app_uuid, team_uuid, cage_name);
+        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name);
         let server_name = Some(ctx.get_cert_name());
         let (cert, key) = provisioner::generate_ca().unwrap();
         let resolver = AttestableCertResolver::new(cert, key, ctx).unwrap();
@@ -539,8 +541,9 @@ mod tests {
     fn test_base_cert_used_with_nonce() {
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
+        let cage_uuid = "cage_123".to_string();
         let cage_name = "my-sick-cage".to_string();
-        let ctx = CageContext::new(app_uuid, team_uuid, cage_name);
+        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name);
         let server_name = Some(ctx.get_cert_name());
         let (cert, key) = provisioner::generate_ca().unwrap();
         let resolver = AttestableCertResolver::new(cert, key, ctx).unwrap();

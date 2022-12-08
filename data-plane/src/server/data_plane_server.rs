@@ -15,6 +15,7 @@ use hyper::server::conn;
 use hyper::service::service_fn;
 use hyper::{Body, Request, Response};
 
+use shared::logging::TrxContextBuilder;
 use shared::server::Listener;
 use std::sync::Arc;
 
@@ -56,13 +57,29 @@ where
                         let e3_client_for_req = e3_client_for_tcp.clone();
                         let cage_context_for_req = cage_context_for_tcp.clone();
                         async move {
-                            handle_incoming_request(
+                            let mut trx_context = init_trx(&cage_context_for_req, &req);
+                            trx_context.add_req_to_trx_context(&req);
+                            let response = handle_incoming_request(
                                 req,
                                 port,
                                 e3_client_for_req,
                                 cage_context_for_req,
+                                &mut trx_context,
                             )
-                            .await
+                            .await;
+
+                            trx_context.add_res_to_trx_context(&response);
+                            let built_context = trx_context.build();
+
+                            match built_context {
+                                Ok(ctx) => ctx.record_trx(),
+                                Err(e) => {
+                                    println!("Failed to build transaction context. err: {:?}", e)
+                                }
+                            };
+
+                            let res: Result<Response<Body>> = Ok(response);
+                            res
                         }
                     }),
                 )
@@ -83,7 +100,8 @@ async fn handle_incoming_request(
     customer_port: u16,
     e3_client: Arc<E3Client>,
     cage_context: CageContext,
-) -> Result<Response<Body>> {
+    trx_context: &mut TrxContextBuilder,
+) -> Response<Body> {
     // Extract API Key header and authenticate request
     // Run parser over payload
     // Serialize request onto socket
@@ -94,7 +112,7 @@ async fn handle_incoming_request(
         .map(|api_key_header| api_key_header.to_owned())
     {
         Ok(api_key_header) => api_key_header,
-        Err(e) => return Ok(e.into()),
+        Err(e) => return e.into(),
     };
 
     let is_auth = if cfg!(feature = "enclave") {
@@ -105,14 +123,12 @@ async fn handle_incoming_request(
         {
             Ok(auth_status) => auth_status,
             Err(ClientError::FailedRequest(status)) if status.as_u16() == 401 => {
-                return Ok(AuthError::FailedToAuthenticateApiKey.into());
+                let response: Response<Body> = AuthError::FailedToAuthenticateApiKey.into();
+                return response;
             }
             Err(e) => {
                 eprintln!("Failed to authenticate against e3 — {:?}", e);
-                return Ok(Response::builder()
-                    .status(500)
-                    .body(Body::from("Connection to E3 failed."))
-                    .expect("Hardcoded response"));
+                return build_error_response(Some("Connection to E3 failed.".to_string()));
             }
         }
     } else {
@@ -121,7 +137,8 @@ async fn handle_incoming_request(
 
     if !is_auth {
         println!("Failed to authenticate request using provided API Key");
-        return Ok(AuthError::FailedToAuthenticateApiKey.into());
+        let response = AuthError::FailedToAuthenticateApiKey.into();
+        return response;
     }
 
     let (req_info, req_body) = req.into_parts();
@@ -133,19 +150,16 @@ async fn handle_incoming_request(
         .and_then(|encoding_res| encoding_res.ok());
 
     if let Some(_encoding) = req_info.headers.get(http::header::TRANSFER_ENCODING) {
-        Ok(Response::builder()
-            .status(500)
-            .body(Body::empty())
-            .expect("Hardcoded response"))
+        build_error_response(None)
     } else {
         handle_standard_request(
             &api_key,
-            req_info,
-            req_body,
+            (req_info, req_body),
             compression,
             customer_port,
             e3_client,
             &cage_context,
+            trx_context,
         )
         .await
     }
@@ -153,35 +167,33 @@ async fn handle_incoming_request(
 
 pub async fn handle_standard_request(
     api_key: &HeaderValue,
-    mut req_info: Parts,
-    req_body: Body,
+    req_parts: (Parts, Body),
     _compression: Option<super::http::ContentEncoding>,
     customer_port: u16,
     e3_client: Arc<E3Client>,
     cage_context: &CageContext,
-) -> crate::error::Result<Response<Body>> {
+    trx_context: &mut TrxContextBuilder,
+) -> Response<Body> {
+    let (mut req_info, req_body) = req_parts;
     let request_bytes = match hyper::body::to_bytes(req_body).await {
         Ok(body_bytes) => body_bytes,
         Err(e) => {
             eprintln!("Failed to read entire body — {}", e);
-            return Ok(Response::builder()
-                .status(500)
-                .body(Body::empty())
-                .expect("Hardcoded response"));
+            return build_error_response(None);
         }
     };
 
     let decryption_payload = match extract_ciphertexts_from_payload(&request_bytes).await {
-        Ok(decryption_payload) => decryption_payload,
+        Ok(decryption_res) => decryption_res,
         Err(_e) => {
-            return Ok(Response::builder()
-                .status(500)
-                .body(Body::from(
-                    "Failed to parse incoming stream for ciphertexts",
-                ))
-                .expect("Hardcoded response"))
+            let response = build_error_response(Some(
+                "Failed to parse incoming stream for ciphertexts".to_string(),
+            ));
+            return response;
         }
     };
+
+    let n_decrypts: Option<u32> = decryption_payload.len().try_into().ok();
 
     let mut bytes_vec = request_bytes.to_vec();
     if !decryption_payload.is_empty() {
@@ -193,12 +205,11 @@ pub async fn handle_standard_request(
             Ok(decrypted) => decrypted,
             Err(e) => {
                 eprintln!("Failed to decrypt — {}", e);
-                return Ok(Response::builder()
-                    .status(500)
-                    .body(Body::empty())
-                    .expect("Hardcoded response"));
+                return build_error_response(Some(String::from("Failed to decrypt ciphertexts")));
             }
         };
+
+        trx_context.n_decrypts(n_decrypts);
 
         println!("Decryption complete");
         decrypted.data().iter().rev().for_each(|entry| {
@@ -229,20 +240,14 @@ pub async fn handle_standard_request(
     let decrypted_request = Request::from_parts(req_info, Body::from(bytes_vec));
     println!("Finished processing request");
     let http_client = hyper::Client::new();
-    let customer_response = match http_client.request(decrypted_request).await {
+    match http_client.request(decrypted_request).await {
         Ok(res) => res,
         Err(e) => {
             let msg = format!("Error requesting user process - {}", e);
             eprintln!("{}", msg);
-            let res_body = Body::from(msg);
-            Response::builder()
-                .status(500)
-                .body(res_body)
-                .expect("Hardcoded response")
+            build_error_response(Some(msg))
         }
-    };
-
-    Ok(customer_response)
+    }
 }
 
 async fn extract_ciphertexts_from_payload(
@@ -265,6 +270,29 @@ async fn extract_ciphertexts_from_payload(
         decryption_payload.push(ciphertext_item);
     }
     Ok(decryption_payload)
+}
+
+fn init_trx(cage_context: &CageContext, req: &Request<Body>) -> TrxContextBuilder {
+    let mut trx_ctx = TrxContextBuilder::init_trx_context_with_cage_details(
+        &cage_context.cage_uuid,
+        &cage_context.cage_name,
+        &cage_context.app_uuid,
+        &cage_context.team_uuid,
+    );
+    trx_ctx.add_req_to_trx_context(req);
+    trx_ctx
+}
+
+fn build_error_response(body_msg: Option<String>) -> Response<Body> {
+    let body = match body_msg {
+        Some(msg) => Body::from(msg),
+        None => Body::empty(),
+    };
+
+    Response::builder()
+        .status(500)
+        .body(body)
+        .expect("Hardcoded response")
 }
 
 #[cfg(test)]

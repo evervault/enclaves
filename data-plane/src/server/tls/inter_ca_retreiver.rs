@@ -91,9 +91,10 @@ impl InterCaRetreiver {
         let mut file = File::create("/etc/customer-env")?;
         let mut env_string: String = "".to_owned();
 
-        secrets
-            .iter()
-            .for_each(|env| env_string.push_str(&format!("export {}={}  ", env.name, env.secret)));
+        secrets.iter().for_each(|env| {
+            let value = &format!("export {}={}  ", env.name, env.secret);
+            env_string.push_str(value)
+        });
         file.write_all(env_string.as_bytes())?;
         Ok(())
     }

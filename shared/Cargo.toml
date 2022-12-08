@@ -16,6 +16,8 @@ hyper = { version = "0.14.4", features = ["server","http1","http2","tcp","stream
 tokio = { version = "1.18.0", features = ["net", "macros", "rt", "rt-multi-thread", "io-util", "time"] }
 async-trait = "0.1.56"
 tokio-vsock = { version = "0.3.2", optional = true }
+lazy_static = "1.4.0"
+derive_builder = "0.12.0"
 
 [lib]
 name = "shared"

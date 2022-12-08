@@ -23,6 +23,7 @@ use shared::{server::VsockServer, ENCLAVE_CID};
 pub struct CageContext {
     team_uuid: String,
     app_uuid: String,
+    cage_uuid: String,
     cage_name: String,
 }
 
@@ -30,20 +31,27 @@ impl CageContext {
     pub fn try_from_env() -> std::result::Result<Self, std::env::VarError> {
         let app_uuid = std::env::var("EV_APP_UUID")?;
         let team_uuid = std::env::var("EV_TEAM_UUID")?;
+        let cage_uuid = std::env::var("EV_CAGE_UUID")?;
         let cage_name = std::env::var("EV_CAGE_NAME")?;
         Ok(Self {
             app_uuid,
             team_uuid,
+            cage_uuid,
             cage_name,
         })
     }
 
-    pub fn new(app_uuid: String, team_uuid: String, cage_name: String) -> Self {
+    pub fn new(app_uuid: String, team_uuid: String, cage_uuid: String, cage_name: String) -> Self {
         Self {
+            cage_uuid,
             app_uuid,
             team_uuid,
             cage_name,
         }
+    }
+
+    pub fn cage_uuid(&self) -> &str {
+        &self.cage_uuid
     }
 
     pub fn cage_name(&self) -> &str {
