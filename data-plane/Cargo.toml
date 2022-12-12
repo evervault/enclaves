@@ -30,7 +30,7 @@ serde_bytes = "0.11.6"
 serde_json = "1.0.83"
 sha2 = "0.10.2"
 rcgen = { version = "0.9.2", features = ["x509-parser"], optional = true }
-rand = { version = "0.8.5", optional = true }
+rand = { version = "0.8.5" }
 webpki-roots = "0.22.4"
 pem = "1.1.0"
 base64 = "0.13.0"
@@ -41,6 +41,6 @@ tokio-test = "0.4.2"
 [features]
 default = ["tls_termination"]
 tls_termination = ["dep:nom", "dep:rcgen"]
-network_egress = ["dep:dns-message-parser","dep:rand", "dep:tls-parser", "dep:dashmap"]
+network_egress = ["dep:dns-message-parser", "dep:tls-parser", "dep:dashmap"]
 enclave = ["dep:tokio-vsock", "shared/enclave"]
 not_enclave = []

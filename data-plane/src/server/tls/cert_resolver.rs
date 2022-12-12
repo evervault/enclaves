@@ -105,7 +105,7 @@ impl SelfSignedCertResolver {
         let der_encoded_private_key = cert.serialize_private_key_der();
         let ecdsa_private_key = sign::any_ecdsa_type(&PrivateKey(der_encoded_private_key))?;
         let pem_encoded_cert = cert.serialize_pem()?;
-        let parsed_pems = pem::parse_many(&pem_encoded_cert)?;
+        let parsed_pems = pem::parse_many(pem_encoded_cert)?;
         let cert_chain: Vec<Certificate> = parsed_pems
             .into_iter()
             .map(|p| Certificate(p.contents))
@@ -330,7 +330,7 @@ impl AttestableCertResolver {
         let pem_encoded_intermediate_cert: Vec<u8> = intermediate_cert.to_pem()?;
         let combined_pem_encoded_certs: Vec<u8> =
             [pem_encoded_leaf_cert, pem_encoded_intermediate_cert].concat();
-        let parsed_pems = pem::parse_many(&combined_pem_encoded_certs)?;
+        let parsed_pems = pem::parse_many(combined_pem_encoded_certs)?;
         let cert_chain: Vec<Certificate> = parsed_pems
             .into_iter()
             .map(|p| Certificate(p.contents))
