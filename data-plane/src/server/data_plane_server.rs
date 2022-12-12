@@ -209,8 +209,6 @@ pub async fn handle_standard_request(
             }
         };
 
-        trx_context.n_decrypts(n_decrypts);
-
         println!("Decryption complete");
         decrypted.data().iter().rev().for_each(|entry| {
             let range = entry.range();
@@ -225,6 +223,8 @@ pub async fn handle_standard_request(
             }
         });
     }
+    
+    trx_context.n_decrypts(n_decrypts);
 
     // Build processed request
     let mut uri_builder = hyper::Uri::builder()
