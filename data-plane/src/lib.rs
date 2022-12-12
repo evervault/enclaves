@@ -31,7 +31,7 @@ impl CageContext {
     pub fn try_from_env() -> std::result::Result<Self, std::env::VarError> {
         let app_uuid = std::env::var("EV_APP_UUID")?;
         let team_uuid = std::env::var("EV_TEAM_UUID")?;
-        let cage_uuid = std::env::var("EV_CAGE_UUID")?;
+        let cage_uuid = std::env::var("CAGE_UUID")?;
         let cage_name = std::env::var("EV_CAGE_NAME")?;
         Ok(Self {
             app_uuid,
