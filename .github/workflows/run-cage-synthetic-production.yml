@@ -1,9 +1,6 @@
 on:
-  push:
-    branches:
-      - 'main'
   schedule:
-    - cron: 0 9,18 * * * # run twice daily
+    - cron: "*/30 * * * *" # run every 30 mins 
 
 name: Deploy and Test Cage Production
 jobs:
