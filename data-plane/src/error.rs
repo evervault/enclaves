@@ -50,6 +50,8 @@ pub enum Error {
     InvalidHeaderValue(#[from] InvalidHeaderValue),
     #[error("Client error — {0}")]
     ClientError(#[from] ClientError),
+    #[error("Deserialization Error — {0:?}")]
+    SerdeError(#[from] serde_json::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

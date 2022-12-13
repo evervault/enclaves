@@ -66,24 +66,27 @@ impl InterCaRetreiver {
             .into_iter()
             .partition(|env| env.secret.starts_with("ev:"));
 
-        let e3_response: CryptoResponse = self
-            .e3_client
-            .decrypt(
-                &header,
-                CryptoRequest {
-                    app_uuid: self.cage_context.app_uuid.clone(),
-                    team_uuid: self.cage_context.team_uuid.clone(),
-                    data: json!(encrypted_env.clone()),
-                },
-            )
-            .await?;
-
-        let mut decrypted_env: Vec<Secret> = serde_json::from_value(e3_response.data).unwrap();
-
         let mut plaintext_env = plaintext_env;
-        decrypted_env.append(&mut plaintext_env);
 
-        Self::write_env_file(decrypted_env.clone())?;
+        if !encrypted_env.is_empty() {
+            let e3_response: CryptoResponse = self
+                .e3_client
+                .decrypt(
+                    &header,
+                    CryptoRequest {
+                        app_uuid: self.cage_context.app_uuid.clone(),
+                        team_uuid: self.cage_context.team_uuid.clone(),
+                        data: json!(encrypted_env.clone()),
+                    },
+                )
+                .await?;
+            let mut decrypted_env: Vec<Secret> = serde_json::from_value(e3_response.data)?;
+            decrypted_env.append(&mut plaintext_env);
+            Self::write_env_file(decrypted_env.clone())?;
+        } else {
+            Self::write_env_file(plaintext_env.clone())?;
+        }
+
         Ok(())
     }
 
