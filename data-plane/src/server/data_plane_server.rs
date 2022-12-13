@@ -223,7 +223,7 @@ pub async fn handle_standard_request(
             }
         });
     }
-    
+
     trx_context.n_decrypts(n_decrypts);
 
     // Build processed request
