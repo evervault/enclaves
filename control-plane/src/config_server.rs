@@ -1,10 +1,13 @@
 use crate::clients::cert_provisioner::CertProvisionerClient;
-use crate::error::Result;
+use crate::error::{Result, ServerError};
 
 use hyper::server::conn;
 use hyper::service::service_fn;
 use hyper::{Body, Request, Response};
-use shared::server::config_server::requests::{ConfigServerPayload, GetCertTokenResponseDataPlane};
+use serde::de::DeserializeOwned;
+use shared::server::config_server::requests::{
+    ConfigServerPayload, GetCertTokenResponseDataPlane, PostTrxLogsRequest,
+};
 use shared::server::config_server::routes::ConfigServerPath;
 use shared::server::Listener;
 #[cfg(not(feature = "enclave"))]
@@ -85,12 +88,11 @@ async fn handle_incoming_request(
     req: Request<Body>,
     cert_provisioner_client: CertProvisionerClient,
 ) -> Result<Response<Body>> {
-    let (req_info, _) = req.into_parts();
-
-    match ConfigServerPath::from_str(req_info.uri.path()) {
+    match ConfigServerPath::from_str(req.uri().path()) {
         Ok(ConfigServerPath::GetCertToken) => {
             Ok(handle_cert_token_request(cert_provisioner_client).await)
         }
+        Ok(ConfigServerPath::PostTrxLogs) => Ok(handle_post_trx_logs_request(req).await),
         _ => Ok(build_bad_request_response()),
     }
 }
@@ -134,6 +136,28 @@ async fn handle_cert_token_request(
     })
 }
 
+async fn handle_post_trx_logs_request(req: Request<Body>) -> Response<Body> {
+    println!("Recieved request in config server to log transactions");
+    let parsed_result: Result<PostTrxLogsRequest> = parse_request(req).await;
+    match parsed_result {
+        Ok(log_body) => {
+            log_body.trx_logs().into_iter().for_each(|trx| {
+                trx.record_trx();
+            });
+            build_success_response()
+        }
+        Err(_) => build_error_response("Failed to parse log body from data plane".to_string()),
+    }
+}
+
+fn build_success_response() -> Response<Body> {
+    Response::builder()
+        .status(200)
+        .header("Content-Type", "application/json")
+        .body(Body::empty())
+        .expect("Infallible")
+}
+
 fn build_bad_request_response() -> Response<Body> {
     Response::builder()
         .status(404)
@@ -149,4 +173,9 @@ fn build_error_response(body_msg: String) -> Response<Body> {
         .header("Content-Type", "application/json")
         .body(Body::from(body_msg))
         .expect("Infallible")
+}
+
+async fn parse_request<T: DeserializeOwned>(req: Request<Body>) -> Result<T> {
+    let req_body = hyper::body::to_bytes(req.into_body()).await?;
+    serde_json::from_slice(&req_body).map_err(ServerError::JsonError)
 }

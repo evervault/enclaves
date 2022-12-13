@@ -1,10 +1,13 @@
 use error::Result;
 use hyper::client::conn::{Connection as HyperConnection, SendRequest};
+use hyper::http::StatusCode;
 use hyper::{Body, Response};
 
 use serde::de::DeserializeOwned;
+use shared::logging::TrxContext;
 use shared::server::config_server::requests::{
     ConfigServerPayload, GetCertTokenRequestDataPlane, GetCertTokenResponseDataPlane,
+    PostTrxLogsRequest,
 };
 use shared::server::config_server::routes::ConfigServerPath;
 
@@ -13,6 +16,7 @@ use crate::error::{self, Error};
 
 use connection::Connection;
 
+#[derive(Clone)]
 pub struct ConfigClient {}
 
 impl Default for ConfigClient {
@@ -90,6 +94,24 @@ impl ConfigClient {
         let result: GetCertTokenResponseDataPlane = self.parse_response(response).await?;
 
         Ok(result)
+    }
+
+    pub async fn post_trx_logs(&self, trx_logs: Vec<TrxContext>) -> Result<()> {
+        let payload = PostTrxLogsRequest::new(trx_logs).into_body()?;
+
+        let response = self
+            .send(ConfigServerPath::PostTrxLogs, "POST", payload)
+            .await?;
+
+        if response.status() == StatusCode::OK {
+            Ok(())
+        } else {
+            println!("Error in message send to control plane");
+            Err(Error::ConfigServer(
+                "Invalid Response code returned when sending trx logs to control plane "
+                    .to_string(),
+            ))
+        }
     }
 
     async fn parse_response<T: DeserializeOwned>(&self, res: Response<Body>) -> Result<T> {

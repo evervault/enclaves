@@ -5,7 +5,9 @@ use super::tls::TlsServerBuilder;
 use crate::base_tls_client::ClientError;
 use crate::e3client::{self, AuthRequest, DecryptRequest, E3Client};
 use crate::error::{AuthError, Result};
-use crate::CageContext;
+use crate::{configuration, CageContext};
+
+use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
 
 use futures::StreamExt;
 
@@ -18,6 +20,7 @@ use hyper::{Body, Request, Response};
 use shared::logging::TrxContextBuilder;
 use shared::server::Listener;
 use std::sync::Arc;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 pub async fn run<L: Listener + Send + Sync>(tcp_server: L, port: u16)
 where
@@ -32,6 +35,20 @@ where
         .expect("Failed to create tls server");
     let http_server = conn::Http::new();
     let e3_client = Arc::new(E3Client::new());
+    let trx_logging_enabled = configuration::trx_logging_enabled();
+
+    let (tx, rx): (
+        UnboundedSender<LogHandlerMessage>,
+        UnboundedReceiver<LogHandlerMessage>,
+    ) = unbounded_channel();
+
+    if trx_logging_enabled {
+        let tx_for_handler = tx.clone();
+        tokio::spawn(async move {
+            start_log_handler(tx_for_handler, rx).await;
+        });
+    }
+
     println!("TLS Server Created - Listening for new connections.");
     loop {
         let stream = match server.accept().await {
@@ -47,15 +64,18 @@ where
         let server = http_server.clone();
         let e3_client_for_connection = e3_client.clone();
         let cage_context_for_connection = cage_context.clone();
+        let tx_for_connection = tx.clone();
         tokio::spawn(async move {
             let e3_client_for_tcp = e3_client_for_connection.clone();
             let cage_context_for_tcp = cage_context_for_connection.clone();
+            let tx_for_tcp = tx_for_connection.clone();
             let sent_response = server
                 .serve_connection(
                     stream,
                     service_fn(|req: Request<Body>| {
                         let e3_client_for_req = e3_client_for_tcp.clone();
                         let cage_context_for_req = cage_context_for_tcp.clone();
+                        let tx_for_req = tx_for_tcp.clone();
                         async move {
                             let mut trx_context = init_trx(&cage_context_for_req, &req);
                             trx_context.add_req_to_trx_context(&req);
@@ -72,7 +92,16 @@ where
                             let built_context = trx_context.build();
 
                             match built_context {
-                                Ok(ctx) => ctx.record_trx(),
+                                Ok(ctx) => {
+
+                                    if trx_logging_enabled {
+                                        if let Err(e) = tx_for_req.send(LogHandlerMessage::new_log_message(ctx)) {
+                                            println!("Failed to send transaction context to log handler. err: {}", e)
+                                        }
+                                    } else {
+                                        ctx.record_trx();
+                                    }
+                                },
                                 Err(e) => {
                                     println!("Failed to build transaction context. err: {:?}", e)
                                 }

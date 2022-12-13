@@ -8,6 +8,7 @@ pub mod routes {
 
     pub enum ConfigServerPath {
         GetCertToken,
+        PostTrxLogs,
     }
 
     impl FromStr for ConfigServerPath {
@@ -16,6 +17,7 @@ pub mod routes {
         fn from_str(input: &str) -> ServerResult<ConfigServerPath> {
             match input {
                 "/cert/token" => Ok(Self::GetCertToken),
+                "/trx/logs" => Ok(Self::PostTrxLogs),
                 _ => Err(ServerError::InvalidPath(input.to_string())),
             }
         }
@@ -25,12 +27,15 @@ pub mod routes {
         fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
             match self {
                 Self::GetCertToken => write!(f, "/cert/token"),
+                Self::PostTrxLogs => write!(f, "/trx/logs"),
             }
         }
     }
 }
 
 pub mod requests {
+    use crate::logging::TrxContext;
+
     use super::error::ServerResult;
     use serde::{Deserialize, Serialize};
 
@@ -129,6 +134,23 @@ pub mod requests {
 
         pub fn key_pair(&self) -> String {
             self.key_pair.clone()
+        }
+    }
+
+    #[derive(Serialize, Deserialize, Debug, Clone)]
+    pub struct PostTrxLogsRequest {
+        trx_logs: Vec<TrxContext>,
+    }
+
+    impl ConfigServerPayload for PostTrxLogsRequest {}
+
+    impl PostTrxLogsRequest {
+        pub fn new(trx_logs: Vec<TrxContext>) -> Self {
+            Self { trx_logs }
+        }
+
+        pub fn trx_logs(&self) -> Vec<TrxContext> {
+            self.trx_logs.clone()
         }
     }
 }

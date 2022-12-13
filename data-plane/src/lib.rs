@@ -10,6 +10,7 @@ pub mod dns;
 pub mod e3client;
 pub mod error;
 pub mod health;
+pub mod utils;
 
 #[cfg(feature = "tls_termination")]
 pub mod server;

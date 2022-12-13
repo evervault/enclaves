@@ -1,4 +1,6 @@
+use chrono::SecondsFormat;
 use derive_builder::Builder;
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 use hyper::{
@@ -8,8 +10,9 @@ use hyper::{
 };
 
 #[allow(dead_code)]
-#[derive(serde::Serialize, Clone, Debug, Builder)]
+#[derive(Serialize, Deserialize, Clone, Debug, Builder)]
 pub struct TrxContext {
+    ts: String,
     msg: String,
     uri: String,
     request_method: String,
@@ -43,7 +46,9 @@ impl TrxContext {
 
 impl TrxContextBuilder {
     fn new() -> TrxContextBuilder {
+        let timestamp = get_iso_timestamp();
         TrxContextBuilder {
+            ts: Some(timestamp),
             msg: Some("Cage Transaction Complete".to_string()),
             uri: None,
             request_method: None,
@@ -125,6 +130,11 @@ impl TrxContextBuilder {
             & self.request_method.is_some()
             & self.request_headers.is_some()
     }
+}
+
+fn get_iso_timestamp() -> String {
+    let timestamp: chrono::DateTime<chrono::Utc> = std::time::SystemTime::now().into();
+    timestamp.to_rfc3339_opts(SecondsFormat::Millis, true)
 }
 
 fn convert_headers_to_string(headers: &HeaderMap<HeaderValue>) -> String {
