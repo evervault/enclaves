@@ -25,3 +25,11 @@ pub fn trx_logging_enabled() -> bool {
         Err(_) => true,
     }
 }
+
+pub fn api_key_auth_enabled() -> bool {
+    //Check if api key auth is enabled - default to true
+    match std::env::var("EV_API_KEY_AUTH") {
+        Ok(auth_enabled) => auth_enabled.parse().unwrap_or(true),
+        Err(_) => true,
+    }
+}
