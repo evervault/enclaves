@@ -2,6 +2,7 @@ on:
   push:
     paths:
       - control-plane/**
+      - shared/**
       - .github/workflows/deploy-control-plane-image-staging.yml
       - scripts/start-cage.sh
       - scripts/health-check.sh

@@ -5,6 +5,7 @@ on:
     paths:
       - .github/workflows/deploy-data-plane-binary-staging.yml
       - data-plane/**
+      - shared/**
     branches:
       - main
 
