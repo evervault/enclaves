@@ -1791,6 +1791,7 @@ dependencies = [
  "derive_builder",
  "hyper",
  "lazy_static",
+ "rand",
  "rmp-serde",
  "serde",
  "serde_derive",

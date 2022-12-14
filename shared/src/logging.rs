@@ -9,12 +9,16 @@ use hyper::{
     Body, HeaderMap, Request, Response,
 };
 
+use rand::{thread_rng, Rng};
+
 #[allow(dead_code)]
 #[derive(Serialize, Deserialize, Clone, Debug, Builder)]
 pub struct TrxContext {
+    id: u128,
     ts: String,
     msg: String,
     uri: String,
+    r#type: String,
     request_method: String,
     request_headers: Option<String>,
     user_agent: Option<String>,
@@ -47,10 +51,14 @@ impl TrxContext {
 impl TrxContextBuilder {
     fn new() -> TrxContextBuilder {
         let timestamp = get_iso_timestamp();
+        let trx_id = thread_rng().gen::<u128>();
+        let trx_type = "cage_trx".to_string();
         TrxContextBuilder {
+            id: Some(trx_id),
             ts: Some(timestamp),
             msg: Some("Cage Transaction Complete".to_string()),
             uri: None,
+            r#type: Some(trx_type),
             request_method: None,
             request_headers: None,
             user_agent: None,
@@ -78,6 +86,10 @@ impl TrxContextBuilder {
         trx_context.app_uuid(app_uuid.to_string());
         trx_context.team_uuid(team_uuid.to_string());
         trx_context
+    }
+
+    pub fn get_trx_id(&self) -> Option<u128> {
+        self.id
     }
 
     pub fn add_req_to_trx_context(&mut self, req: &Request<Body>) {

@@ -72,14 +72,20 @@ where
             let sent_response = server
                 .serve_connection(
                     stream,
-                    service_fn(|req: Request<Body>| {
+                    service_fn(|mut req: Request<Body>| {
                         let e3_client_for_req = e3_client_for_tcp.clone();
                         let cage_context_for_req = cage_context_for_tcp.clone();
                         let tx_for_req = tx_for_tcp.clone();
                         async move {
                             let mut trx_context = init_trx(&cage_context_for_req, &req);
+                            let trx_id = trx_context.get_trx_id();
                             trx_context.add_req_to_trx_context(&req);
-                            let response = handle_incoming_request(
+
+                            if trx_logging_enabled {
+                                add_ev_ctx_header_to_request(&mut req, trx_id);
+                            }
+
+                            let mut response = handle_incoming_request(
                                 req,
                                 port,
                                 e3_client_for_req,
@@ -93,8 +99,11 @@ where
 
                             match built_context {
                                 Ok(ctx) => {
-
                                     if trx_logging_enabled {
+                                        //Add trx ID to response of request
+                                        add_ev_ctx_header_to_response(&mut response, trx_id);
+
+                                        //Send trx to config server in data plane
                                         if let Err(e) = tx_for_req.send(LogHandlerMessage::new_log_message(ctx)) {
                                             println!("Failed to send transaction context to log handler. err: {}", e)
                                         }
@@ -266,6 +275,7 @@ pub async fn handle_standard_request(
     req_info
         .headers
         .insert("Content-Length", HeaderValue::from(bytes_vec.len()));
+
     let decrypted_request = Request::from_parts(req_info, Body::from(bytes_vec));
     println!("Finished processing request");
     let http_client = hyper::Client::new();
@@ -312,6 +322,32 @@ fn init_trx(cage_context: &CageContext, req: &Request<Body>) -> TrxContextBuilde
     trx_ctx
 }
 
+fn build_trx_id_header_value(trx_id: u128) -> HeaderValue {
+    HeaderValue::from_str(trx_id.to_string().as_str())
+        .expect("Unable to create headerValue from ID: u128")
+}
+
+fn add_ev_ctx_header_to_request(req: &mut Request<Body>, trx_id: Option<u128>) {
+    match trx_id {
+        Some(id) => {
+            req.headers_mut()
+                .insert("x-evervault-cage-ctx", build_trx_id_header_value(id));
+        }
+        None => println!("No id present in trx context to insert into request headers"),
+    }
+}
+
+fn add_ev_ctx_header_to_response(response: &mut Response<Body>, trx_id: Option<u128>) {
+    match trx_id {
+        Some(id) => {
+            response
+                .headers_mut()
+                .insert("x-evervault-cage-ctx", build_trx_id_header_value(id));
+        }
+        None => println!("No id present in trx context to insert into response headers"),
+    }
+}
+
 fn build_error_response(body_msg: Option<String>) -> Response<Body> {
     let body = match body_msg {
         Some(msg) => Body::from(msg),
@@ -326,7 +362,12 @@ fn build_error_response(body_msg: Option<String>) -> Response<Body> {
 
 #[cfg(test)]
 mod test {
-    use super::extract_ciphertexts_from_payload;
+    use hyper::{http::HeaderValue, Body, Request, Response};
+
+    use super::{
+        add_ev_ctx_header_to_request, add_ev_ctx_header_to_response,
+        extract_ciphertexts_from_payload,
+    };
 
     #[tokio::test]
     async fn test_extract_ciphertexts_with_none_present() {
@@ -342,5 +383,44 @@ mod test {
         let result = extract_ciphertexts_from_payload(input).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_adding_ctx_header_to_req() {
+        let mut request = Request::builder()
+            .method("GET")
+            .uri("https://evervault.com/")
+            .body(Body::empty())
+            .unwrap();
+
+        let trx_id = Some(u128::MAX);
+
+        add_ev_ctx_header_to_request(&mut request, trx_id);
+
+        let ctx_header = request.headers().get("x-evervault-cage-ctx");
+        let expected_header_val = HeaderValue::from_str(trx_id.unwrap().to_string().as_str())
+            .expect("Unable to create headerValue from ID: u128");
+
+        assert!(ctx_header.is_some());
+        assert_eq!(ctx_header.unwrap(), expected_header_val);
+    }
+
+    #[test]
+    fn test_adding_ctx_header_to_res() {
+        let mut response = Response::builder()
+            .status("200")
+            .body(Body::empty())
+            .unwrap();
+
+        let trx_id = Some(u128::MAX);
+
+        add_ev_ctx_header_to_response(&mut response, trx_id);
+
+        let ctx_header = response.headers().get("x-evervault-cage-ctx");
+        let expected_header_val = HeaderValue::from_str(trx_id.unwrap().to_string().as_str())
+            .expect("Unable to create headerValue from ID: u128");
+
+        assert!(ctx_header.is_some());
+        assert_eq!(ctx_header.unwrap(), expected_header_val);
     }
 }

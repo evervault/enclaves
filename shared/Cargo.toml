@@ -19,6 +19,7 @@ tokio-vsock = { version = "0.3.2", optional = true }
 lazy_static = "1.4.0"
 derive_builder = "0.12.0"
 chrono = "0.4.23"
+rand = "^0.8"
 
 [lib]
 name = "shared"
