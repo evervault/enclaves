@@ -20,16 +20,23 @@ pub struct TrxContext {
     uri: String,
     r#type: String,
     request_method: String,
+    #[builder(default)]
     request_headers: Option<String>,
+    #[builder(default)]
     user_agent: Option<String>,
+    #[builder(default)]
     response_headers: Option<String>,
+    #[builder(default)]
     response_code: Option<String>,
     cage_name: String,
     cage_uuid: String,
     app_uuid: String,
     team_uuid: String,
+    #[builder(default)]
     n_decrypts: Option<u32>,
+    #[builder(default)]
     content_type: Option<String>,
+    #[builder(default)]
     response_content_type: Option<String>,
 }
 
