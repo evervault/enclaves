@@ -14,8 +14,9 @@ use rand::{thread_rng, Rng};
 
 #[allow(dead_code)]
 #[derive(Serialize, Deserialize, Clone, Debug, Builder)]
+#[serde(rename_all = "camelCase")]
 pub struct TrxContext {
-    id: u128,
+    txid: String,
     ts: String,
     msg: String,
     uri: String,
@@ -34,7 +35,7 @@ pub struct TrxContext {
     app_uuid: String,
     team_uuid: String,
     #[builder(default)]
-    n_decrypts: Option<u32>,
+    n_decrypted_fields: Option<u32>,
     #[builder(default)]
     content_type: Option<String>,
     #[builder(default)]
@@ -54,13 +55,37 @@ impl TrxContext {
     }
 }
 
+pub struct TrxContextId {
+    txid: u128,
+}
+
+impl TrxContextId {
+    pub fn new() -> Self {
+        Self {
+            txid: thread_rng().gen::<u128>(),
+        }
+    }
+}
+
+impl Default for TrxContextId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl std::fmt::Display for TrxContextId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:X}", self.txid)
+    }
+}
+
 impl TrxContextBuilder {
     fn new() -> TrxContextBuilder {
         let timestamp = get_iso_timestamp();
-        let trx_id = thread_rng().gen::<u128>();
+        let trx_id = TrxContextId::new();
         let trx_type = "cage_trx".to_string();
         TrxContextBuilder {
-            id: Some(trx_id),
+            txid: Some(format!("{}", trx_id)),
             ts: Some(timestamp),
             msg: Some("Cage Transaction Complete".to_string()),
             uri: None,
@@ -74,7 +99,7 @@ impl TrxContextBuilder {
             cage_uuid: None,
             team_uuid: None,
             app_uuid: None,
-            n_decrypts: None,
+            n_decrypted_fields: None,
             content_type: None,
             response_content_type: None,
         }
@@ -94,8 +119,8 @@ impl TrxContextBuilder {
         trx_context
     }
 
-    pub fn get_trx_id(&self) -> Option<u128> {
-        self.id
+    pub fn get_trx_id(&self) -> Option<String> {
+        self.txid.clone()
     }
 
     pub fn add_req_to_trx_context(&mut self, req: &Request<Body>) {

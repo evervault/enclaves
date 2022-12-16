@@ -82,7 +82,7 @@ where
                             trx_context.add_req_to_trx_context(&req);
 
                             if trx_logging_enabled {
-                                add_ev_ctx_header_to_request(&mut req, trx_id);
+                                add_ev_ctx_header_to_request(&mut req, trx_id.clone());
                             }
 
                             let mut response = handle_incoming_request(
@@ -264,7 +264,7 @@ pub async fn handle_standard_request(
         });
     }
 
-    trx_context.n_decrypts(n_decrypts);
+    trx_context.n_decrypted_fields(n_decrypts);
 
     // Build processed request
     let mut uri_builder = hyper::Uri::builder()
@@ -324,12 +324,11 @@ fn init_trx(cage_context: &CageContext, req: &Request<Body>) -> TrxContextBuilde
     trx_ctx
 }
 
-fn build_trx_id_header_value(trx_id: u128) -> HeaderValue {
-    HeaderValue::from_str(trx_id.to_string().as_str())
-        .expect("Unable to create headerValue from ID: u128")
+fn build_trx_id_header_value(trx_id: String) -> HeaderValue {
+    HeaderValue::from_str(trx_id.as_str()).expect("Unable to create headerValue from ID: u128")
 }
 
-fn add_ev_ctx_header_to_request(req: &mut Request<Body>, trx_id: Option<u128>) {
+fn add_ev_ctx_header_to_request(req: &mut Request<Body>, trx_id: Option<String>) {
     match trx_id {
         Some(id) => {
             req.headers_mut()
@@ -339,7 +338,7 @@ fn add_ev_ctx_header_to_request(req: &mut Request<Body>, trx_id: Option<u128>) {
     }
 }
 
-fn add_ev_ctx_header_to_response(response: &mut Response<Body>, trx_id: Option<u128>) {
+fn add_ev_ctx_header_to_response(response: &mut Response<Body>, trx_id: Option<String>) {
     match trx_id {
         Some(id) => {
             response
@@ -395,9 +394,9 @@ mod test {
             .body(Body::empty())
             .unwrap();
 
-        let trx_id = Some(u128::MAX);
+        let trx_id = Some(format!("{}", u128::MAX));
 
-        add_ev_ctx_header_to_request(&mut request, trx_id);
+        add_ev_ctx_header_to_request(&mut request, trx_id.clone());
 
         let ctx_header = request.headers().get("x-evervault-cage-ctx");
         let expected_header_val = HeaderValue::from_str(trx_id.unwrap().to_string().as_str())
@@ -414,9 +413,9 @@ mod test {
             .body(Body::empty())
             .unwrap();
 
-        let trx_id = Some(u128::MAX);
+        let trx_id = Some(format!("{}", u128::MAX));
 
-        add_ev_ctx_header_to_response(&mut response, trx_id);
+        add_ev_ctx_header_to_response(&mut response, trx_id.clone());
 
         let ctx_header = response.headers().get("x-evervault-cage-ctx");
         let expected_header_val = HeaderValue::from_str(trx_id.unwrap().to_string().as_str())
