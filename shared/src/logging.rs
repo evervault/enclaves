@@ -1,6 +1,7 @@
 use chrono::SecondsFormat;
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 use std::collections::HashSet;
 
 use hyper::{
@@ -45,10 +46,8 @@ impl TrxContext {
         if self.response_code.is_none() {
             self.response_code = Some("ERR".to_string());
         }
-
         let json_log = serde_json::to_string(&self);
-        //TODO - add feature flag check here to ship logs to config server instead of logging in dataplane
-        // It should also use a mpsc channel to send to a different tokio task so it doesn't block the request if it fails
+
         if let Ok(log) = json_log {
             println!("{}", log);
         }
@@ -135,11 +134,17 @@ impl TrxContextBuilder {
     }
 
     fn add_headers_to_request(&mut self, headers: &HeaderMap<HeaderValue>) {
-        self.request_headers(Some(convert_headers_to_string(headers)));
+        let headers_map = convert_headers_to_map(headers);
+        if let Ok(headers_string) = serde_json::to_string(&headers_map) {
+            self.request_headers(Some(headers_string));
+        }
     }
 
     fn add_headers_to_response(&mut self, headers: &HeaderMap<HeaderValue>) {
-        self.response_headers(Some(convert_headers_to_string(headers)));
+        let headers_map = convert_headers_to_map(headers);
+        if let Ok(headers_string) = serde_json::to_string(&headers_map) {
+            self.response_headers(Some(headers_string));
+        }
     }
 
     pub fn can_build(&mut self) -> bool {
@@ -156,14 +161,22 @@ fn get_iso_timestamp() -> String {
     timestamp.to_rfc3339_opts(SecondsFormat::Millis, true)
 }
 
-fn convert_headers_to_string(headers: &HeaderMap<HeaderValue>) -> String {
-    headers.iter().fold(String::new(), |mut acc, (key, value)| {
-        if NON_SENSITIVE_HEADERS.contains(&key.to_string()) {
-            let header_str = format!("{}: {}, ", key, value.to_str().unwrap());
-            acc.push_str(&header_str);
-        };
-        acc
-    })
+fn convert_headers_to_map(headers: &HeaderMap<HeaderValue>) -> Map<String, Value> {
+    let mut tracked_headers: Map<String, Value> = Map::new();
+    for (header_key, header_value) in headers {
+        match header_value.to_str() {
+            Ok(header_value_str) if NON_SENSITIVE_HEADERS.contains(&header_key.to_string()) => {
+                tracked_headers.insert(
+                    header_key.to_string(),
+                    Value::String(header_value_str.to_string()),
+                );
+            }
+            _ => {
+                tracked_headers.insert(header_key.to_string(), Value::String("***".to_string()));
+            }
+        }
+    }
+    tracked_headers
 }
 
 lazy_static::lazy_static!(
