@@ -22,7 +22,7 @@ use shared::server::Listener;
 use std::sync::Arc;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
-pub async fn run<L: Listener + Send + Sync>(tcp_server: L, port: u16, auth_enabled: bool)
+pub async fn run<L: Listener + Send + Sync>(tcp_server: L, port: u16)
 where
     TlsError: From<<L as Listener>::Error>,
     <L as Listener>::Connection: 'static,
@@ -91,7 +91,6 @@ where
                                 e3_client_for_req,
                                 cage_context_for_req,
                                 &mut trx_context,
-                                auth_enabled
                             )
                             .await;
 
@@ -140,29 +139,35 @@ async fn handle_incoming_request(
     e3_client: Arc<E3Client>,
     cage_context: CageContext,
     trx_context: &mut TrxContextBuilder,
-    auth_enabled: bool,
 ) -> Response<Body> {
     // Extract API Key header and authenticate request
     // Run parser over payload
     // Serialize request onto socket
 
-    let api_key = match req
-        .headers()
-        .get(hyper::http::header::HeaderName::from_static("api-key"))
-        .ok_or(AuthError::NoApiKeyGiven)
-        .map(|api_key_header| api_key_header.to_owned())
-    {
-        Ok(api_key_header) => api_key_header,
-        Err(e) => return e.into(),
-    };
-
-    let is_auth = if cfg!(feature = "enclave") && auth_enabled {
+    let api_key = if cfg!(feature = "enclave") && cage_context.api_key_auth {
         println!("Authenticating request");
+        let api_key = match req
+            .headers()
+            .get(hyper::http::header::HeaderName::from_static("api-key"))
+            .ok_or(AuthError::NoApiKeyGiven)
+            .map(|api_key_header| api_key_header.to_owned())
+        {
+            Ok(api_key_header) => api_key_header,
+            Err(e) => return e.into(),
+        };
         match e3_client
             .authenticate(&api_key, AuthRequest::from(&cage_context))
             .await
         {
-            Ok(auth_status) => auth_status,
+            Ok(auth_status) => {
+                if !auth_status {
+                    println!("Failed to authenticate request using provided API Key");
+                    let response = AuthError::FailedToAuthenticateApiKey.into();
+                    return response;
+                } else {
+                    api_key
+                }
+            }
             Err(ClientError::FailedRequest(status)) if status.as_u16() == 401 => {
                 let response: Response<Body> = AuthError::FailedToAuthenticateApiKey.into();
                 return response;
@@ -173,14 +178,8 @@ async fn handle_incoming_request(
             }
         }
     } else {
-        true
+        HeaderValue::from_str(&cage_context.api_key).unwrap()
     };
-
-    if !is_auth {
-        println!("Failed to authenticate request using provided API Key");
-        let response = AuthError::FailedToAuthenticateApiKey.into();
-        return response;
-    }
 
     let (req_info, req_body) = req.into_parts();
 

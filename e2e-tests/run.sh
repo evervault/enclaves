@@ -2,7 +2,6 @@
 
 set -e 
 
-
 # kill container if it is left running by hanging test, then generate local testing certs
 if [[ -z "${CI}" ]];
 then

@@ -7,8 +7,8 @@ use data_plane::dns::egressproxy::EgressProxy;
 #[cfg(feature = "network_egress")]
 use data_plane::dns::enclavedns::EnclaveDns;
 
+use data_plane::get_tcp_server;
 use data_plane::health::start_health_check_server;
-use data_plane::{configuration, get_tcp_server};
 use shared::{env_var_present_and_true, ENCLAVE_CONNECT_PORT};
 
 #[tokio::main]
@@ -75,12 +75,10 @@ async fn start_data_plane(data_plane_port: u16) {
     };
     println!("Data plane TCP server created");
 
-    let auth_enabled = configuration::api_key_auth_enabled();
-
     #[cfg(feature = "tls_termination")]
     {
         println!("TLS Termination enabled in dataplane. Running tls server.");
-        data_plane::server::data_plane_server::run(server, data_plane_port, auth_enabled).await;
+        data_plane::server::data_plane_server::run(server, data_plane_port).await;
     }
     #[cfg(not(feature = "tls_termination"))]
     run_tcp_passthrough(server, data_plane_port).await;
