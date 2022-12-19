@@ -101,7 +101,6 @@ impl E3Client {
                 payload.try_into_body()?,
             )
             .await?;
-
         Ok(response.status().is_success())
     }
 

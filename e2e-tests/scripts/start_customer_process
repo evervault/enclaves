@@ -11,5 +11,4 @@ done
 echo "Environment ready.. Starting user process"
 
 source /etc/customer-env
-–
 node /services/customerProcess.js

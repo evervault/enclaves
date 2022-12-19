@@ -11,12 +11,12 @@ use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
 
 use futures::StreamExt;
 
+use crate::server::tls::inter_ca_retreiver::EV_API_KEY;
 use hyper::http::HeaderValue;
 use hyper::http::{self, request::Parts};
 use hyper::server::conn;
 use hyper::service::service_fn;
 use hyper::{Body, Request, Response};
-
 use shared::logging::TrxContextBuilder;
 use shared::server::Listener;
 use std::sync::Arc;
@@ -145,7 +145,7 @@ async fn handle_incoming_request(
     // Run parser over payload
     // Serialize request onto socket
 
-    let api_key = if cfg!(feature = "enclave") && cage_context.api_key_auth {
+    let api_key = if cage_context.api_key_auth {
         println!("Authenticating request");
         let api_key = match req
             .headers()
@@ -179,7 +179,7 @@ async fn handle_incoming_request(
             }
         }
     } else {
-        HeaderValue::from_str(&cage_context.api_key).unwrap()
+        HeaderValue::from_str(&EV_API_KEY).unwrap()
     };
 
     let (req_info, req_body) = req.into_parts();

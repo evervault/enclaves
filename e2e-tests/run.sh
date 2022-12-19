@@ -1,6 +1,6 @@
 #!/bin/bash
-
 set -e 
+
 
 # kill container if it is left running by hanging test, then generate local testing certs
 if [[ -z "${CI}" ]];
@@ -62,6 +62,18 @@ docker kill cages-test-container
 docker run $docker_run_args --env DATA_PLANE_HEALTH_CHECKS=false cages-test
 docker exec cages-test-container sh -c "sv down data-plane"
 npm run health-check-tests "should succeed"
+
+echo "API Key Auth Tests"
+docker kill cages-test-container
+docker run $docker_run_args --env EV_API_KEY_AUTH=true cages-test
+sleep 10
+npm run api-key-auth-tests
+
+echo "No API Key Auth Tests"
+docker kill cages-test-container
+docker run $docker_run_args --env EV_API_KEY_AUTH=false cages-test
+sleep 10
+npm run no-auth-tests
 
 echo "Testing that Cage is serving trustable cert chain"
 echo "Q" | openssl s_client -verifyCAfile sample-ca/sample-root-ca-cert.pem -showcerts -connect 0.0.0.0:443 | grep "Verification: OK"

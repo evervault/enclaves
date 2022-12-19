@@ -1,5 +1,5 @@
 mod cert_resolver;
-mod inter_ca_retreiver;
+pub(crate) mod inter_ca_retreiver;
 mod tls_server;
 
 pub use tls_server::*;

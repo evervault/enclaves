@@ -5,8 +5,10 @@ use rustls::server::ServerConfig;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::convert::Infallible;
-use std::fs;
 use rust_crypto::backend::{CryptoClient, Datatype};
+use axum::response::IntoResponse;
+use axum::http::StatusCode;
+use axum::http::HeaderMap;
 
 lazy_static::lazy_static! {
   static ref KEY_PAIR: rust_crypto::backend::ies_secp256r1_openssl::Client = create_key_pair();
@@ -71,6 +73,7 @@ fn get_router() -> Router {
     .route("/encrypt", post(encryption_handler))
     .route("/decrypt", post(decryption_handler))
     .route("/attestation-doc", post(attestation_handler))
+    .route("/authenticate", post(authentication_handler))
 }
 
 fn encrypt(value: &mut Value) {
@@ -123,6 +126,21 @@ async fn decryption_handler(
   println!("[Mock Crypto API] - Recieved request to decrypt!");
   decrypt(request_payload.data_mut());
   Ok(Json(request_payload))
+}
+
+async fn authentication_handler(headers: HeaderMap) -> impl IntoResponse {
+  match headers.get("api-key") {
+    Some(key) => {
+      if key.to_str().unwrap() == "placeholder" {
+        println!("[Mock Crypto API] - Recieved request to authenticate!");
+        StatusCode::OK
+      } else {
+        println!("[Mock Crypto API] - Invalid API key recieved");
+        StatusCode::UNAUTHORIZED
+      }
+    },
+    None => return StatusCode::UNAUTHORIZED
+  }
 }
 
 async fn attestation_handler() -> Result<Vec<u8>, Infallible> {

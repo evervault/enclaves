@@ -1,3 +1,4 @@
+use std::env;
 use std::fs::File;
 use std::io::Write;
 
@@ -8,11 +9,15 @@ use serde_json::json;
 use shared::server::config_server::requests::Secret;
 
 use crate::e3client::{CryptoRequest, CryptoResponse, E3Client};
+use crate::error::{Error, Result};
 use crate::{cert_provisioner_client, config_client, CageContext};
 use crate::{cert_provisioner_client::CertProvisionerClient, config_client::ConfigClient};
+use lazy_static::lazy_static;
 
-use crate::error::{Error, Result};
-
+lazy_static! {
+    pub static ref EV_API_KEY: String =
+        std::env::var("EV_API_KEY").expect("Couldn't get EV_API_KEY from env");
+}
 pub struct InterCaRetreiver {
     cert_provisioner_client: CertProvisionerClient,
     config_client: ConfigClient,
@@ -48,6 +53,7 @@ impl InterCaRetreiver {
         self.init_environment(cert_response.clone().secrets.unwrap())
             .await?;
 
+        lazy_static::initialize(&EV_API_KEY);
         let inter_ca_cert = parse_cert(cert_response.cert())?;
         let inter_ca_key_pair = parse_key(cert_response.key_pair())?;
 
@@ -59,6 +65,7 @@ impl InterCaRetreiver {
             .iter()
             .find(|secret| secret.name == "EV_API_KEY")
             .ok_or(Error::MissingApiKey)?;
+        env::set_var(api_key.clone().name, api_key.clone().secret);
         let header = HeaderValue::from_str(&api_key.secret)?;
 
         let (encrypted_env, plaintext_env): (_, Vec<Secret>) = secrets
