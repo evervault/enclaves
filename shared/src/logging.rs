@@ -2,7 +2,7 @@ use chrono::SecondsFormat;
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use std::collections::HashSet;
+use std::{collections::HashSet, time::SystemTime};
 
 use hyper::{
     header::{self, CONTENT_TYPE, USER_AGENT},
@@ -40,6 +40,8 @@ pub struct TrxContext {
     content_type: Option<String>,
     #[builder(default)]
     response_content_type: Option<String>,
+    #[builder(default)]
+    elapsed: Option<f64>,
 }
 
 impl TrxContext {
@@ -55,6 +57,7 @@ impl TrxContext {
     }
 }
 
+#[derive(Clone)]
 pub struct TrxContextId {
     txid: u128,
 }
@@ -82,10 +85,10 @@ impl std::fmt::Display for TrxContextId {
 impl TrxContextBuilder {
     fn new() -> TrxContextBuilder {
         let timestamp = get_iso_timestamp();
-        let trx_id = TrxContextId::new();
+        let trx_id = format!("{}", TrxContextId::new());
         let trx_type = "cage_trx".to_string();
         TrxContextBuilder {
-            txid: Some(format!("{}", trx_id)),
+            txid: Some(trx_id),
             ts: Some(timestamp),
             msg: Some("Cage Transaction Complete".to_string()),
             uri: None,
@@ -102,7 +105,21 @@ impl TrxContextBuilder {
             n_decrypted_fields: None,
             content_type: None,
             response_content_type: None,
+            elapsed: None,
         }
+    }
+
+    pub fn get_timer() -> SystemTime {
+        std::time::SystemTime::now()
+    }
+
+    pub fn stop_timer_and_build(
+        &mut self,
+        started: SystemTime,
+    ) -> Result<TrxContext, TrxContextBuilderError> {
+        let elapsed = started.elapsed().unwrap().as_millis() as f64;
+        self.elapsed(Some(elapsed));
+        self.build()
     }
 
     pub fn init_trx_context_with_cage_details(
@@ -119,8 +136,10 @@ impl TrxContextBuilder {
         trx_context
     }
 
-    pub fn get_trx_id(&self) -> Option<String> {
-        self.txid.clone()
+    pub fn get_trx_id(&self) -> String {
+        self.txid
+            .clone()
+            .unwrap_or_else(|| format!("{:X}", thread_rng().gen::<u128>()))
     }
 
     pub fn add_req_to_trx_context(&mut self, req: &Request<Body>) {
@@ -146,7 +165,7 @@ impl TrxContextBuilder {
     }
 
     pub fn add_res_to_trx_context(&mut self, res: &Response<Body>) {
-        self.response_code(Some(res.status().to_string()));
+        self.response_code(Some(res.status().as_u16().to_string()));
         self.add_headers_to_response(res.headers());
 
         //Pull out content type
