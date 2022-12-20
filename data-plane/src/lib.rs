@@ -35,7 +35,10 @@ impl CageContext {
         let team_uuid = std::env::var("EV_TEAM_UUID")?;
         let cage_uuid = std::env::var("CAGE_UUID")?;
         let cage_name = std::env::var("EV_CAGE_NAME")?;
-        let api_key_auth = std::env::var("EV_API_KEY_AUTH")?.parse().unwrap_or(true);
+        let api_key_auth = std::env::var("EV_API_KEY_AUTH")
+            .unwrap_or_else(|_| "true".to_string())
+            .parse()
+            .unwrap_or(true);
         Ok(Self {
             app_uuid,
             team_uuid,
