@@ -140,7 +140,7 @@ jobs:
         run: |
           docker pull $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$VERSION_TAG
           docker pull $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$VERSION_TAG
-          docker tag egress-disabled-$VERSION_TAG $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-latest
-          docker tag egress-enabled-$VERSION_TAG $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-latest
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$VERSION_TAG $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-latest
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$VERSION_TAG $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-latest
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-latest
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-latest
