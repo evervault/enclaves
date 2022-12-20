@@ -113,7 +113,12 @@ jobs:
 
   mark_control_plane_images_as_latest:
     runs-on: ubuntu-latest
-    needs: [deploy_control_plane_image_with_egress, deploy_control_plane_image_without_egress, get-version]
+    needs:
+      [
+        deploy_control_plane_image_with_egress,
+        deploy_control_plane_image_without_egress,
+        get-version,
+      ]
     environment:
       name: production
 
@@ -133,6 +138,9 @@ jobs:
           ECR_REPOSITORY: evervault/control-plane
           VERSION_TAG: ${{ needs.get-version.outputs.version }}
         run: |
+          docker pull $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$VERSION_TAG
+          docker pull $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$VERSION_TAG
           docker tag egress-disabled-$VERSION_TAG $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-latest
           docker tag egress-enabled-$VERSION_TAG $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-latest
-      
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-latest
