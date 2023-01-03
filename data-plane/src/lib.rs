@@ -27,6 +27,7 @@ pub struct CageContext {
     cage_uuid: String,
     cage_name: String,
     api_key_auth: bool,
+    trx_logging_enabled: bool,
 }
 
 impl CageContext {
@@ -39,12 +40,18 @@ impl CageContext {
             .unwrap_or_else(|_| "true".to_string())
             .parse()
             .unwrap_or(true);
+        let trx_logging_enabled = std::env::var("EV_TRX_LOGGING_ENABLED")
+            .unwrap_or_else(|_| "true".to_string())
+            .parse()
+            .unwrap_or(true);
+
         Ok(Self {
             app_uuid,
             team_uuid,
             cage_uuid,
             cage_name,
             api_key_auth,
+            trx_logging_enabled,
         })
     }
 
@@ -54,6 +61,7 @@ impl CageContext {
         cage_uuid: String,
         cage_name: String,
         api_key_auth: bool,
+        trx_logging_enabled: bool,
     ) -> Self {
         Self {
             cage_uuid,
@@ -61,6 +69,7 @@ impl CageContext {
             team_uuid,
             cage_name,
             api_key_auth,
+            trx_logging_enabled,
         }
     }
 

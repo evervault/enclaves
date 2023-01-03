@@ -30,6 +30,8 @@ pub struct TrxContext {
     response_headers: Option<String>,
     #[builder(default)]
     response_code: Option<String>,
+    #[builder(default)]
+    status_group: Option<String>,
     cage_name: String,
     cage_uuid: String,
     app_uuid: String,
@@ -98,6 +100,7 @@ impl TrxContextBuilder {
             user_agent: None,
             response_headers: None,
             response_code: None,
+            status_group: None,
             cage_name: None,
             cage_uuid: None,
             team_uuid: None,
@@ -142,6 +145,12 @@ impl TrxContextBuilder {
             .unwrap_or_else(|| format!("{:X}", thread_rng().gen::<u128>()))
     }
 
+    pub fn add_status_and_group(&mut self, status_code: u16) {
+        let status_group = StatusGroup::from_u16(status_code).map(|group| format!("{}", group));
+        self.status_group(status_group);
+        self.response_code(Some(status_code.to_string()));
+    }
+
     pub fn add_req_to_trx_context(&mut self, req: &Request<Body>) {
         self.uri(req.uri().to_string());
         self.request_method(req.method().to_string());
@@ -165,7 +174,7 @@ impl TrxContextBuilder {
     }
 
     pub fn add_res_to_trx_context(&mut self, res: &Response<Body>) {
-        self.response_code(Some(res.status().as_u16().to_string()));
+        self.add_status_and_group(res.status().as_u16());
         self.add_headers_to_response(res.headers());
 
         //Pull out content type
@@ -321,4 +330,44 @@ fn create_non_sensitive_header_set() -> HashSet<String> {
         header_set.insert(global_trx_id.to_string());
     }
     header_set
+}
+
+pub enum StatusGroup {
+    Information,
+    Success,
+    Redirection,
+    RequestErr,
+    ServerErr,
+}
+
+impl StatusGroup {
+    pub fn from_u16(val: u16) -> Option<Self> {
+        let prefix = if val < 200 {
+            StatusGroup::Information
+        } else if val < 300 {
+            StatusGroup::Success
+        } else if val < 400 {
+            StatusGroup::Redirection
+        } else if val < 500 {
+            StatusGroup::RequestErr
+        } else if val < 600 {
+            StatusGroup::ServerErr
+        } else {
+            return None;
+        };
+        Some(prefix)
+    }
+}
+
+impl std::fmt::Display for StatusGroup {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str_prefix = match self {
+            Self::Information => "1XX",
+            Self::Success => "2XX",
+            Self::Redirection => "3XX",
+            Self::RequestErr => "4XX",
+            Self::ServerErr => "5XX",
+        };
+        write!(f, "{}", str_prefix)
+    }
 }

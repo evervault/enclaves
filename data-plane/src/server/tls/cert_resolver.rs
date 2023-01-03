@@ -405,7 +405,15 @@ mod tests {
         let cage_uuid = "cage_123".to_string();
         let cage_name = "my-sick-cage".to_string();
         let api_auth = false;
-        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name, api_auth);
+        let trx_logging = true;
+        let ctx = CageContext::new(
+            app_uuid,
+            team_uuid,
+            cage_uuid,
+            cage_name,
+            api_auth,
+            trx_logging,
+        );
         let (_, cert) =
             super::SelfSignedCertResolver::generate_self_signed_cert(ctx.get_cert_name()).unwrap();
         let parsed_initial_cert = parse_x509_from_rustls_certified_key(&cert);
@@ -514,7 +522,15 @@ mod tests {
         let cage_uuid = "cage_123".to_string();
         let cage_name = "my-sick-cage".to_string();
         let api_key_auth = true;
-        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name, api_key_auth);
+        let trx_logging = true;
+        let ctx = CageContext::new(
+            app_uuid,
+            team_uuid,
+            cage_uuid,
+            cage_name,
+            api_key_auth,
+            trx_logging,
+        );
         let server_name = Some(ctx.get_cert_name());
         let (cert, key) = provisioner::generate_ca().unwrap();
         let resolver = AttestableCertResolver::new(cert, key, ctx).unwrap();
@@ -546,7 +562,15 @@ mod tests {
         let cage_uuid = "cage_123".to_string();
         let cage_name = "my-sick-cage".to_string();
         let api_key_auth = false;
-        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name, api_key_auth);
+        let trx_logging = true;
+        let ctx = CageContext::new(
+            app_uuid,
+            team_uuid,
+            cage_uuid,
+            cage_name,
+            api_key_auth,
+            trx_logging,
+        );
         let server_name = Some(ctx.get_cert_name());
         let (cert, key) = provisioner::generate_ca().unwrap();
         let resolver = AttestableCertResolver::new(cert, key, ctx).unwrap();

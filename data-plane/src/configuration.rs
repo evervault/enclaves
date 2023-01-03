@@ -17,11 +17,3 @@ pub fn get_e3_host() -> String {
 pub fn get_e3_host() -> String {
     "localhost".to_string()
 }
-
-pub fn trx_logging_enabled() -> bool {
-    //Check if logging enabled - default to true
-    match std::env::var("EV_TRX_LOGGING_ENABLED") {
-        Ok(var_value) => var_value.parse().unwrap_or(false),
-        Err(_) => false,
-    }
-}

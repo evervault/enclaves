@@ -5,7 +5,7 @@ use super::tls::TlsServerBuilder;
 use crate::base_tls_client::ClientError;
 use crate::e3client::{self, AuthRequest, DecryptRequest, E3Client};
 use crate::error::{AuthError, Result};
-use crate::{configuration, CageContext};
+use crate::CageContext;
 
 use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
 
@@ -36,14 +36,13 @@ where
         .expect("Failed to create tls server");
     let http_server = conn::Http::new();
     let e3_client = Arc::new(E3Client::new());
-    let trx_logging_enabled = configuration::trx_logging_enabled();
 
     let (tx, rx): (
         UnboundedSender<LogHandlerMessage>,
         UnboundedReceiver<LogHandlerMessage>,
     ) = unbounded_channel();
 
-    if trx_logging_enabled {
+    if cage_context.trx_logging_enabled {
         let tx_for_handler = tx.clone();
         tokio::spawn(async move {
             start_log_handler(tx_for_handler, rx).await;
@@ -81,8 +80,9 @@ where
                             let (mut trx_context, request_timer) = init_trx(&cage_context_for_req, &req);
                             let trx_id = trx_context.get_trx_id();
                             trx_context.add_req_to_trx_context(&req);
+                            let trx_logging_enabled = cage_context_for_req.trx_logging_enabled;
 
-                            if trx_logging_enabled {
+                            if  trx_logging_enabled {
                                 add_ev_ctx_header_to_request(&mut req, trx_id.clone());
                             }
 
