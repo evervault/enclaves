@@ -1,37 +1,37 @@
-on:
-  schedule:
-    - cron: "*/30 * * * *" # run every 30 mins 
+# on:
+#   schedule:
+#     - cron: "*/30 * * * *" # run every 30 mins 
 
-name: Deploy and Test Cage Staging
-jobs:
-  deploy-testing-cage:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Deploy Cage
-        env:
-          EV_API_KEY: ${{ secrets.EV_API_KEY_STAGING }}
-          EV_DOMAIN: evervault.io
-          EV_CERT: ${{ secrets.SYNTHETIC_CERT_STAGING }}
-          EV_KEY: ${{ secrets.SYNTHETIC_KEY_STAGING }}
-          TMPDIR: /tmp/
-        run: |
-          sh <(curl https://cage-build-assets.evervault.com/cli/install -sL)
-          cd ci/test-cage/server
-          echo "$EV_CERT" > cert.pem
-          echo "$EV_KEY" > key.pem
-          ev-cage deploy -c staging.cage.toml --build-arg API_KEY="$EV_API_KEY" .
-  run-testing-script:
-    runs-on: ubuntu-latest
-    needs: [deploy-testing-cage]
-    steps:
-      - uses: actions/checkout@v2
-      - name: Run testing client
-        env:
-          ENVIRONMENT: staging
-          CAGE_NAME: synthetic-testing-cage
-          APP_UUID: app_1bba8ba15402
-          EV_API_KEY: ${{ secrets.EV_API_KEY_STAGING }}
-          NODE_TLS_REJECT_UNAUTHORIZED: 0
-        run: |
-          cd ci/test-cage/client ; npm ci ; npm start
+# name: Deploy and Test Cage Staging
+# jobs:
+#   deploy-testing-cage:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v2
+#       - name: Deploy Cage
+#         env:
+#           EV_API_KEY: ${{ secrets.EV_API_KEY_STAGING }}
+#           EV_DOMAIN: evervault.io
+#           EV_CERT: ${{ secrets.SYNTHETIC_CERT_STAGING }}
+#           EV_KEY: ${{ secrets.SYNTHETIC_KEY_STAGING }}
+#           TMPDIR: /tmp/
+#         run: |
+#           sh <(curl https://cage-build-assets.evervault.com/cli/install -sL)
+#           cd ci/test-cage/server
+#           echo "$EV_CERT" > cert.pem
+#           echo "$EV_KEY" > key.pem
+#           ev-cage deploy -c staging.cage.toml --build-arg API_KEY="$EV_API_KEY" .
+#   run-testing-script:
+#     runs-on: ubuntu-latest
+#     needs: [deploy-testing-cage]
+#     steps:
+#       - uses: actions/checkout@v2
+#       - name: Run testing client
+#         env:
+#           ENVIRONMENT: staging
+#           CAGE_NAME: synthetic-testing-cage
+#           APP_UUID: app_1bba8ba15402
+#           EV_API_KEY: ${{ secrets.EV_API_KEY_STAGING }}
+#           NODE_TLS_REJECT_UNAUTHORIZED: 0
+#         run: |
+#           cd ci/test-cage/client ; npm ci ; npm start
