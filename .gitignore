@@ -13,3 +13,4 @@ ci/**/node_modules
 .vscode
 logs.txt
 certs/
+installer/output
