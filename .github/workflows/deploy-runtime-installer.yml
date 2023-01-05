@@ -26,9 +26,6 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           name: runtime-dependencies-${{github.sha}}.zip
-      - name: Extract runtime
-        run: |
-          unzip runtime-dependencies-${{github.sha}}.zip
       - name: Configure Staging AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -54,9 +51,6 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           name: runtime-dependencies-${{github.sha}}.zip
-      - name: Extract runtime
-        run: |
-          unzip runtime-dependencies-${{github.sha}}.zip
       - name: Configure Production AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
