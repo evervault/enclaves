@@ -1,6 +1,11 @@
 #!/bin/sh
 
-cd packages
+# If running within github actions, operate within mounted FS, else operate from root
+BASE_PATH=$GITHUB_WORKSPACE
+OUTPUT_PATH="$BASE_PATH/output"
+
+PACKAGES_PATH=/packages
+cd $PACKAGES_PATH
 
 ### Build runit
 gunzip runit-2.1.2.tar.gz
@@ -15,23 +20,19 @@ echo "****************************"
 ./package/check
 
 # Create expected directories for runit
-mkdir -p /output/runit-2.1.2/src
+mkdir -p "$OUTPUT_PATH/runit-2.1.2/src"
 
 # Move compiled runit commands into output commands folder
 echo "************************************"
 echo "* copying runit binaries to output *"
 echo "************************************"
-cp -r command /output/runit-2.1.2
+cp -r command "$OUTPUT_PATH/runit-2.1.2"
 
 # Move compiled runit scripts into output scripts folder
-cp -r ./package /output/runit-2.1.2
-
-# navigate back to packages base
-cd -
-cd -
+cp -r ./package "$OUTPUT_PATH/runit-2.1.2"
 
 # extract net-tools source
-cd /packages
+cd $PACKAGES_PATH
 echo "************************"
 echo "* extracting net-tools *"
 echo "************************"
@@ -42,27 +43,27 @@ echo "* building net-tools *"
 echo "**********************"
 cd net-tools-2.10
 # Use preconfigured config for Cage environment
-cp /packages/net-tools.h ./config.h
+cp "$PACKAGES_PATH/net-tools.h" ./config.h
 
 
 # Run make commands required for ifconfig, include static flag
 CFLAGS="-O2 -g -static" make subdirs
 CFLAGS="-O2 -g -static" make ifconfig
 
-mkdir -p /output/net-tools-2.10
+mkdir -p "$OUTPUT_PATH/net-tools-2.10"
 
 # Copy ifconfig binary to output directory
 echo "*******************************"
 echo "* copying ifconfig to outputs *"
 echo "*******************************"
-cp ./ifconfig /output/net-tools-2.10
+cp ./ifconfig "$OUTPUT_PATH/net-tools-2.10"
 
 # Create archive of static binaries and installer
 echo "******************************"
 echo "* creating installer archive *"
 echo "******************************"
-cp /packages/installer.sh /output/installer.sh
-cd /output
+cp "$PACKAGES_PATH/installer.sh" "$OUTPUT_PATH/installer.sh"
+cd $OUTPUT_PATH
 tar -czf runtime-dependencies.tar.gz net-tools-2.10 runit-2.1.2 installer.sh
 
 # Remove binaries outside of the archive

@@ -9,7 +9,6 @@ ADD https://downloads.sourceforge.net/project/net-tools/net-tools-2.10.tar.xz /p
 # Copy in minimal preset header file to configure net-tools compilation
 COPY config/net-tools.h /packages/
 
-RUN mkdir -p /output
 COPY scripts/installer.sh /packages
 RUN chmod +x /packages/installer.sh
 

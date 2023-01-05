@@ -1,0 +1,83 @@
+on:
+  push:
+    paths:
+      - installer/**
+      - .github/workflows/deploy-runtime-installer.yml
+    branches:
+      - main
+name: Build and deploy runtime installer bundle
+jobs:
+  build-runtime-bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build bundle using local action
+        uses: ./installer
+      - name: Upload bundle as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: runtime-dependencies-${{github.sha}}.zip
+          path: ./output/runtime-dependencies.tar.gz
+
+  upload-runtime-bundle-staging:
+    runs-on: ubuntu-latest
+    needs: [build-runtime-bundle]
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: runtime-dependencies-${{github.sha}}.zip
+      - name: Extract runtime
+        run: |
+          unzip runtime-dependencies-${{github.sha}}.zip
+      - name: Configure Staging AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_STAGING }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}
+          aws-region: us-east-1
+      - name: Upload installer bundle to S3
+        env:
+          STAGE: staging
+        run: |
+          aws s3 cp ./runtime-dependencies.tar.gz s3://cage-build-assets-${{ env.STAGE }}/installer/${{ github.sha }}.tar.gz
+      - name: Update latest record for installer in staging
+        env:
+          STAGE: staging
+        run: |
+          echo "${{ github.sha }}" > latest.txt
+          aws s3 cp ./latest.txt s3://cage-build-assets-${{ env.STAGE }}/installer/latest
+
+    upload-runtime-bundle-production:
+      runs-on: ubuntu-latest
+      needs: [build-runtime-bundle]
+      steps:
+        - uses: actions/download-artifact@v3
+          with:
+            name: runtime-dependencies-${{github.sha}}.zip
+        - name: Extract runtime
+          run: |
+            unzip runtime-dependencies-${{github.sha}}.zip
+        - name: Configure Production AWS Credentials
+          uses: aws-actions/configure-aws-credentials@v1
+          with:
+            aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PRODUCTION }}
+            aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PRODUCTION }}
+            aws-region: us-east-1
+        - name: Upload installer bundle to S3
+          env:
+            STAGE: production
+          run: |
+            aws s3 cp ./runtime-dependencies.tar.gz s3://cage-build-assets-${{ env.STAGE }}/installer/${{ github.sha }}.tar.gz
+
+    release-runtime-bundle-production:
+      runs-on: ubuntu-latest
+      needs: [build-runtime-bundle, upload-runtime-bundle-production]
+      environment:
+        name: production
+      steps:
+        - name: Update latest record for installer in production
+          env:
+            STAGE: production
+          run: |
+            echo "${{ github.sha }}" > latest.txt
+            aws s3 cp ./latest.txt s3://cage-build-assets-${{ env.STAGE }}/installer/latest

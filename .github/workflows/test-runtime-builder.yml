@@ -1,0 +1,15 @@
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - installer/**
+      - .github/workflows/test-runtime-builder.yml
+name: Build runtime installer
+jobs:
+  run-build-on-runtime-installer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build bundle using local action
+        uses: ./installer
