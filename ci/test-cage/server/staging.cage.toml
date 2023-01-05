@@ -1,9 +1,11 @@
-name = "synthetic-testing-cage"
-uuid = "cage_25ba0d91fee4"
+name = "staging-synthetic-cage"
+uuid = "cage_537fb3834b07"
 app_uuid = "app_1bba8ba15402"
 team_uuid = "team_478144181bec"
 debug = true
 dockerfile = "./Dockerfile"
+api_key_auth = true
+trx_logging = true
 disable_tls_termination = false
 
 [egress]
