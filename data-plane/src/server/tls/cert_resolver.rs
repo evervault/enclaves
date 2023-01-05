@@ -214,7 +214,10 @@ impl AttestableCertResolver {
         x509_name.append_entry_by_text("C", "IE")?;
         x509_name.append_entry_by_text("ST", "DUB")?;
         x509_name.append_entry_by_text("O", "Evervault")?;
-        x509_name.append_entry_by_text("CN", hostname)?;
+        // CommonName upper bound is 64 characters
+        if hostname.len() < 65 {
+            x509_name.append_entry_by_text("CN", hostname)?;
+        }
 
         let x509_name = x509_name.build();
         req_builder.set_subject_name(&x509_name)?;
@@ -597,5 +600,74 @@ mod tests {
             .unwrap();
         let same_nonce_cert = parse_x509_from_rustls_certified_key(&cert_with_same_nonce);
         assert_ne!(get_digest!(&x509_with_nonce), get_digest!(&same_nonce_cert));
+    }
+
+    #[test]
+    fn test_common_name_not_included_for_long_cage_name() {
+        let app_uuid = "app_123".to_string();
+        let team_uuid = "team_456".to_string();
+        let cage_uuid = "cage_123".to_string();
+        let cage_name = "a-sick-cage-that-has-a-very-long-name".to_string();
+        let api_key_auth = true;
+        let trx_logging = true;
+        let ctx = CageContext::new(
+            app_uuid,
+            team_uuid,
+            cage_uuid,
+            cage_name,
+            api_key_auth,
+            trx_logging,
+        );
+        let hostname = ctx.get_cert_name();
+        let server_name = Some(hostname.clone());
+        let (cert, key) = provisioner::generate_ca().unwrap();
+        let resolver = AttestableCertResolver::new(cert, key, ctx).unwrap();
+        let first_cert = resolver
+            .resolve_cert_using_sni(server_name.as_deref())
+            .unwrap();
+
+        let first_x509 = parse_x509_from_rustls_certified_key(&first_cert);
+        // assert that final entry in the subject name is not the hostname
+        let x509_subject_name = first_x509.subject_name();
+        let final_name_entry = x509_subject_name.entries().find(|entry| {
+            let entry_string = entry.data().as_utf8().unwrap();
+            entry_string.to_string() == hostname
+        });
+        assert!(final_name_entry.is_none());
+    }
+
+    #[test]
+    fn test_common_name_is_included_for_shorter_cage_name() {
+        let app_uuid = "app_123".to_string();
+        let team_uuid = "team_456".to_string();
+        let cage_uuid = "cage_123".to_string();
+        let cage_name = "my-sick-cage".to_string();
+        let api_key_auth = true;
+        let trx_logging = true;
+        let ctx = CageContext::new(
+            app_uuid,
+            team_uuid,
+            cage_uuid,
+            cage_name,
+            api_key_auth,
+            trx_logging,
+        );
+        let hostname = ctx.get_cert_name();
+        let server_name = Some(hostname.clone());
+        let (cert, key) = provisioner::generate_ca().unwrap();
+        let resolver = AttestableCertResolver::new(cert, key, ctx).unwrap();
+        let first_cert = resolver
+            .resolve_cert_using_sni(server_name.as_deref())
+            .unwrap();
+
+        let first_x509 = parse_x509_from_rustls_certified_key(&first_cert);
+
+        // assert that final entry in the subject name is the hostname
+        let x509_subject_name = first_x509.subject_name();
+        let final_name_entry = x509_subject_name.entries().find(|entry| {
+            let entry_string = entry.data().as_utf8().unwrap();
+            entry_string.to_string() == hostname
+        });
+        assert!(final_name_entry.is_some());
     }
 }
