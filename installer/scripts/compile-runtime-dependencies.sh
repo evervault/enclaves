@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -e
+
 # If running within github actions, operate within mounted FS, else operate from root
 BASE_PATH=$GITHUB_WORKSPACE
 OUTPUT_PATH="$BASE_PATH/output"
@@ -36,7 +38,7 @@ cd $PACKAGES_PATH
 echo "************************"
 echo "* extracting net-tools *"
 echo "************************"
-unxz net-tools-2.10.tar.xz ; tar -xf net-tools-2.10.tar
+xz -d net-tools-2.10.tar.xz ; tar -xf net-tools-2.10.tar
 
 echo "**********************"
 echo "* building net-tools *"

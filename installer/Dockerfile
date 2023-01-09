@@ -1,4 +1,4 @@
-FROM alpine
+FROM --platform=linux/amd64 alpine
 
 RUN mkdir -p /packages
 RUN apk update ; apk add xz make gcc build-base bash linux-headers
