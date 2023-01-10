@@ -18,6 +18,10 @@ cd admin/runit-2.1.2 # runit contains a top level folder called admin
 echo "****************************"
 echo "* compiling runit binaries *"
 echo "****************************"
+
+# Configure static compilation of runit using dietlibc
+echo 'gcc -O2 -Wall -static' >src/conf-cc
+echo 'gcc -static -Os -pipe' >src/conf-ld
 ./package/compile
 ./package/check
 
