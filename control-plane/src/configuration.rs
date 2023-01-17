@@ -63,6 +63,10 @@ pub fn get_app_uuid() -> String {
     std::env::var("EV_APP_UUID").expect("EV_APP_UUID is not set in env")
 }
 
+pub fn get_team_uuid() -> String {
+    std::env::var("EV_TEAM_UUID").expect("EV_TEAM_UUID is not set in env")
+}
+
 pub fn get_cert_provisoner_host() -> String {
     match get_rust_env() {
         Environment::Staging | Environment::Production => "provisioner.cages.internal".to_string(),

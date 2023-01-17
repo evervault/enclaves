@@ -53,15 +53,16 @@ fn get_mtls_connector(
     tokio_rustls::TlsConnector::from(std::sync::Arc::new(mtls_connector_config))
 }
 
-fn get_token_request_metadata_from_env() -> (String, i32, String, String) {
+fn get_token_request_metadata_from_env() -> GetCertTokenRequestControlPlane {
     let cage_uuid = configuration::get_cage_uuid();
     let version_id = configuration::get_cage_version()
         .parse::<i32>()
         .expect("Can't parse Cage version ENV var into integer");
     let cage_name = configuration::get_cage_name();
     let app_uuid = configuration::get_app_uuid();
+    let team_uuid = configuration::get_team_uuid();
 
-    (cage_uuid, version_id, cage_name, app_uuid)
+    GetCertTokenRequestControlPlane::new(cage_uuid, version_id, cage_name, app_uuid, team_uuid)
 }
 
 #[derive(Clone)]
@@ -147,10 +148,7 @@ impl CertProvisionerClient {
     }
 
     pub async fn get_token(&self) -> Result<GetCertTokenResponseControlPlane> {
-        let (cage_uuid, version_id, cage_name, app_uuid) = get_token_request_metadata_from_env();
-
-        let body = GetCertTokenRequestControlPlane::new(cage_uuid, version_id, cage_name, app_uuid)
-            .into_body()?;
+        let body = get_token_request_metadata_from_env().into_body()?;
 
         let response = self.send("/cert/token", "GET", body, true).await?;
         let result: GetCertTokenResponseControlPlane = self.parse_response(response).await?;
@@ -177,17 +175,25 @@ pub struct GetCertTokenRequestControlPlane {
     version_id: i32,
     cage_name: String,
     app_uuid: String,
+    team_uuid: String,
 }
 
 impl CertProvisionerPayload for GetCertTokenRequestControlPlane {}
 
 impl GetCertTokenRequestControlPlane {
-    fn new(cage_uuid: String, version_id: i32, cage_name: String, app_uuid: String) -> Self {
+    fn new(
+        cage_uuid: String,
+        version_id: i32,
+        cage_name: String,
+        app_uuid: String,
+        team_uuid: String,
+    ) -> Self {
         Self {
             cage_uuid,
             version_id,
             cage_name,
             app_uuid,
+            team_uuid,
         }
     }
 }
