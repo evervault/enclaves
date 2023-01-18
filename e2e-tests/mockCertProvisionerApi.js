@@ -78,6 +78,20 @@ tlsApp.post('/cert', async (req, res) => {
     console.log("Could not return cert ", e)
   }
 })
+
+tlsApp.post('/secrets', async (req, res) => {
+  try {
+    console.log(`Mock cert provisioner - Received secrets request from cage data plane ${req}`);
+    
+    var result = {
+      secrets: [{name: "EV_API_KEY", secret: "placeholder"}, {name: "ANOTHER_ENV_VAR", secret: "123"}, {name: "ENCRYPTED_ENV", secret: "ev:123"}]
+    };
+    res.status(200)
+    res.send(result) 
+  } catch (e) {
+    console.log("Could not return cert ", e)
+  }
+})
  
 
 https.createServer(options, tlsApp).listen(TlsOptions.port, () => {

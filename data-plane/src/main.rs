@@ -7,6 +7,8 @@ use data_plane::dns::egressproxy::EgressProxy;
 #[cfg(feature = "network_egress")]
 use data_plane::dns::enclavedns::EnclaveDns;
 
+#[cfg(not(feature = "tls_termination"))]
+use data_plane::env::Environment;
 use data_plane::get_tcp_server;
 use data_plane::health::start_health_check_server;
 use shared::{env_var_present_and_true, ENCLAVE_CONNECT_PORT};
@@ -88,6 +90,15 @@ async fn start_data_plane(data_plane_port: u16) {
 async fn run_tcp_passthrough<L: Listener>(mut server: L, port: u16) {
     use shared::utils::pipe_streams;
     println!("Piping TCP streams directly to user process");
+
+    let env_result = Environment::new().init_without_certs().await;
+    if let Err(e) = env_result {
+        eprintln!(
+            "An error occurred initializing the enclave environment — {:?}",
+            e
+        );
+    }
+
     loop {
         let incoming_conn = match server.accept().await {
             Ok(incoming_conn) => incoming_conn,

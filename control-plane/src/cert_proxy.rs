@@ -70,7 +70,7 @@ impl CertProxy {
                     continue;
                 }
             };
-            println!("Cert request received - forwarding stream to cert provisioner");
+            println!("Forwarding stream to cert provisioner");
             let cert_provisioner_ip = match self.get_ip_for_cert_provisioner().await {
                 Ok(Some(ip)) => ip,
                 Ok(None) => {

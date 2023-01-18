@@ -18,6 +18,7 @@ use shared::server::VsockServer;
 use std::net::{IpAddr, Ipv4Addr};
 use std::str::FromStr;
 
+#[derive(Clone)]
 pub struct ConfigServer {
     cert_provisioner_client: CertProvisionerClient,
 }

@@ -113,6 +113,11 @@ pub mod requests {
         pub secrets: Option<Vec<Secret>>,
     }
 
+    #[derive(Serialize, Deserialize, Debug, Clone)]
+    pub struct GetSecretsResponseDataPlane {
+        pub secrets: Vec<Secret>,
+    }
+
     impl ConfigServerPayload for GetCertResponseDataPlane {}
 
     impl GetCertResponseDataPlane {

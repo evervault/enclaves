@@ -78,5 +78,7 @@ npm run no-auth-tests
 echo "Testing that Cage is serving trustable cert chain"
 echo "Q" | openssl s_client -verifyCAfile sample-ca/sample-root-ca-cert.pem -showcerts -connect 0.0.0.0:443 | grep "Verification: OK"
 
+
 echo "Tests complete"
 docker kill cages-test-container
+

@@ -2,7 +2,7 @@ use hyper::header::InvalidHeaderValue;
 use shared::server::error::ServerError;
 use thiserror::Error;
 
-use crate::base_tls_client::ClientError;
+use crate::{base_tls_client::ClientError, env::EnvError};
 
 #[derive(Debug, Error)]
 pub enum AuthError {
@@ -44,14 +44,14 @@ pub enum Error {
     ConfigServer(String),
     #[error("An error occurred requesting intermediate cert from the cert provisioner — {0}")]
     CertServer(String),
-    #[error("No api key was provided in the env")]
-    MissingApiKey,
     #[error("Could not create header value — {0}")]
     InvalidHeaderValue(#[from] InvalidHeaderValue),
     #[error("Client error — {0}")]
     ClientError(#[from] ClientError),
     #[error("Deserialization Error — {0:?}")]
     SerdeError(#[from] serde_json::Error),
+    #[error("Error initializing environment — {0:?}")]
+    EnvError(#[from] EnvError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

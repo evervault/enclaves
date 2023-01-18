@@ -4,6 +4,7 @@ use hyper::{Body, Response};
 use serde::de::DeserializeOwned;
 use shared::server::config_server::requests::{
     ConfigServerPayload, GetCertRequestDataPlane, GetCertResponseDataPlane,
+    GetSecretsResponseDataPlane,
 };
 use tokio_rustls::rustls::ServerName;
 use tokio_rustls::TlsConnector;
@@ -15,6 +16,7 @@ use crate::configuration;
 use crate::crypto::attest;
 
 type CertProvisionerError = ClientError;
+#[derive(Clone)]
 pub struct CertProvisionerClient {
     base_client: BaseClient,
 }
@@ -76,6 +78,24 @@ impl CertProvisionerClient {
         let response = self
             .base_client
             .send(None, "POST", &self.uri("/cert"), body)
+            .await?;
+
+        self.parse_response(response).await
+    }
+
+    pub async fn get_secrets(
+        &self,
+        token: String,
+    ) -> Result<GetSecretsResponseDataPlane, CertProvisionerError> {
+        let attestation_doc = self.get_attestation_doc(token)?;
+
+        let body = GetCertRequestDataPlane::new(attestation_doc)
+            .into_body()
+            .map_err(|err| CertProvisionerError::General(err.to_string()))?;
+
+        let response = self
+            .base_client
+            .send(None, "POST", &self.uri("/secrets"), body)
             .await?;
 
         self.parse_response(response).await

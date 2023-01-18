@@ -8,7 +8,8 @@
     "health-check-tests": "NODE_TLS_REJECT_UNAUTHORIZED=0 mocha health-check-tests.js --grep",
     "customer": "node customerProcess.js",
     "no-auth-tests": "NODE_TLS_REJECT_UNAUTHORIZED=0 mocha noAuthTests.js",
-    "api-key-auth-tests": "NODE_TLS_REJECT_UNAUTHORIZED=0 mocha apiKeyAuthTests.js"
+    "api-key-auth-tests": "NODE_TLS_REJECT_UNAUTHORIZED=0 mocha apiKeyAuthTests.js",
+    "no-tls-termination-tests": "NODE_TLS_REJECT_UNAUTHORIZED=0 mocha noTlsTests.js"
   },
   "author": "",
   "license": "ISC",

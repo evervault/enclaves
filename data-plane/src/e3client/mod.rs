@@ -10,6 +10,7 @@ use tokio_rustls::TlsConnector;
 
 type E3Error = ClientError;
 
+#[derive(Clone)]
 pub struct E3Client {
     base_client: BaseClient,
 }

@@ -8,6 +8,7 @@ pub mod connection;
 pub mod crypto;
 pub mod dns;
 pub mod e3client;
+pub mod env;
 pub mod error;
 pub mod health;
 pub mod utils;

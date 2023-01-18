@@ -10,6 +10,7 @@ use tokio_rustls::{client::TlsStream, TlsConnector};
 
 use crate::connection::{self, Connection};
 
+#[derive(Clone)]
 pub struct BaseClient {
     tls_connector: TlsConnector,
     server_name: ServerName,
