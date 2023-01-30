@@ -19,14 +19,11 @@ pub struct InterCaRetreiver {
 }
 
 impl InterCaRetreiver {
-    pub fn new(cage_context: CageContext) -> Self {
+    pub fn new() -> Self {
         let cert_provisioner_client = cert_provisioner_client::CertProvisionerClient::new();
         let config_client = config_client::ConfigClient::new();
         let e3_client = E3Client::new();
-        let env = Environment {
-            e3_client,
-            cage_context,
-        };
+        let env = Environment { e3_client };
 
         Self {
             cert_provisioner_client,
@@ -45,7 +42,7 @@ impl InterCaRetreiver {
             .get_cert(token)
             .await
             .map_err(|err| Error::CertServer(err.to_string()))?;
-
+        CageContext::set(cert_response.clone().context.into())?;
         self.env
             .clone()
             .init(cert_response.clone().secrets.unwrap())

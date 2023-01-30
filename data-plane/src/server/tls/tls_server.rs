@@ -17,7 +17,6 @@ use super::inter_ca_retreiver;
 
 use crate::server::error::ServerResult;
 use crate::server::error::TlsError;
-use crate::CageContext;
 use rand::Rng;
 
 pub struct TlsServer<S: Listener + Send + Sync> {
@@ -70,31 +69,28 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
 
     /// Use self signed cert resolver to handle incoming connections
     #[allow(unused)]
-    pub fn with_self_signed_cert(self, cage_ctx: CageContext) -> ServerResult<TlsServer<S>> {
+    pub fn with_self_signed_cert(self) -> ServerResult<TlsServer<S>> {
         println!("Creating TLSServer with self signed cert");
-        let self_signed_cert_resolver = SelfSignedCertResolver::new(cage_ctx)?;
+        let self_signed_cert_resolver = SelfSignedCertResolver::new()?;
         let config =
             Self::get_base_config().with_cert_resolver(Arc::new(self_signed_cert_resolver));
 
         Ok(TlsServer::new(config, self.tcp_server))
     }
 
-    pub async fn with_attestable_cert(self, cage_ctx: CageContext) -> ServerResult<TlsServer<S>> {
+    pub async fn with_attestable_cert(self) -> ServerResult<TlsServer<S>> {
         println!("Creating TLSServer with attestable cert");
-        let (ca_cert, ca_private_key) = Self::get_ca_with_retry(cage_ctx.clone()).await;
+        let (ca_cert, ca_private_key) = Self::get_ca_with_retry().await;
         println!("Received intermediate CA from cert provisioner. Using it with TLS Server.");
-        let attestable_cert_resolver = super::cert_resolver::AttestableCertResolver::new(
-            ca_cert,
-            ca_private_key,
-            cage_ctx.clone(),
-        )?;
+        let attestable_cert_resolver =
+            super::cert_resolver::AttestableCertResolver::new(ca_cert, ca_private_key)?;
         let tls_config =
             Self::get_base_config().with_cert_resolver(Arc::new(attestable_cert_resolver));
         Ok(TlsServer::new(tls_config, self.tcp_server))
     }
 
-    async fn get_ca_with_retry(cage_ctx: CageContext) -> (X509, PKey<Private>) {
-        let inter_ca_retriever = inter_ca_retreiver::InterCaRetreiver::new(cage_ctx.clone());
+    async fn get_ca_with_retry() -> (X509, PKey<Private>) {
+        let inter_ca_retriever = inter_ca_retreiver::InterCaRetreiver::new();
         let mut attempts = 0;
         loop {
             match inter_ca_retriever.get_intermediate_ca().await {

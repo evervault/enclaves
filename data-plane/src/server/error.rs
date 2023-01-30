@@ -1,5 +1,6 @@
 #[cfg(feature = "enclave")]
 use crate::crypto::attest::AttestationError;
+use crate::CageContextError;
 use rcgen::RcgenError;
 use std::fmt::Formatter;
 use thiserror::Error;
@@ -19,6 +20,7 @@ pub enum TlsError {
     SignError(#[from] SignError),
     PemError(#[from] pem::PemError),
     CertProvisionerError(String),
+    CageContextError(#[from] CageContextError),
 }
 
 impl std::fmt::Display for TlsError {

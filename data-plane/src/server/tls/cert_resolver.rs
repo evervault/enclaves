@@ -89,12 +89,13 @@ pub struct SelfSignedCertResolver {
 }
 
 impl SelfSignedCertResolver {
-    pub fn new(cage_ctx: CageContext) -> ServerResult<Self> {
+    pub fn new() -> ServerResult<Self> {
+        let cage_context = CageContext::get()?;
         let (expiry_time, self_signed_cert) =
-            Self::generate_self_signed_cert(cage_ctx.get_cert_name())?;
+            Self::generate_self_signed_cert(cage_context.get_cert_name())?;
         Ok(Self {
             cert_container: CertContainer::new(expiry_time, self_signed_cert),
-            cage_context: cage_ctx,
+            cage_context,
         })
     }
 
@@ -176,12 +177,9 @@ pub struct AttestableCertResolver {
 }
 
 impl AttestableCertResolver {
-    pub fn new(
-        internal_ca: X509,
-        internal_pk: PKey<Private>,
-        ctx: CageContext,
-    ) -> ServerResult<Self> {
-        let hostname = ctx.get_cert_name();
+    pub fn new(internal_ca: X509, internal_pk: PKey<Private>) -> ServerResult<Self> {
+        let cage_context = CageContext::get()?;
+        let hostname = cage_context.get_cert_name();
         let (created_at, cert_and_key) = Self::generate_self_signed_cert(
             internal_ca.as_ref(),
             internal_pk.as_ref(),
@@ -190,7 +188,7 @@ impl AttestableCertResolver {
         )?;
 
         Ok(Self {
-            cage_context: ctx,
+            cage_context,
             internal_ca,
             internal_pk,
             base_cert_container: CertContainer::new(created_at, cert_and_key),
@@ -536,7 +534,7 @@ mod tests {
         );
         let server_name = Some(ctx.get_cert_name());
         let (cert, key) = provisioner::generate_ca().unwrap();
-        let resolver = AttestableCertResolver::new(cert, key, ctx).unwrap();
+        let resolver = AttestableCertResolver::new(cert, key).unwrap();
         let first_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();
@@ -574,9 +572,10 @@ mod tests {
             api_key_auth,
             trx_logging,
         );
+        CageContext::set(ctx.clone()).unwrap();
         let server_name = Some(ctx.get_cert_name());
         let (cert, key) = provisioner::generate_ca().unwrap();
-        let resolver = AttestableCertResolver::new(cert, key, ctx).unwrap();
+        let resolver = AttestableCertResolver::new(cert, key).unwrap();
         let first_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();
@@ -621,7 +620,7 @@ mod tests {
         let hostname = ctx.get_cert_name();
         let server_name = Some(hostname.clone());
         let (cert, key) = provisioner::generate_ca().unwrap();
-        let resolver = AttestableCertResolver::new(cert, key, ctx).unwrap();
+        let resolver = AttestableCertResolver::new(cert, key).unwrap();
         let first_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();
@@ -655,7 +654,7 @@ mod tests {
         let hostname = ctx.get_cert_name();
         let server_name = Some(hostname.clone());
         let (cert, key) = provisioner::generate_ca().unwrap();
-        let resolver = AttestableCertResolver::new(cert, key, ctx).unwrap();
+        let resolver = AttestableCertResolver::new(cert, key).unwrap();
         let first_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();

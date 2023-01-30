@@ -5,7 +5,7 @@ use super::tls::TlsServerBuilder;
 use crate::base_tls_client::ClientError;
 use crate::e3client::{self, AuthRequest, DecryptRequest, E3Client};
 use crate::error::{AuthError, Result};
-use crate::CageContext;
+use crate::{CageContext, CAGE_CONTEXT};
 
 use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
 
@@ -28,10 +28,9 @@ where
     TlsError: From<<L as Listener>::Error>,
     <L as Listener>::Connection: 'static,
 {
-    let cage_context = CageContext::try_from_env().expect("Missing required Cage context elements");
     let mut server = TlsServerBuilder::new()
         .with_server(tcp_server)
-        .with_attestable_cert(cage_context.clone())
+        .with_attestable_cert()
         .await
         .expect("Failed to create tls server");
     let http_server = conn::Http::new();
@@ -42,6 +41,7 @@ where
         UnboundedReceiver<LogHandlerMessage>,
     ) = unbounded_channel();
 
+    let cage_context = CAGE_CONTEXT.get().expect("Couldn't get cage context");
     if cage_context.trx_logging_enabled {
         let tx_for_handler = tx.clone();
         tokio::spawn(async move {

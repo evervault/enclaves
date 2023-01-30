@@ -1,20 +1,17 @@
 use std::{env, fs::File, io::Write};
 
-use crate::base_tls_client::ClientError;
 #[cfg(not(feature = "tls_termination"))]
 use crate::cert_provisioner_client::CertProvisionerClient;
 #[cfg(not(feature = "tls_termination"))]
 use crate::config_client::ConfigClient;
+use crate::{base_tls_client::ClientError, CageContext, CageContextError};
 use hyper::header::InvalidHeaderValue;
 use hyper::http::HeaderValue;
 use serde_json::json;
 use shared::server::config_server::requests::Secret;
 use thiserror::Error;
 
-use crate::{
-    e3client::{CryptoRequest, CryptoResponse, E3Client},
-    CageContext,
-};
+use crate::e3client::{CryptoRequest, CryptoResponse, E3Client};
 
 #[derive(Debug, Error)]
 pub enum EnvError {
@@ -32,6 +29,8 @@ pub enum EnvError {
     ClientError(#[from] ClientError),
     #[error("Could not create header value — {0}")]
     InvalidHeaderValue(#[from] InvalidHeaderValue),
+    #[error("Couldn't get cage context")]
+    CageContextError(#[from] CageContextError),
 }
 
 #[derive(Clone)]
@@ -41,7 +40,6 @@ pub struct Environment {
     #[cfg(not(feature = "tls_termination"))]
     pub config_client: ConfigClient,
     pub e3_client: E3Client,
-    pub cage_context: CageContext,
 }
 
 impl Environment {
@@ -49,13 +47,10 @@ impl Environment {
     pub fn new() -> Environment {
         let cert_provisioner_client = CertProvisionerClient::new();
         let e3_client = E3Client::new();
-        let cage_context =
-            CageContext::try_from_env().expect("Couldn't get Cage context from the env");
         let config_client = ConfigClient::new();
         Environment {
             cert_provisioner_client,
             e3_client,
-            cage_context,
             config_client,
         }
     }
@@ -75,14 +70,16 @@ impl Environment {
 
         let mut plaintext_env = plaintext_env;
 
+        let cage_context = CageContext::get()?;
+
         if !encrypted_env.is_empty() {
             let e3_response: CryptoResponse = self
                 .e3_client
                 .decrypt(
                     &header,
                     CryptoRequest {
-                        app_uuid: self.cage_context.app_uuid.clone(),
-                        team_uuid: self.cage_context.team_uuid.clone(),
+                        app_uuid: cage_context.app_uuid.clone(),
+                        team_uuid: cage_context.team_uuid.clone(),
                         data: json!(encrypted_env.clone()),
                     },
                 )
@@ -102,6 +99,7 @@ impl Environment {
         println!("Initializing env without TLS termination, sending request to control plane for cert provisioner token.");
         let token = self.config_client.get_cert_token().await.unwrap().token();
         let cert_response = self.cert_provisioner_client.get_secrets(token).await?;
+        CageContext::set(cert_response.clone().context.into())?;
 
         self.init(cert_response.clone().secrets).await?;
         Ok(())

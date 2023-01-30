@@ -1,3 +1,4 @@
+use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 
 pub mod base_tls_client;
@@ -16,10 +17,14 @@ pub mod utils;
 #[cfg(feature = "tls_termination")]
 pub mod server;
 
+use shared::server::config_server::requests::ProvisionerContext;
 #[cfg(not(feature = "enclave"))]
 use shared::server::TcpServer;
 #[cfg(feature = "enclave")]
 use shared::{server::VsockServer, ENCLAVE_CID};
+use thiserror::Error;
+
+static CAGE_CONTEXT: OnceCell<CageContext> = OnceCell::new();
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CageContext {
@@ -31,12 +36,34 @@ pub struct CageContext {
     trx_logging_enabled: bool,
 }
 
+#[derive(Error, Debug)]
+pub enum CageContextError {
+    #[error("Cage context has not yet been initialized")]
+    ContextNotInitialized,
+    #[error("Cage context could not be initialized")]
+    InitializationError,
+}
+
 impl CageContext {
-    pub fn try_from_env() -> std::result::Result<Self, std::env::VarError> {
-        let app_uuid = std::env::var("EV_APP_UUID")?;
-        let team_uuid = std::env::var("EV_TEAM_UUID")?;
-        let cage_uuid = std::env::var("CAGE_UUID")?;
-        let cage_name = std::env::var("EV_CAGE_NAME")?;
+    fn get() -> Result<CageContext, CageContextError> {
+        CAGE_CONTEXT
+            .get()
+            .map(|context| context.to_owned())
+            .ok_or(CageContextError::ContextNotInitialized)
+    }
+
+    fn set(ctx: CageContext) -> Result<(), CageContextError> {
+        CAGE_CONTEXT
+            .set(ctx)
+            .map_err(|_| CageContextError::InitializationError)
+    }
+
+    pub fn try_from_env(
+        team_uuid: String,
+        app_uuid: String,
+        cage_uuid: String,
+        cage_name: String,
+    ) -> std::result::Result<Self, std::env::VarError> {
         let api_key_auth = std::env::var("EV_API_KEY_AUTH")
             .unwrap_or_else(|_| "true".to_string())
             .parse()
@@ -92,6 +119,18 @@ impl CageContext {
 
     pub fn get_cert_name(&self) -> String {
         format!("{}.{}.cages.evervault.com", &self.cage_name, &self.app_uuid)
+    }
+}
+
+impl From<ProvisionerContext> for CageContext {
+    fn from(context: ProvisionerContext) -> Self {
+        CageContext::try_from_env(
+            context.team_uuid,
+            context.app_uuid,
+            context.cage_uuid,
+            context.cage_name,
+        )
+        .expect("Couldn't instantiate cage context")
     }
 }
 

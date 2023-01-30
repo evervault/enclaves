@@ -111,28 +111,26 @@ pub mod requests {
         intermediate_cert: String,
         key_pair: String,
         pub secrets: Option<Vec<Secret>>,
+        pub context: ProvisionerContext,
+    }
+
+    #[derive(Serialize, Deserialize, Debug, Clone)]
+    pub struct ProvisionerContext {
+        pub cage_uuid: String,
+        pub cage_name: String,
+        pub team_uuid: String,
+        pub app_uuid: String,
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct GetSecretsResponseDataPlane {
         pub secrets: Vec<Secret>,
+        pub context: ProvisionerContext,
     }
 
     impl ConfigServerPayload for GetCertResponseDataPlane {}
 
     impl GetCertResponseDataPlane {
-        pub fn new(
-            intermediate_cert: String,
-            key_pair: String,
-            secrets: Option<Vec<Secret>>,
-        ) -> Self {
-            Self {
-                intermediate_cert,
-                key_pair,
-                secrets,
-            }
-        }
-
         pub fn cert(&self) -> String {
             self.intermediate_cert.clone()
         }

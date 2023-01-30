@@ -2,7 +2,7 @@ use hyper::header::InvalidHeaderValue;
 use shared::server::error::ServerError;
 use thiserror::Error;
 
-use crate::{base_tls_client::ClientError, env::EnvError};
+use crate::{base_tls_client::ClientError, env::EnvError, CageContextError};
 
 #[derive(Debug, Error)]
 pub enum AuthError {
@@ -52,6 +52,8 @@ pub enum Error {
     SerdeError(#[from] serde_json::Error),
     #[error("Error initializing environment — {0:?}")]
     EnvError(#[from] EnvError),
+    #[error("Couldn't get cage context")]
+    CageContextError(#[from] CageContextError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -70,7 +70,8 @@ tlsApp.post('/cert', async (req, res) => {
     var result = {
       intermediate_cert: ca_cert,
       key_pair: ca_key_pair,
-      secrets: [{name: "EV_API_KEY", secret: "placeholder"}, {name: "ANOTHER_ENV_VAR", secret: "123"}, {name: "ENCRYPTED_ENV", secret: "ev:123"}]
+      secrets: [{name: "EV_API_KEY", secret: "placeholder"}, {name: "ANOTHER_ENV_VAR", secret: "123"}, {name: "ENCRYPTED_ENV", secret: "ev:123"}],
+      context: {team_uuid: "team_123", cage_uuid: "cage_123", app_uuid: "app_12345678", cage_name: "test-cage"},
     };
     res.status(200)
     res.send(result) 
@@ -84,6 +85,7 @@ tlsApp.post('/secrets', async (req, res) => {
     console.log(`Mock cert provisioner - Received secrets request from cage data plane ${req}`);
     
     var result = {
+      context: {team_uuid: "team_123", cage_uuid: "cage_123", app_uuid: "app_12345678", cage_name: "test-cage"},
       secrets: [{name: "EV_API_KEY", secret: "placeholder"}, {name: "ANOTHER_ENV_VAR", secret: "123"}, {name: "ENCRYPTED_ENV", secret: "ev:123"}]
     };
     res.status(200)
