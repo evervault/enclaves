@@ -12,8 +12,7 @@ pub fn rand_bytes(buffer: &mut [u8]) -> Result<()> {
             Ok(())
         }
         nitro::api::Response::Error(e) => Err(Error::Crypto(format!(
-            "Could not get entropy from the Nitro Secure Module! {:?}",
-            e
+            "Could not get entropy from the Nitro Secure Module! {e:?}"
         ))),
         _ => Err(Error::Crypto(
             "Received unknown response from Nitro Secure Module".to_string(),

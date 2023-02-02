@@ -54,7 +54,7 @@ impl TrxContext {
         let json_log = serde_json::to_string(&self);
 
         if let Ok(log) = json_log {
-            println!("{}", log);
+            println!("{log}");
         }
     }
 }
@@ -146,7 +146,7 @@ impl TrxContextBuilder {
     }
 
     pub fn add_status_and_group(&mut self, status_code: u16) {
-        let status_group = StatusGroup::from_u16(status_code).map(|group| format!("{}", group));
+        let status_group = StatusGroup::from_u16(status_code).map(|group| format!("{group}"));
         self.status_group(status_group);
         self.response_code(Some(status_code.to_string()));
     }
@@ -368,6 +368,6 @@ impl std::fmt::Display for StatusGroup {
             Self::RequestErr => "4XX",
             Self::ServerErr => "5XX",
         };
-        write!(f, "{}", str_prefix)
+        write!(f, "{str_prefix}")
     }
 }

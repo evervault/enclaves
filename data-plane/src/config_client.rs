@@ -67,10 +67,7 @@ impl ConfigClient {
         let (mut request_sender, connection) = self.get_conn().await?;
         tokio::spawn(async move {
             if let Err(e) = connection.await {
-                eprintln!(
-                    "Error with connection to config server in control plane: {}",
-                    e
-                );
+                eprintln!("Error with connection to config server in control plane: {e}");
             }
         });
 
@@ -120,8 +117,7 @@ impl ConfigClient {
 
         serde_json::from_slice(&response_body).map_err(|err| {
             Error::ConfigServer(format!(
-                "Error parsing response from config server. Error: {:?}",
-                err
+                "Error parsing response from config server. Error: {err:?}"
             ))
         })
     }

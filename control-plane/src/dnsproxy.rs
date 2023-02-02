@@ -54,11 +54,11 @@ impl DnsProxy {
                     tokio::spawn(async move {
                         if let Err(e) = Self::proxy_dns_connection(self.dns_server_ip, stream).await
                         {
-                            eprintln!("Error proxying dns connection: {}", e);
+                            eprintln!("Error proxying dns connection: {e}");
                         }
                     });
                 }
-                Err(e) => eprintln!("Error accepting connection in DNS proxy - {:?}", e),
+                Err(e) => eprintln!("Error accepting connection in DNS proxy - {e:?}"),
             }
         }
         #[allow(unreachable_code)]

@@ -52,7 +52,7 @@ impl ConfigServer {
             let connection = match enclave_conn.accept().await {
                 Ok(conn) => conn,
                 Err(e) => {
-                    eprintln!("Error accepting config request from data plane — {:?}", e);
+                    eprintln!("Error accepting config request from data plane — {e:?}");
                     continue;
                 }
             };
@@ -72,10 +72,7 @@ impl ConfigServer {
                     .await;
 
                 if let Err(processing_err) = sent_response {
-                    eprintln!(
-                        "An error occurred while processing the request — {}",
-                        processing_err
-                    );
+                    eprintln!("An error occurred while processing the request — {processing_err}");
                 }
             });
         }
@@ -104,10 +101,9 @@ async fn handle_cert_token_request(
     let token_response = match cert_provisioner_client.get_token().await {
         Ok(res) => res,
         Err(err) => {
-            println!("Request to cert provisioner for token failed. Err: {}", err);
+            println!("Request to cert provisioner for token failed. Err: {err}");
             return build_error_response(format!(
-                "Request to cert provisioner for token failed. Err: {}",
-                err
+                "Request to cert provisioner for token failed. Err: {err}"
             ));
         }
     };
@@ -116,8 +112,7 @@ async fn handle_cert_token_request(
         Ok(body) => body,
         Err(err) => {
             return build_error_response(format!(
-                "Failed to serialise client provisioner token response: {}",
-                err
+                "Failed to serialise client provisioner token response: {err}"
             ))
         }
     };
@@ -130,10 +125,7 @@ async fn handle_cert_token_request(
     println!("Token returned from cert provisioner, sending it back to the cage");
 
     res.unwrap_or_else(|err| {
-        build_error_response(format!(
-            "Couldn't build cert token response. Error: {}",
-            err
-        ))
+        build_error_response(format!("Couldn't build cert token response. Error: {err}"))
     })
 }
 
@@ -168,7 +160,7 @@ fn build_bad_request_response() -> Response<Body> {
 }
 
 fn build_error_response(body_msg: String) -> Response<Body> {
-    println!("Request failed: {}", body_msg);
+    println!("Request failed: {body_msg}");
     Response::builder()
         .status(500)
         .header("Content-Type", "application/json")

@@ -42,8 +42,7 @@ fn parse_client_certs(mut client_cert_raw: &[u8]) -> Result<Vec<Certificate>> {
         .map(|certs| certs.into_iter().map(Certificate).collect())
         .map_err(|err| {
             ServerError::CertProvisionerMtls(format!(
-                "Couldn't parse cert-provisioner client cert. Error: {}",
-                err
+                "Couldn't parse cert-provisioner client cert. Error: {err}"
             ))
         })?;
 
@@ -59,8 +58,7 @@ fn parse_client_certs(mut client_cert_raw: &[u8]) -> Result<Vec<Certificate>> {
 fn parse_client_key(mut client_key_raw: &[u8]) -> Result<PrivateKey> {
     let parsed_keys = rustls_pemfile::pkcs8_private_keys(&mut client_key_raw).map_err(|err| {
         ServerError::CertProvisionerMtls(format!(
-            "Couldn't parse cert-provisioner client key from secrets. Error: {}",
-            err
+            "Couldn't parse cert-provisioner client key from secrets. Error: {err}"
         ))
     })?;
 
@@ -78,8 +76,7 @@ fn parse_root_cert(mut root_cert_raw: &[u8]) -> Result<Certificate> {
         .map(|certs| certs.into_iter().map(Certificate).collect())
         .map_err(|err| {
             ServerError::CertProvisionerMtls(format!(
-                "Couldn't parse cert-provisioner root cert. Error: {}",
-                err
+                "Couldn't parse cert-provisioner root cert. Error: {err}"
             ))
         })?;
 

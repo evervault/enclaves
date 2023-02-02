@@ -46,17 +46,13 @@ impl EgressProxy {
                     tokio::spawn(async move {
                         if let Err(e) = Self::handle_connection(stream).await {
                             eprintln!(
-                                "An error occurred while handling an egress connection - {:?}",
-                                e
+                                "An error occurred while handling an egress connection - {e:?}"
                             );
                         }
                     });
                 }
                 Err(e) => {
-                    eprintln!(
-                        "An error occurred accepting the egress connection — {:?}",
-                        e
-                    );
+                    eprintln!("An error occurred accepting the egress connection — {e:?}");
                 }
             }
         }
@@ -112,7 +108,7 @@ mod test {
     fn attempt_egress_to_private_ip_without_override() {
         let ip_addr = "10.0.0.1";
         match validate_requested_ip(ip_addr, false) {
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
             Err(e) => {
                 assert!(matches!(e, ServerError::IllegalInternalIp(_)))
             }
@@ -124,7 +120,7 @@ mod test {
         let ip_addr = "10.0.0.1";
         match validate_requested_ip(ip_addr, true) {
             Ok(parsed_addr) => assert_eq!(ip_addr.parse::<Ipv4Addr>().unwrap(), parsed_addr),
-            Err(_) => assert!(false),
+            Err(_) => panic!(),
         }
     }
 
@@ -132,7 +128,7 @@ mod test {
     fn attempt_egress_to_invalid_ip() {
         let ip_addr = "256.256.256.256";
         match validate_requested_ip(ip_addr, false) {
-            Ok(_) => assert!(false),
+            Ok(_) => panic!(),
             Err(e) => assert!(matches!(e, ServerError::InvalidIp(_))),
         }
     }

@@ -13,7 +13,7 @@ pub struct HexSlice<'a>(&'a [u8]);
 impl<'a> std::fmt::UpperHex for HexSlice<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for byte in self.0 {
-            write!(f, "{:02X}", byte)?;
+            write!(f, "{byte:02X}")?;
         }
         Ok(())
     }
@@ -22,7 +22,7 @@ impl<'a> std::fmt::UpperHex for HexSlice<'a> {
 impl<'a> std::fmt::LowerHex for HexSlice<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for byte in self.0 {
-            write!(f, "{:02x}", byte)?;
+            write!(f, "{byte:02x}")?;
         }
         Ok(())
     }
@@ -38,7 +38,7 @@ impl<'a> std::convert::From<&'a [u8]> for HexSlice<'a> {
 macro_rules! print_version {
     ($label:tt) => {
         if let Ok(version) = std::env::var("CARGO_PKG_VERSION") {
-            println!("{} Version: {version}", $label);
+            println!("{} Version: {}", $label, version);
         }
     };
 }
@@ -62,7 +62,7 @@ mod tests {
         let slice: [u8; 2] = [255, 3];
         let hex_slice = HexSlice(slice.as_slice());
         let expected_hex = "FF03".to_string();
-        assert_eq!(format!("{:X}", hex_slice), expected_hex);
+        assert_eq!(format!("{hex_slice:X}"), expected_hex);
     }
 
     #[test]
@@ -70,6 +70,6 @@ mod tests {
         let slice: [u8; 2] = [255, 90];
         let hex_slice = HexSlice(slice.as_slice());
         let expected_hex = "ff5a".to_string();
-        assert_eq!(format!("{:x}", hex_slice), expected_hex);
+        assert_eq!(format!("{hex_slice:x}"), expected_hex);
     }
 }

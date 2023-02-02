@@ -38,14 +38,14 @@ impl CertProxy {
     #[cfg(feature = "enclave")]
     async fn shutdown_conn(connection: tokio_vsock::VsockStream) {
         if let Err(e) = connection.shutdown(std::net::Shutdown::Both) {
-            eprintln!("Failed to shutdown data plane connection — {:?}", e);
+            eprintln!("Failed to shutdown data plane connection — {e:?}");
         }
     }
 
     #[cfg(not(feature = "enclave"))]
     async fn shutdown_conn(mut connection: tokio::net::TcpStream) {
         if let Err(e) = connection.shutdown().await {
-            eprintln!("Failed to shutdown data plane connection — {:?}", e);
+            eprintln!("Failed to shutdown data plane connection — {e:?}");
         }
     }
 
@@ -66,7 +66,7 @@ impl CertProxy {
             let connection = match enclave_conn.accept().await {
                 Ok(conn) => conn,
                 Err(e) => {
-                    eprintln!("Error accepting cert request — {:?}", e);
+                    eprintln!("Error accepting cert request — {e:?}");
                     continue;
                 }
             };
@@ -79,7 +79,7 @@ impl CertProxy {
                     continue;
                 }
                 Err(e) => {
-                    eprintln!("Error obtaining IP for Cert Provisioner — {:?}", e);
+                    eprintln!("Error obtaining IP for Cert Provisioner — {e:?}");
                     Self::shutdown_conn(connection).await;
                     continue;
                 }
@@ -90,7 +90,7 @@ impl CertProxy {
                     match tokio::net::TcpStream::connect(cert_provisioner_ip).await {
                         Ok(stream) => stream,
                         Err(e) => {
-                            eprintln!("Failed to connect to Cert Provisioner — {:?}", e);
+                            eprintln!("Failed to connect to Cert Provisioner — {e:?}");
                             Self::shutdown_conn(connection).await;
                             return;
                         }
@@ -99,10 +99,7 @@ impl CertProxy {
                 if let Err(e) =
                     shared::utils::pipe_streams(connection, cert_provisioner_stream).await
                 {
-                    eprintln!(
-                        "Error streaming from Data Plane to Cert Provisioner — {:?}",
-                        e
-                    );
+                    eprintln!("Error streaming from Data Plane to Cert Provisioner — {e:?}");
                 }
             });
         }

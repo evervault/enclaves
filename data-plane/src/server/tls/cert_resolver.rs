@@ -439,7 +439,7 @@ mod tests {
         assert!(maybe_resolved_cert.is_some());
         let resolved_cert = maybe_resolved_cert.unwrap();
         let resolved_cert = parse_x509_from_rustls_certified_key(resolved_cert.as_ref());
-        assert_eq!(get_digest!(&resolved_cert), get_digest!(&existing_cert));
+        assert_eq!(get_digest!(&resolved_cert), get_digest!(existing_cert));
     }
 
     fn assert_resolves_diff_cert(existing_cert: &X509Ref, resolver: &SelfSignedCertResolver) {
@@ -447,7 +447,7 @@ mod tests {
         assert!(maybe_resolved_cert.is_some());
         let resolved_cert = maybe_resolved_cert.unwrap();
         let resolved_cert = parse_x509_from_rustls_certified_key(resolved_cert.as_ref());
-        assert_ne!(get_digest!(&resolved_cert), get_digest!(&existing_cert));
+        assert_ne!(get_digest!(&resolved_cert), get_digest!(existing_cert));
     }
 
     #[test]

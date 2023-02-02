@@ -155,7 +155,7 @@ mod health_check_tests {
         };
         let response = run_ecs_health_check_service(config).await.unwrap();
         assert_eq!(response.status(), 500);
-        println!("deep response: {:?}", response);
+        println!("deep response: {response:?}");
         let health_check_log = response_to_health_check_log(response).await;
         assert!(matches!(
             health_check_log.data_plane.status,
@@ -171,7 +171,7 @@ mod health_check_tests {
         };
         let response = run_ecs_health_check_service(config).await.unwrap();
         assert_eq!(response.status(), 200);
-        println!("shallow response: {:?}", response);
+        println!("shallow response: {response:?}");
         let health_check_log = response_to_health_check_log(response).await;
         assert!(matches!(
             health_check_log.data_plane.status,

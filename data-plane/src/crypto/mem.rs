@@ -205,7 +205,7 @@ mod tests {
     #[test]
     fn encryption_and_decryption_work() {
         let encrypted = Encrypted::new([1, 2, 3], random_salt());
-        println!("Encrypted data: {:?}", encrypted);
+        println!("Encrypted data: {encrypted:?}");
         encrypted.map_cipher(|ciphertext| assert_ne!(ciphertext, [1, 2, 3]));
         encrypted
             .map(|plaintext| assert_eq!(plaintext, [1, 2, 3]))

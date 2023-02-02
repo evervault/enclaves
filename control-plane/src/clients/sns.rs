@@ -90,7 +90,7 @@ impl ControlPlaneSnsClient {
 
         match self.sns_client.publish(publish_input).await {
             Ok(_) => println!("Successfully published message to SNS"),
-            Err(err) => eprintln!("Failed to publish message to SNS. {}", err),
+            Err(err) => eprintln!("Failed to publish message to SNS. {err}"),
         }
     }
 }

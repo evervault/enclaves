@@ -368,7 +368,7 @@ mod tests {
             assert_eq!(second_cipher, ciphertext2_with_quotes);
         } else {
             // second match should be a ciphertext
-            assert!(false);
+            panic!()
         }
     }
 }

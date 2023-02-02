@@ -40,7 +40,7 @@ async fn start(data_plane_port: u16) {
     let (_, e3_api_result) = tokio::join!(start_data_plane(data_plane_port), CryptoApi::listen());
 
     if let Err(e) = e3_api_result {
-        eprintln!("An error occurred within the E3 API server — {:?}", e);
+        eprintln!("An error occurred within the E3 API server — {e:?}");
     }
 }
 
@@ -57,15 +57,15 @@ async fn start(data_plane_port: u16) {
     );
 
     if let Err(e) = dns_result {
-        eprintln!("An error occurred within the dns server — {:?}", e);
+        eprintln!("An error occurred within the dns server — {e:?}");
     }
 
     if let Err(e) = egress_result {
-        eprintln!("An error occurred within the egress server — {:?}", e);
+        eprintln!("An error occurred within the egress server — {e:?}");
     }
 
     if let Err(e) = e3_api_result {
-        eprintln!("An error occurred within the E3 API server — {:?}", e);
+        eprintln!("An error occurred within the E3 API server — {e:?}");
     }
 }
 

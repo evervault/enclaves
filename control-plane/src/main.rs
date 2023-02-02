@@ -22,7 +22,7 @@ const CONTROL_PLANE_PORT: u16 = 3031;
 #[tokio::main]
 async fn main() -> Result<()> {
     print_version!("Control Plane");
-    println!("Starting control plane on {}", CONTROL_PLANE_PORT);
+    println!("Starting control plane on {CONTROL_PLANE_PORT}");
     let e3_proxy = e3proxy::E3Proxy::new();
     let cert_proxy = cert_proxy::CertProxy::new();
 
@@ -51,23 +51,23 @@ async fn main() -> Result<()> {
         );
 
         if let Err(err) = tcp_result {
-            eprintln!("Error running TCP server on host: {:?}", err);
+            eprintln!("Error running TCP server on host: {err:?}");
         };
 
         if let Err(err) = e3_result {
-            eprintln!("Error running E3 proxy on host: {:?}", err);
+            eprintln!("Error running E3 proxy on host: {err:?}");
         }
 
         if let Err(err) = health_check_result {
-            eprintln!("Error running health check server on host: {:?}", err);
+            eprintln!("Error running health check server on host: {err:?}");
         }
 
         if let Err(err) = config_server_result {
-            eprintln!("Error running config server on host: {:?}", err);
+            eprintln!("Error running config server on host: {err:?}");
         }
 
         if let Err(err) = cert_proxy_result {
-            eprintln!("Error running cert proxy on host: {:?}", err);
+            eprintln!("Error running cert proxy on host: {err:?}");
         }
     }
 
@@ -97,31 +97,31 @@ async fn main() -> Result<()> {
         );
 
         if let Err(tcp_err) = tcp_result {
-            eprintln!("An error occurred in the tcp server - {:?}", tcp_err);
+            eprintln!("An error occurred in the tcp server - {tcp_err:?}");
         }
 
         if let Err(dns_err) = dns_result {
-            eprintln!("An error occurred in the dns server - {:?}", dns_err);
+            eprintln!("An error occurred in the dns server - {dns_err:?}");
         }
 
         if let Err(egress_err) = egress_result {
-            eprintln!("An error occurred in the egress server - {:?}", egress_err);
+            eprintln!("An error occurred in the egress server - {egress_err:?}");
         }
 
         if let Err(e3_err) = e3_result {
-            eprintln!("An error occurred in the e3 server - {:?}", e3_err);
+            eprintln!("An error occurred in the e3 server - {e3_err:?}");
         }
 
         if let Err(err) = health_check_result {
-            eprintln!("Error running health check server on host: {:?}", err);
+            eprintln!("Error running health check server on host: {err:?}");
         }
 
         if let Err(err) = config_server_result {
-            eprintln!("Error running config server on host: {:?}", err);
+            eprintln!("Error running config server on host: {err:?}");
         }
 
         if let Err(err) = cert_proxy_result {
-            eprintln!("Error running cert proxy on host: {:?}", err);
+            eprintln!("Error running cert proxy on host: {err:?}");
         }
     }
 
@@ -134,7 +134,7 @@ async fn tcp_server() -> Result<()> {
     let tcp_listener = match TcpListener::bind(addr).await {
         Ok(tcp_listener) => tcp_listener,
         Err(e) => {
-            eprintln!("Failed to bind to TCP Socket - {:?}", e);
+            eprintln!("Failed to bind to TCP Socket - {e:?}");
             return Err(e.into());
         }
     };
@@ -142,16 +142,13 @@ async fn tcp_server() -> Result<()> {
     loop {
         if let Ok((mut connection, _client_socket_addr)) = tcp_listener.accept().await {
             tokio::spawn(async move {
-                println!("Accepted incoming TCP stream — {:?}", _client_socket_addr);
+                println!("Accepted incoming TCP stream — {_client_socket_addr:?}");
                 let enclave_stream =
                     match enclave_connection::get_connection_to_enclave(ENCLAVE_CONNECT_PORT).await
                     {
                         Ok(enclave_stream) => enclave_stream,
                         Err(e) => {
-                            eprintln!(
-                                "An error occurred while connecting to the enclave — {:?}",
-                                e
-                            );
+                            eprintln!("An error occurred while connecting to the enclave — {e:?}");
                             connection
                                 .shutdown()
                                 .await
@@ -161,10 +158,7 @@ async fn tcp_server() -> Result<()> {
                     };
 
                 if let Err(e) = pipe_streams(connection, enclave_stream).await {
-                    eprintln!(
-                        "An error occurred while piping the connection over vsock - {:?}",
-                        e
-                    );
+                    eprintln!("An error occurred while piping the connection over vsock - {e:?}");
                 }
             });
         }
@@ -191,11 +185,11 @@ fn listen_for_shutdown_signal() {
 
         let _ = ctrlc::set_handler(move || {
             tx.send(()).unwrap_or_else(|err| {
-                println!("Could not broadcast sigterm to channel: {:?}", err);
+                println!("Could not broadcast sigterm to channel: {err:?}");
             })
         })
         .map_err(|err| {
-            eprintln!("Error setting up Sigterm handler: {:?}", err);
+            eprintln!("Error setting up Sigterm handler: {err:?}");
             std::io::Error::new(std::io::ErrorKind::Other, err)
         });
 

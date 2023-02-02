@@ -152,10 +152,10 @@ impl std::fmt::Display for Ciphertext {
             write!(f, "debug:")?;
         }
         if let Some(vers) = self.version.as_ref() {
-            write!(f, "{}:", vers)?;
+            write!(f, "{vers}:")?;
         }
         if let Some(datatype) = self.datatype.as_ref() {
-            write!(f, "{}:", datatype)?;
+            write!(f, "{datatype}:")?;
         }
         write!(
             f,
@@ -316,19 +316,19 @@ mod test {
         debug: bool,
     ) -> Vec<u8> {
         let mut ciphertext = Vec::new();
-        ciphertext.write(b"ev:").unwrap();
+        ciphertext.write_all(b"ev:").unwrap();
         if debug {
-            ciphertext.write(b"debug:").unwrap();
+            ciphertext.write_all(b"debug:").unwrap();
         }
         if let Some(version) = version.map(|v| v.to_string()) {
-            ciphertext.write(version.as_bytes()).unwrap();
-            ciphertext.write(b":").unwrap();
+            ciphertext.write_all(version.as_bytes()).unwrap();
+            ciphertext.write_all(b":").unwrap();
         }
         if let Some(dt) = datatype.map(|dt| dt.to_string()) {
-            ciphertext.write(dt.as_bytes()).unwrap();
-            ciphertext.write(b":").unwrap();
+            ciphertext.write_all(dt.as_bytes()).unwrap();
+            ciphertext.write_all(b":").unwrap();
         }
-        ciphertext.write(b"YGJVktHhdj3ds3wC:A6rkaTU8lez7NSBT8nTqbhBIu3tX4/lyH3aJVBUcGmLh:8hI5qEp32kWcVK367yaC09bDRbk:$").unwrap();
+        ciphertext.write_all(b"YGJVktHhdj3ds3wC:A6rkaTU8lez7NSBT8nTqbhBIu3tX4/lyH3aJVBUcGmLh:8hI5qEp32kWcVK367yaC09bDRbk:$").unwrap();
         ciphertext
     }
 
@@ -407,7 +407,7 @@ mod test {
             context_aware_ciphertext(contextful_bytes.as_ref()).expect("no parsing error");
         assert!(parsed.has_leading_quote());
         assert!(parsed.has_trailing_quote());
-        assert_eq!(parsed.is_in_quotes(), true);
+        assert!(parsed.is_in_quotes());
 
         // test only leading
         let contextful_bytes =
@@ -415,16 +415,16 @@ mod test {
         let (_, parsed) =
             context_aware_ciphertext(contextful_bytes.as_ref()).expect("no parsing error");
         assert!(parsed.has_leading_quote());
-        assert_eq!(parsed.has_trailing_quote(), false);
-        assert_eq!(parsed.is_in_quotes(), false);
+        assert!(!parsed.has_trailing_quote());
+        assert!(!parsed.is_in_quotes());
 
         // test only trailing
         let contextful_bytes = vec![ciphertext_bytes.clone(), b"\"".to_vec()].concat();
         let (_, parsed) =
             context_aware_ciphertext(contextful_bytes.as_ref()).expect("no parsing error");
-        assert_eq!(parsed.has_leading_quote(), false);
+        assert!(!parsed.has_leading_quote());
         assert!(parsed.has_trailing_quote());
-        assert_eq!(parsed.is_in_quotes(), false);
+        assert!(!parsed.is_in_quotes());
 
         // test no character following ciphertext - expect nom incomplete (to be handled by stream impl)
         let result = context_aware_ciphertext(ciphertext_bytes.as_ref());

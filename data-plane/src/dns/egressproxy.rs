@@ -41,7 +41,7 @@ impl EgressProxy {
     fn get_hostname(data: Vec<u8>) -> Result<Option<String>, DNSError> {
         let (_, parsed_request) = parse_tls_plaintext(&data)
             .finish()
-            .map_err(|tls_parse_err| DNSError::TlsParseError(format!("{:?}", tls_parse_err)))?;
+            .map_err(|tls_parse_err| DNSError::TlsParseError(format!("{tls_parse_err:?}")))?;
 
         let client_hello = match &parsed_request.msg[0] {
             TlsMessage::Handshake(TlsMessageHandshake::ClientHello(client_hello)) => client_hello,
@@ -55,7 +55,7 @@ impl EgressProxy {
         let mut destination = "".to_string();
         let (_, extensions) = parse_tls_extensions(raw_extensions)
             .finish()
-            .map_err(|tls_parse_err| DNSError::TlsParseError(format!("{:?}", tls_parse_err)))?;
+            .map_err(|tls_parse_err| DNSError::TlsParseError(format!("{tls_parse_err:?}")))?;
 
         for extension in extensions {
             if let TlsExtension::SNI(sni_vec) = extension {
@@ -116,10 +116,7 @@ impl EgressProxy {
                 pipe_streams(external_stream, data_plane_stream).await?;
                 Ok(())
             }
-            None => Err(MissingIP(format!(
-                "Couldn't find cached ip for {}",
-                hostname
-            ))),
+            None => Err(MissingIP(format!("Couldn't find cached ip for {hostname}"))),
         }
     }
 }

@@ -54,10 +54,7 @@ where
         let stream = match server.accept().await {
             Ok(stream) => stream,
             Err(tls_err) => {
-                eprintln!(
-                    "An error occurred while accepting the incoming connection — {}",
-                    tls_err
-                );
+                eprintln!("An error occurred while accepting the incoming connection — {tls_err}");
                 continue;
             }
         };
@@ -106,14 +103,14 @@ where
 
                                         //Send trx to config server in data plane
                                         if let Err(e) = tx_for_req.send(LogHandlerMessage::new_log_message(ctx)) {
-                                            println!("Failed to send transaction context to log handler. err: {}", e)
+                                            println!("Failed to send transaction context to log handler. err: {e}")
                                         }
                                     } else {
                                         ctx.record_trx();
                                     }
                                 },
                                 Err(e) => {
-                                    println!("Failed to build transaction context. err: {:?}", e)
+                                    println!("Failed to build transaction context. err: {e:?}")
                                 }
                             };
 
@@ -125,10 +122,7 @@ where
                 .await;
 
             if let Err(processing_err) = sent_response {
-                eprintln!(
-                    "An error occurred while processing your request — {}",
-                    processing_err
-                );
+                eprintln!("An error occurred while processing your request — {processing_err}");
             }
         });
     }
@@ -174,7 +168,7 @@ async fn handle_incoming_request(
                 return response;
             }
             Err(e) => {
-                eprintln!("Failed to authenticate against e3 — {:?}", e);
+                eprintln!("Failed to authenticate against e3 — {e:?}");
                 return build_error_response(Some("Connection to E3 failed.".to_string()));
             }
         }
@@ -219,7 +213,7 @@ pub async fn handle_standard_request(
     let request_bytes = match hyper::body::to_bytes(req_body).await {
         Ok(body_bytes) => body_bytes,
         Err(e) => {
-            eprintln!("Failed to read entire body — {}", e);
+            eprintln!("Failed to read entire body — {e}");
             return build_error_response(None);
         }
     };
@@ -245,7 +239,7 @@ pub async fn handle_standard_request(
         let decrypted: DecryptRequest = match e3_client.decrypt(api_key, request_payload).await {
             Ok(decrypted) => decrypted,
             Err(e) => {
-                eprintln!("Failed to decrypt — {}", e);
+                eprintln!("Failed to decrypt — {e}");
                 return build_error_response(Some(String::from("Failed to decrypt ciphertexts")));
             }
         };
@@ -259,7 +253,7 @@ pub async fn handle_standard_request(
                     let _: Vec<u8> = bytes_vec.splice(range.0..range.1, value).collect();
                 }
                 Err(err) => {
-                    eprintln!("Failed to convert Json Value into bytes. Error {}", err);
+                    eprintln!("Failed to convert Json Value into bytes. Error {err}");
                 }
             }
         });
@@ -269,7 +263,7 @@ pub async fn handle_standard_request(
 
     // Build processed request
     let mut uri_builder = hyper::Uri::builder()
-        .authority(format!("0.0.0.0:{}", customer_port))
+        .authority(format!("0.0.0.0:{customer_port}"))
         .scheme("http");
     if let Some(req_path) = req_info.uri.path_and_query() {
         uri_builder = uri_builder.path_and_query(req_path.clone());
@@ -285,8 +279,8 @@ pub async fn handle_standard_request(
     match http_client.request(decrypted_request).await {
         Ok(res) => res,
         Err(e) => {
-            let msg = format!("Error requesting user process - {}", e);
-            eprintln!("{}", msg);
+            let msg = format!("Error requesting user process - {e}");
+            eprintln!("{msg}");
             build_error_response(Some(msg))
         }
     }
@@ -391,7 +385,7 @@ mod test {
         add_ev_ctx_header_to_request(&mut request, trx_id.clone());
 
         let ctx_header = request.headers().get("x-evervault-cage-ctx");
-        let expected_header_val = HeaderValue::from_str(trx_id.to_string().as_str())
+        let expected_header_val = HeaderValue::from_str(trx_id.as_str())
             .expect("Unable to create headerValue from ID: u128");
 
         assert!(ctx_header.is_some());
@@ -410,7 +404,7 @@ mod test {
         add_ev_ctx_header_to_response(&mut response, trx_id.clone());
 
         let ctx_header = response.headers().get("x-evervault-cage-ctx");
-        let expected_header_val = HeaderValue::from_str(trx_id.to_string().as_str())
+        let expected_header_val = HeaderValue::from_str(trx_id.as_str())
             .expect("Unable to create headerValue from ID: u128");
 
         assert!(ctx_header.is_some());

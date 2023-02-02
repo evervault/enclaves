@@ -36,14 +36,14 @@ impl E3Proxy {
     #[cfg(feature = "enclave")]
     async fn shutdown_conn(connection: tokio_vsock::VsockStream) {
         if let Err(e) = connection.shutdown(std::net::Shutdown::Both) {
-            eprintln!("Failed to shutdown data plane connection — {:?}", e);
+            eprintln!("Failed to shutdown data plane connection — {e:?}");
         }
     }
 
     #[cfg(not(feature = "enclave"))]
     async fn shutdown_conn(mut connection: tokio::net::TcpStream) {
         if let Err(e) = connection.shutdown().await {
-            eprintln!("Failed to shutdown data plane connection — {:?}", e);
+            eprintln!("Failed to shutdown data plane connection — {e:?}");
         }
     }
 
@@ -64,7 +64,7 @@ impl E3Proxy {
             let connection = match enclave_conn.accept().await {
                 Ok(conn) => conn,
                 Err(e) => {
-                    eprintln!("Error accepting crypto request — {:?}", e);
+                    eprintln!("Error accepting crypto request — {e:?}");
                     continue;
                 }
             };
@@ -77,7 +77,7 @@ impl E3Proxy {
                     continue;
                 }
                 Err(e) => {
-                    eprintln!("Error obtaining IP for E3 — {:?}", e);
+                    eprintln!("Error obtaining IP for E3 — {e:?}");
                     Self::shutdown_conn(connection).await;
                     continue;
                 }
@@ -87,14 +87,14 @@ impl E3Proxy {
                 let e3_stream = match tokio::net::TcpStream::connect(e3_ip).await {
                     Ok(e3_stream) => e3_stream,
                     Err(e) => {
-                        eprintln!("Failed to connect to E3 — {:?}", e);
+                        eprintln!("Failed to connect to E3 — {e:?}");
                         Self::shutdown_conn(connection).await;
                         return;
                     }
                 };
 
                 if let Err(e) = shared::utils::pipe_streams(connection, e3_stream).await {
-                    eprintln!("Error streaming from Data Plane to e3 — {:?}", e);
+                    eprintln!("Error streaming from Data Plane to e3 — {e:?}");
                 }
             });
         }

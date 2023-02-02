@@ -69,7 +69,7 @@ impl BaseClient {
         let (mut request_sender, connection) = self.get_conn().await?;
         tokio::spawn(async move {
             if let Err(e) = connection.await {
-                eprintln!("Error in client connection: {}", e);
+                eprintln!("Error in client connection: {e}");
             }
         });
 

@@ -106,7 +106,7 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
                     attempts += 1;
                 }
                 Err(e) => {
-                    println!("Error from provisioner sleeping for 20 seconds: {}", e);
+                    println!("Error from provisioner sleeping for 20 seconds: {e}");
                     thread::sleep(Duration::from_secs(20));
                 }
                 Ok(ca) => break ca,
