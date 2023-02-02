@@ -249,7 +249,12 @@ impl AttestableCertResolver {
         cert_builder.set_subject_name(req.subject_name())?;
         cert_builder.set_issuer_name(signing_cert.subject_name())?;
         cert_builder.set_pubkey(&key_pair)?;
-        let not_before = Asn1Time::days_from_now(0)?;
+        // 10 second buffer to avoid system times mismatches
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)?
+            .as_secs()
+            - 10;
+        let not_before = Asn1Time::from_unix(now.try_into()?)?;
         cert_builder.set_not_before(&not_before)?;
         let not_after = Asn1Time::days_from_now(365)?;
         cert_builder.set_not_after(&not_after)?;

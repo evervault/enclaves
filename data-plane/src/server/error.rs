@@ -2,7 +2,7 @@
 use crate::crypto::attest::AttestationError;
 use crate::CageContextError;
 use rcgen::RcgenError;
-use std::fmt::Formatter;
+use std::{fmt::Formatter, num::TryFromIntError, time::SystemTimeError};
 use thiserror::Error;
 use tokio_rustls::rustls::sign::SignError;
 
@@ -21,6 +21,8 @@ pub enum TlsError {
     PemError(#[from] pem::PemError),
     CertProvisionerError(String),
     CageContextError(#[from] CageContextError),
+    SystemTimeError(#[from] SystemTimeError),
+    TryFromIntError(#[from] TryFromIntError),
 }
 
 impl std::fmt::Display for TlsError {
