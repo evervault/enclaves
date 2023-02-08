@@ -157,9 +157,18 @@ async fn handle_incoming_request(
                 Ok(hashed_api_key_header) => hashed_api_key_header,
                 Err(_) => return build_error_response(Some("Invalid API Key.".to_string())),
             };
+        println!("Generated hashed api key: {hashed_api_key:?}");
+
+        let auth_payload_for_hashed_api_key = AuthRequest::from(&cage_context);
+
+        let auth_payload_for_app_api_key = AuthRequest {
+            team_uuid: cage_context.team_uuid().to_string(),
+            app_uuid: cage_context.app_uuid().to_string(),
+            cage_uuid: None,
+        };
 
         match e3_client
-            .authenticate(&hashed_api_key, AuthRequest::from(&cage_context))
+            .authenticate(&hashed_api_key, auth_payload_for_hashed_api_key)
             .await
         {
             Ok(auth_status) => {
@@ -168,10 +177,34 @@ async fn handle_incoming_request(
                     let response = AuthError::FailedToAuthenticateApiKey.into();
                     return response;
                 } else {
-                    api_key
+                    api_key.clone()
                 }
             }
             Err(ClientError::FailedRequest(status)) if status.as_u16() == 401 => {
+                //Temporary fallback to authenticate with APP api key -- remove this match when moving to just scoped api keys
+                println!("Failed to auth with scoped api key hash, attempting with app api key");
+                match e3_client
+                    .authenticate(&api_key, auth_payload_for_app_api_key)
+                    .await
+                {
+                    Ok(auth_status) => {
+                        if !auth_status {
+                            println!("Failed to authenticate request using provided API Key");
+                            let response = AuthError::FailedToAuthenticateApiKey.into();
+                            return response;
+                        } else {
+                            api_key
+                        }
+                    }
+                    Err(ClientError::FailedRequest(status)) if status.as_u16() == 401 => {
+                        let response: Response<Body> = AuthError::FailedToAuthenticateApiKey.into();
+                        return response;
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to authenticate against e3 — {e:?}");
+                        return build_error_response(Some("Connection to E3 failed.".to_string()));
+                    }
+                };
                 let response: Response<Body> = AuthError::FailedToAuthenticateApiKey.into();
                 return response;
             }

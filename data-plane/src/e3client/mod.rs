@@ -102,6 +102,7 @@ impl E3Client {
                 payload.try_into_body()?,
             )
             .await?;
+        println!("{response:?}");
         Ok(response.status().is_success())
     }
 
@@ -114,9 +115,9 @@ impl E3Client {
 
 #[derive(Serialize, Deserialize)]
 pub struct AuthRequest {
-    team_uuid: String,
-    app_uuid: String,
-    cage_uuid: String,
+    pub team_uuid: String,
+    pub app_uuid: String,
+    pub cage_uuid: Option<String>,
 }
 
 impl E3Payload for AuthRequest {}
@@ -126,7 +127,7 @@ impl std::convert::From<&crate::CageContext> for AuthRequest {
         Self {
             team_uuid: context.team_uuid().to_string(),
             app_uuid: context.app_uuid().to_string(),
-            cage_uuid: context.cage_uuid().to_string(),
+            cage_uuid: Some(context.cage_uuid().to_string()),
         }
     }
 }
