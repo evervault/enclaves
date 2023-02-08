@@ -131,7 +131,7 @@ async fn decryption_handler(
 async fn authentication_handler(headers: HeaderMap) -> impl IntoResponse {
   match headers.get("api-key") {
     Some(key) => {
-      if key.to_str().unwrap() == "placeholder" {
+      if key.to_str().unwrap() == "e0hrSRE7NYXmyoG7aAlRbu/Vgly7ak/4dkqCnB044+VH+xuJkMwiIGt2C4xBQ82um7AwsOX/rvytn4Hlb6izsw==" {
         println!("[Mock Crypto API] - Recieved request to authenticate!");
         StatusCode::OK
       } else {

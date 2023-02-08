@@ -17,6 +17,7 @@ use hyper::http::{self, request::Parts};
 use hyper::server::conn;
 use hyper::service::service_fn;
 use hyper::{Body, Request, Response};
+use sha2::Digest;
 use shared::logging::TrxContextBuilder;
 use shared::server::Listener;
 use std::sync::Arc;
@@ -150,8 +151,15 @@ async fn handle_incoming_request(
             Ok(api_key_header) => api_key_header,
             Err(e) => return e.into(),
         };
+
+        let hashed_api_key =
+            match HeaderValue::from_bytes(&compute_base64_sha512(api_key.as_bytes())) {
+                Ok(hashed_api_key_header) => hashed_api_key_header,
+                Err(_) => return build_error_response(Some("Invalid API Key.".to_string())),
+            };
+
         match e3_client
-            .authenticate(&api_key, AuthRequest::from(&cage_context))
+            .authenticate(&hashed_api_key, AuthRequest::from(&cage_context))
             .await
         {
             Ok(auth_status) => {
@@ -347,9 +355,18 @@ fn build_error_response(body_msg: Option<String>) -> Response<Body> {
         .expect("Hardcoded response")
 }
 
+pub fn compute_base64_sha512(input: impl AsRef<[u8]>) -> Vec<u8> {
+    let mut hasher = sha2::Sha512::new();
+    hasher.update(input.as_ref());
+    let hash_digest = base64::encode(hasher.finalize().as_slice());
+    hash_digest.as_bytes().to_vec()
+}
+
 #[cfg(test)]
 mod test {
     use hyper::{http::HeaderValue, Body, Request, Response};
+
+    use crate::server::data_plane_server::compute_base64_sha512;
 
     use super::{
         add_ev_ctx_header_to_request, add_ev_ctx_header_to_response,
@@ -409,5 +426,15 @@ mod test {
 
         assert!(ctx_header.is_some());
         assert_eq!(ctx_header.unwrap(), expected_header_val);
+    }
+
+    #[test]
+    fn test_compute_sha_512() {
+        let test_input = "ev:key:1:1f31f1Lpz8jWyc8CcYQBH5GOwimvDaa3sJiIESsPH8j79xvKF";
+        let test_output = "bAJwONVQChhErjXlPJfPp3d6Hss43rjFAZcXhyVTcAaO7VY0bEeIBhA3HUN6z56EAAHU7+w1bCTHf6+Vg7y3/g==".as_bytes().to_vec();
+
+        let output_bytes = compute_base64_sha512(test_input);
+
+        assert_eq!(test_output, output_bytes);
     }
 }

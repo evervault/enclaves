@@ -116,6 +116,7 @@ impl E3Client {
 pub struct AuthRequest {
     team_uuid: String,
     app_uuid: String,
+    cage_uuid: String,
 }
 
 impl E3Payload for AuthRequest {}
@@ -125,6 +126,7 @@ impl std::convert::From<&crate::CageContext> for AuthRequest {
         Self {
             team_uuid: context.team_uuid().to_string(),
             app_uuid: context.app_uuid().to_string(),
+            cage_uuid: context.cage_uuid().to_string(),
         }
     }
 }
