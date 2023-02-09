@@ -157,7 +157,6 @@ async fn handle_incoming_request(
                 Ok(hashed_api_key_header) => hashed_api_key_header,
                 Err(_) => return build_error_response(Some("Invalid API Key.".to_string())),
             };
-        println!("Generated hashed api key: {hashed_api_key:?}");
 
         let auth_payload_for_hashed_api_key = AuthRequest::from(&cage_context);
 
@@ -204,9 +203,7 @@ async fn handle_incoming_request(
                         eprintln!("Failed to authenticate against e3 — {e:?}");
                         return build_error_response(Some("Connection to E3 failed.".to_string()));
                     }
-                };
-                let response: Response<Body> = AuthError::FailedToAuthenticateApiKey.into();
-                return response;
+                }
             }
             Err(e) => {
                 eprintln!("Failed to authenticate against e3 — {e:?}");
