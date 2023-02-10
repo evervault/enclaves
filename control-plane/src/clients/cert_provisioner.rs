@@ -7,6 +7,7 @@ use hyper::{
     Body, Response,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use shared::server::config_server::routes::ConfigServerPath;
 use tokio::net::TcpStream;
 use tokio_rustls::{
     client::TlsStream,
@@ -144,10 +145,13 @@ impl CertProvisionerClient {
         Ok(response)
     }
 
-    pub async fn get_token(&self) -> Result<GetCertTokenResponseControlPlane> {
+    pub async fn get_token(
+        &self,
+        path: ConfigServerPath,
+    ) -> Result<GetCertTokenResponseControlPlane> {
         let body = get_token_request_metadata_from_env().into_body()?;
 
-        let response = self.send("/cert/token", "GET", body, true).await?;
+        let response = self.send(&format!("{path}"), "GET", body, true).await?;
         let result: GetCertTokenResponseControlPlane = self.parse_response(response).await?;
         Ok(result)
     }

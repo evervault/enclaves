@@ -22,7 +22,7 @@ impl<'a> std::fmt::UpperHex for HexSlice<'a> {
 impl<'a> std::fmt::LowerHex for HexSlice<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for byte in self.0 {
-            write!(f, "{byte:02x}")?;
+            write!(f, "{byte:02X}")?;
         }
         Ok(())
     }

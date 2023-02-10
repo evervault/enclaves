@@ -17,6 +17,11 @@ pub struct BaseClient {
     port: u16,
 }
 
+pub enum AuthType {
+    ApiKey(HeaderValue),
+    AttestationDoc(HeaderValue),
+}
+
 impl BaseClient {
     pub fn new(tls_connector: TlsConnector, server_name: ServerName, port: u16) -> Self {
         Self {
@@ -50,7 +55,7 @@ impl BaseClient {
 
     pub async fn send(
         &self,
-        api_key: Option<&HeaderValue>,
+        auth_type: Option<AuthType>,
         method: &str,
         uri: &str,
         payload: hyper::Body,
@@ -62,9 +67,12 @@ impl BaseClient {
             .body(payload)
             .expect("Failed to create request");
 
-        if let Some(value) = api_key {
-            request.headers_mut().insert("api-key", value.into());
-        };
+        auth_type.map(|auth| match auth {
+            AuthType::ApiKey(header_value) => request.headers_mut().insert("api-key", header_value),
+            AuthType::AttestationDoc(header_value) => request
+                .headers_mut()
+                .insert("attestation-token", header_value),
+        });
 
         let (mut request_sender, connection) = self.get_conn().await?;
         tokio::spawn(async move {

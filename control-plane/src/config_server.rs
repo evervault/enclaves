@@ -88,17 +88,21 @@ async fn handle_incoming_request(
 ) -> Result<Response<Body>> {
     match ConfigServerPath::from_str(req.uri().path()) {
         Ok(ConfigServerPath::GetCertToken) => {
-            Ok(handle_cert_token_request(cert_provisioner_client).await)
+            Ok(handle_token_request(cert_provisioner_client, ConfigServerPath::GetCertToken).await)
+        }
+        Ok(ConfigServerPath::GetE3Token) => {
+            Ok(handle_token_request(cert_provisioner_client, ConfigServerPath::GetE3Token).await)
         }
         Ok(ConfigServerPath::PostTrxLogs) => Ok(handle_post_trx_logs_request(req).await),
         _ => Ok(build_bad_request_response()),
     }
 }
 
-async fn handle_cert_token_request(
+async fn handle_token_request(
     cert_provisioner_client: CertProvisionerClient,
+    path: ConfigServerPath,
 ) -> Response<Body> {
-    let token_response = match cert_provisioner_client.get_token().await {
+    let token_response = match cert_provisioner_client.get_token(path).await {
         Ok(res) => res,
         Err(err) => {
             println!("Request to cert provisioner for token failed. Err: {err}");

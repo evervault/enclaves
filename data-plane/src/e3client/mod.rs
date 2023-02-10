@@ -22,7 +22,7 @@ impl std::default::Default for E3Client {
 }
 
 use crate::base_tls_client::tls_client_config::get_tls_client_config;
-use crate::base_tls_client::{BaseClient, ClientError};
+use crate::base_tls_client::{AuthType, BaseClient, ClientError};
 use crate::configuration;
 
 impl E3Client {
@@ -50,7 +50,7 @@ impl E3Client {
 
     pub async fn decrypt<T, P: E3Payload>(
         &self,
-        api_key: &HeaderValue,
+        e3_auth_token: &HeaderValue,
         payload: P,
     ) -> Result<T, E3Error>
     where
@@ -59,7 +59,7 @@ impl E3Client {
         let response = self
             .base_client
             .send(
-                Some(api_key),
+                Some(AuthType::AttestationDoc(e3_auth_token.clone())),
                 "POST",
                 &self.uri("/decrypt"),
                 payload.try_into_body()?,
@@ -70,7 +70,7 @@ impl E3Client {
 
     pub async fn encrypt<T, P: E3Payload>(
         &self,
-        api_key: &HeaderValue,
+        e3_auth_token: &HeaderValue,
         payload: P,
     ) -> Result<T, E3Error>
     where
@@ -79,7 +79,7 @@ impl E3Client {
         let response = self
             .base_client
             .send(
-                Some(api_key),
+                Some(AuthType::AttestationDoc(e3_auth_token.clone())),
                 "POST",
                 &self.uri("/encrypt"),
                 payload.try_into_body()?,
@@ -96,7 +96,7 @@ impl E3Client {
         let response = self
             .base_client
             .send(
-                Some(api_key),
+                Some(AuthType::ApiKey(api_key.clone())),
                 "POST",
                 &self.uri("/authenticate"),
                 payload.try_into_body()?,

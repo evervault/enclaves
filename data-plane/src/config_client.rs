@@ -82,12 +82,10 @@ impl ConfigClient {
         Ok(response)
     }
 
-    pub async fn get_cert_token(&self) -> Result<GetCertTokenResponseDataPlane> {
+    pub async fn get_token(&self, path: ConfigServerPath) -> Result<GetCertTokenResponseDataPlane> {
         let payload = GetCertTokenRequestDataPlane::new().into_body()?;
 
-        let response = self
-            .send(ConfigServerPath::GetCertToken, "GET", payload)
-            .await?;
+        let response = self.send(path, "GET", payload).await?;
         let result: GetCertTokenResponseDataPlane = self.parse_response(response).await?;
 
         Ok(result)

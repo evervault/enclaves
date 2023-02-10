@@ -9,6 +9,7 @@ pub mod routes {
     pub enum ConfigServerPath {
         GetCertToken,
         PostTrxLogs,
+        GetE3Token,
     }
 
     impl FromStr for ConfigServerPath {
@@ -16,7 +17,8 @@ pub mod routes {
 
         fn from_str(input: &str) -> ServerResult<ConfigServerPath> {
             match input {
-                "/cert/token" => Ok(Self::GetCertToken),
+                "/token/cert" => Ok(Self::GetCertToken),
+                "/token/e3" => Ok(Self::GetE3Token),
                 "/trx/logs" => Ok(Self::PostTrxLogs),
                 _ => Err(ServerError::InvalidPath(input.to_string())),
             }
@@ -26,7 +28,8 @@ pub mod routes {
     impl std::fmt::Display for ConfigServerPath {
         fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
             match self {
-                Self::GetCertToken => write!(f, "/cert/token"),
+                Self::GetCertToken => write!(f, "/token/cert"),
+                Self::GetE3Token => write!(f, "/token/e3"),
                 Self::PostTrxLogs => write!(f, "/trx/logs"),
             }
         }

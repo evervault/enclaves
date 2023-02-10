@@ -1,5 +1,6 @@
 use openssl::pkey::{PKey, Private};
 use openssl::x509::X509;
+use shared::server::config_server::routes::ConfigServerPath;
 
 use crate::e3client::E3Client;
 use crate::env::Environment;
@@ -34,7 +35,11 @@ impl InterCaRetreiver {
 
     pub async fn get_intermediate_ca(&self) -> Result<(X509, PKey<Private>)> {
         println!("Sending request to control plane for cert provisioner token.");
-        let token = self.config_client.get_cert_token().await?.token();
+        let token = self
+            .config_client
+            .get_token(ConfigServerPath::GetCertToken)
+            .await?
+            .token();
 
         println!("Received token for cert provisioner. Requesting intermediate CA.");
         let cert_response = self

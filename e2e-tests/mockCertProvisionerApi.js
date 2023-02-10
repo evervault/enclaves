@@ -31,11 +31,11 @@ const mutualTlsMiddleware = () => (req, res, next) => {
 app.use(mutualTlsMiddleware());
 
 
-app.get('/cert/token', async (req, res) => {
+app.get('/token/cert', async (req, res) => {
   try {
     console.log(req.body);
     const { cageUuid, cage_version,  app_uuid} = req.body
-    console.log("Received token request from cage control plane")
+    console.log("Received cert token request from cage control plane")
     var result = {
       token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeFONFh7HgQ"
     };
@@ -43,6 +43,21 @@ app.get('/cert/token', async (req, res) => {
     res.send(result) 
   } catch (e) {
     console.log("Could not return cert token", e)
+  }
+})
+
+app.get('/token/e3', async (req, res) => {
+  try {
+    console.log(req.body);
+    const { cageUuid, cage_version,  app_uuid} = req.body
+    console.log("Received E3 token request from cage control plane")
+    var result = {
+      token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeFONFh7HgQ"
+    };
+    res.status(200)
+    res.send(result) 
+  } catch (e) {
+    console.log("Could not return E3 token", e)
   }
 })
  
