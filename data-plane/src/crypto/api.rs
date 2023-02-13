@@ -142,9 +142,13 @@ impl CryptoApi {
 
         let mut sha256 = Sha256::new();
         sha256.update(body);
-        let payload_digest = sha256.finalize();
-
-        Self::get_attestation_doc_token(token, payload_digest.to_vec())
+        let payload_digest = sha256.finalize().to_vec();
+        println!(
+            "TEMP DEBUG: Generating attestation doc with nonce len: {}, token len: {}",
+            payload_digest.len(),
+            token.as_bytes().len()
+        );
+        Self::get_attestation_doc_token(token, payload_digest)
     }
 
     #[cfg(feature = "enclave")]

@@ -17,3 +17,14 @@ pub fn get_e3_host() -> String {
 pub fn get_e3_host() -> String {
     "localhost".to_string()
 }
+
+pub fn get_egress_ports() -> Vec<u16> {
+    let port_str = std::env::var("EGRESS_PORTS").unwrap_or("443".to_string());
+    port_str
+        .split(',')
+        .map(|port| {
+            port.parse::<u16>()
+                .unwrap_or_else(|_| panic!("Could not parse egress port as u16: {port}"))
+        })
+        .collect()
+}

@@ -23,11 +23,11 @@ use rand::seq::SliceRandom;
 pub struct EgressProxy;
 
 impl EgressProxy {
-    pub async fn listen() -> ServerResult<()> {
-        println!("Egress proxy started");
+    pub async fn listen(port: u16) -> ServerResult<()> {
+        println!("Egress proxy started on port {port}");
 
         let mut server =
-            TcpServer::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 443)).await?;
+            TcpServer::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), port)).await?;
 
         loop {
             if let Ok(stream) = server.accept().await {
