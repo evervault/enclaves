@@ -38,6 +38,8 @@ jobs:
         uses: evervault/cargo-static-build@master
         with:
           cmd: cargo build -p control-plane --features enclave,network_egress --release --target ${{ env.LINUX_TARGET }}
+        env:
+          RUSTFLAGS: "--cfg staging"
       - name: Move control-plane binary to root
         run: cp ./target/${{ env.LINUX_TARGET }}/release/control-plane ./control-plane
       - name: Configure Staging AWS Credentials
@@ -66,7 +68,7 @@ jobs:
         run: |
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-latest
-  
+
   deploy_control_plane_image_without_egress:
     runs-on: ubuntu-latest
     needs: last_test
@@ -78,6 +80,8 @@ jobs:
         uses: evervault/cargo-static-build@master
         with:
           cmd: cargo build -p control-plane --features enclave --release --target ${{ env.LINUX_TARGET }}
+        env:
+          RUSTFLAGS: "--cfg staging"
       - name: Move control-plane binary to root
         run: cp ./target/${{ env.LINUX_TARGET }}/release/control-plane ./control-plane
       - name: Configure Staging AWS Credentials

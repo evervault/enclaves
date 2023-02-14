@@ -36,6 +36,8 @@ jobs:
         uses: evervault/cargo-static-build@master
         with:
           cmd: cargo build -p data-plane --no-default-features --features enclave,network_egress --release --target ${{ env.LINUX_TARGET }}
+        env:
+          RUSTFLAGS: "--cfg staging"
 
       - name: Upload data-plane to S3 (egress enabled, tls termination disabled)
         env:
@@ -50,6 +52,8 @@ jobs:
         uses: evervault/cargo-static-build@master
         with:
           cmd: cargo build -p data-plane --features enclave,network_egress --release --target ${{ env.LINUX_TARGET }}
+        env:
+          RUSTFLAGS: "--cfg staging"
 
       - name: Upload data-plane to S3 (egress enabled, tls termination enabled)
         env:
@@ -64,6 +68,8 @@ jobs:
         uses: evervault/cargo-static-build@master
         with:
           cmd: cargo build -p data-plane --no-default-features --features enclave --release --target ${{ env.LINUX_TARGET }}
+        env:
+          RUSTFLAGS: "--cfg staging"
 
       - name: Upload data-plane to S3 (egress disabled, tls termination disabled)
         env:
@@ -78,6 +84,8 @@ jobs:
         uses: evervault/cargo-static-build@master
         with:
           cmd: cargo build -p data-plane --features enclave --release --target ${{ env.LINUX_TARGET }}
+        env:
+          RUSTFLAGS: "--cfg staging"
 
       - name: Upload data-plane to S3 (egress disabled, tls termination enabled)
         env:

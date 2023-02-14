@@ -117,6 +117,12 @@ impl CageContext {
         &self.team_uuid
     }
 
+    #[cfg(staging)]
+    pub fn get_cert_name(&self) -> String {
+        format!("{}.{}.cages.evervault.dev", &self.cage_name, &self.app_uuid)
+    }
+
+    #[cfg(not(staging))]
     pub fn get_cert_name(&self) -> String {
         format!("{}.{}.cages.evervault.com", &self.cage_name, &self.app_uuid)
     }

@@ -605,6 +605,27 @@ mod tests {
         assert_ne!(get_digest!(&x509_with_nonce), get_digest!(&same_nonce_cert));
     }
 
+    #[cfg(staging)]
+    #[test]
+    fn test_tld_is_correct_when_compiler_flag_is_set() {
+        let app_uuid = "app_123".to_string();
+        let team_uuid = "team_456".to_string();
+        let cage_uuid = "cage_123".to_string();
+        let cage_name = "a-cage".to_string();
+        let api_key_auth = true;
+        let trx_logging = true;
+        let ctx = CageContext::new(
+            app_uuid,
+            team_uuid,
+            cage_uuid,
+            cage_name,
+            api_key_auth,
+            trx_logging,
+        );
+        let hostname = ctx.get_cert_name();
+        assert!(hostname.ends_with(".dev"));
+    }
+
     #[test]
     fn test_common_name_not_included_for_long_cage_name() {
         let app_uuid = "app_123".to_string();
@@ -622,6 +643,13 @@ mod tests {
             trx_logging,
         );
         let hostname = ctx.get_cert_name();
+
+        if cfg!(staging) {
+            assert!(hostname.ends_with(".dev"));
+        } else {
+            assert!(hostname.ends_with(".com"));
+        }
+
         let server_name = Some(hostname.clone());
         let (cert, key) = generate_ca().unwrap();
         let resolver = AttestableCertResolver::new(cert, key).unwrap();
@@ -656,6 +684,12 @@ mod tests {
             trx_logging,
         );
         let hostname = ctx.get_cert_name();
+        if cfg!(staging) {
+            assert!(hostname.ends_with(".dev"));
+        } else {
+            assert!(hostname.ends_with(".com"));
+        }
+
         let server_name = Some(hostname.clone());
         let (cert, key) = generate_ca().unwrap();
         let resolver = AttestableCertResolver::new(cert, key).unwrap();
@@ -669,7 +703,8 @@ mod tests {
         let x509_subject_name = first_x509.subject_name();
         let final_name_entry = x509_subject_name.entries().find(|entry| {
             let entry_string = entry.data().as_utf8().unwrap();
-            entry_string.to_string() == hostname
+            let given_host = entry_string.to_string();
+            given_host == hostname
         });
         assert!(final_name_entry.is_some());
     }
