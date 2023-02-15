@@ -1,4 +1,3 @@
-use bytes::Bytes;
 use cached::{Cached, TimedSizedCache};
 use hyper::http::HeaderValue;
 use hyper::{self, Body};
@@ -125,7 +124,7 @@ impl CryptoApi {
         }
     }
 
-    async fn get_token(&mut self, body: Bytes) -> Result<String, CryptoApiError> {
+    async fn get_token(&mut self, body: Vec<u8>) -> Result<String, CryptoApiError> {
         let token_key: String = "e3_token".to_string();
         let token = match self.cache.cache_get(&token_key) {
             Some(token) => token.clone(),
@@ -144,9 +143,10 @@ impl CryptoApi {
         sha256.update(body);
         let payload_digest = sha256.finalize().to_vec();
         println!(
-            "TEMP DEBUG: Generating attestation doc with nonce len: {}, token len: {}",
+            "TEMP DEBUG: Generating attestation doc with nonce len: {}, token len: {} digest {}",
             payload_digest.len(),
-            token.as_bytes().len()
+            token.as_bytes().len(),
+            base64::encode(payload_digest.clone())
         );
         Self::get_attestation_doc_token(token, payload_digest)
     }
@@ -166,39 +166,31 @@ impl CryptoApi {
     }
 
     async fn build_request(
-        token: String,
-        bytes: Bytes,
+        &mut self,
+        req: Request<Body>,
     ) -> Result<(HeaderValue, CryptoRequest), CryptoApiError> {
+        let (_, body) = req.into_parts();
+        let body_bytes = hyper::body::to_bytes(body).await?;
         let cage_context = CageContext::get()?;
-        let api_key = hyper::http::header::HeaderValue::from_str(&token).unwrap();
         let body: Value =
-            serde_json::from_slice(&bytes).map_err(|_| CryptoApiError::SerializationError)?;
+            serde_json::from_slice(&body_bytes).map_err(|_| CryptoApiError::SerializationError)?;
         let payload = CryptoRequest::from((body, &cage_context));
-        Ok((api_key, payload))
+        let payload_bytes = serde_json::to_vec(&payload).unwrap();
+        let token = self.get_token(payload_bytes).await.unwrap();
+        let token_header = hyper::http::header::HeaderValue::from_str(&token).unwrap();
+        Ok((token_header, payload))
     }
 
     async fn encrypt(&mut self, req: Request<Body>) -> Result<Body, CryptoApiError> {
-        let (token, body) = self.get_token_and_body(req).await?;
-        let (api_key, payload) = Self::build_request(token.clone(), body).await?;
-        let e3_response: CryptoResponse = self.e3_client.encrypt(&api_key, payload).await?;
+        let (token, request) = self.build_request(req).await?;
+        let e3_response: CryptoResponse = self.e3_client.encrypt(&token, request).await?;
         Ok(hyper::Body::from(serde_json::to_vec(&e3_response.data)?))
     }
 
     async fn decrypt(&mut self, req: Request<Body>) -> Result<Body, CryptoApiError> {
-        let (token, body) = self.get_token_and_body(req).await?;
-        let (api_key, payload) = Self::build_request(token, body).await?;
-        let e3_response: CryptoResponse = self.e3_client.decrypt(&api_key, payload).await?;
+        let (token, request) = self.build_request(req).await?;
+        let e3_response: CryptoResponse = self.e3_client.decrypt(&token, request).await?;
         Ok(hyper::Body::from(serde_json::to_vec(&e3_response.data)?))
-    }
-
-    async fn get_token_and_body(
-        &mut self,
-        req: Request<Body>,
-    ) -> Result<(String, Bytes), CryptoApiError> {
-        let (_, body) = req.into_parts();
-        let body_bytes = hyper::body::to_bytes(body).await?;
-        let token = self.get_token(body_bytes.clone()).await?;
-        Ok((token, body_bytes))
     }
 
     #[cfg(feature = "enclave")]
