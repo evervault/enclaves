@@ -78,7 +78,7 @@ impl EgressProxy {
                 }
             };
 
-        let mut remote_stream = TcpStream::connect((connect_ip, 443)).await?;
+        let mut remote_stream = TcpStream::connect((connect_ip, external_request.port)).await?;
         remote_stream.write_all(&external_request.data).await?;
 
         let joined_streams = pipe_streams(external_stream, remote_stream).await?;

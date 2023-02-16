@@ -31,7 +31,7 @@ impl EgressProxy {
 
         loop {
             if let Ok(stream) = server.accept().await {
-                tokio::spawn(Self::handle_egress_connection(stream));
+                tokio::spawn(Self::handle_egress_connection(stream, port));
             }
         }
         #[allow(unreachable_code)]
@@ -85,6 +85,7 @@ impl EgressProxy {
 
     async fn handle_egress_connection<T: AsyncRead + AsyncWrite + Unpin>(
         mut external_stream: T,
+        port: u16,
     ) -> Result<(), DNSError> {
         let mut buf = vec![0u8; 4096];
 
@@ -108,6 +109,7 @@ impl EgressProxy {
                 let external_request = ExternalRequest {
                     ip: remote_ip.to_string(),
                     data: customer_data.to_vec(),
+                    port,
                 }
                 .to_bytes()?;
 

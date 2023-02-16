@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 pub struct ExternalRequest {
     pub ip: String,
     pub data: Vec<u8>,
+    pub port: u16,
 }
 
 impl ExternalRequest {
