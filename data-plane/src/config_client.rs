@@ -6,8 +6,8 @@ use hyper::{Body, Response};
 use serde::de::DeserializeOwned;
 use shared::logging::TrxContext;
 use shared::server::config_server::requests::{
-    ConfigServerPayload, GetCertTokenRequestDataPlane, GetCertTokenResponseDataPlane,
-    PostTrxLogsRequest,
+    ConfigServerPayload, GetCertTokenResponseDataPlane, GetE3TokenResponseDataPlane,
+    GetTokenRequestDataPlane, PostTrxLogsRequest,
 };
 use shared::server::config_server::routes::ConfigServerPath;
 
@@ -82,10 +82,23 @@ impl ConfigClient {
         Ok(response)
     }
 
-    pub async fn get_token(&self, path: ConfigServerPath) -> Result<GetCertTokenResponseDataPlane> {
-        let payload = GetCertTokenRequestDataPlane::new().into_body()?;
+    pub async fn get_e3_token(&self) -> Result<GetE3TokenResponseDataPlane> {
+        let payload = GetTokenRequestDataPlane::new().into_body()?;
 
-        let response = self.send(path, "GET", payload).await?;
+        let response = self
+            .send(ConfigServerPath::GetE3Token, "GET", payload)
+            .await?;
+        let result: GetE3TokenResponseDataPlane = self.parse_response(response).await?;
+
+        Ok(result)
+    }
+
+    pub async fn get_cert_token(&self) -> Result<GetCertTokenResponseDataPlane> {
+        let payload = GetTokenRequestDataPlane::new().into_body()?;
+
+        let response = self
+            .send(ConfigServerPath::GetCertToken, "GET", payload)
+            .await?;
         let result: GetCertTokenResponseDataPlane = self.parse_response(response).await?;
 
         Ok(result)

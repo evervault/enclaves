@@ -6,6 +6,7 @@ pub mod routes {
 
     use std::str::FromStr;
 
+    #[derive(Clone, Debug)]
     pub enum ConfigServerPath {
         GetCertToken,
         PostTrxLogs,
@@ -49,21 +50,21 @@ pub mod requests {
     }
 
     #[derive(Serialize, Deserialize, Debug)]
-    pub struct GetCertTokenRequestDataPlane;
+    pub struct GetTokenRequestDataPlane;
 
-    impl Default for GetCertTokenRequestDataPlane {
+    impl Default for GetTokenRequestDataPlane {
         fn default() -> Self {
             Self::new()
         }
     }
 
-    impl GetCertTokenRequestDataPlane {
+    impl GetTokenRequestDataPlane {
         pub fn new() -> Self {
             Self {}
         }
     }
 
-    impl ConfigServerPayload for GetCertTokenRequestDataPlane {
+    impl ConfigServerPayload for GetTokenRequestDataPlane {
         fn into_body(self) -> ServerResult<hyper::Body> {
             Ok(hyper::Body::empty())
         }
@@ -74,7 +75,14 @@ pub mod requests {
         token: String,
     }
 
+    #[derive(Serialize, Deserialize, Debug)]
+    pub struct GetE3TokenResponseDataPlane {
+        token: String,
+        token_id: String,
+    }
+
     impl ConfigServerPayload for GetCertTokenResponseDataPlane {}
+    impl ConfigServerPayload for GetE3TokenResponseDataPlane {}
 
     impl GetCertTokenResponseDataPlane {
         pub fn new(token: String) -> Self {
@@ -83,6 +91,20 @@ pub mod requests {
 
         pub fn token(&self) -> String {
             self.token.clone()
+        }
+    }
+
+    impl GetE3TokenResponseDataPlane {
+        pub fn new(token: String, token_id: String) -> Self {
+            Self { token, token_id }
+        }
+
+        pub fn token(&self) -> String {
+            self.token.clone()
+        }
+
+        pub fn token_id(&self) -> String {
+            self.token_id.clone()
         }
     }
 

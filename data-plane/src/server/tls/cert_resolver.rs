@@ -576,7 +576,7 @@ mod tests {
             api_key_auth,
             trx_logging,
         );
-        CageContext::set(ctx.clone()).unwrap();
+        CageContext::set(ctx.clone());
         let server_name = Some(ctx.get_cert_name());
         let (cert, key) = generate_ca().unwrap();
         let resolver = AttestableCertResolver::new(cert, key).unwrap();

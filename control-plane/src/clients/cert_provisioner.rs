@@ -145,14 +145,10 @@ impl CertProvisionerClient {
         Ok(response)
     }
 
-    pub async fn get_token(
-        &self,
-        path: ConfigServerPath,
-    ) -> Result<GetCertTokenResponseControlPlane> {
+    pub async fn get_token<T: DeserializeOwned>(&self, path: ConfigServerPath) -> Result<T> {
         let body = get_token_request_metadata_from_env().into_body()?;
-
         let response = self.send(&format!("{path}"), "GET", body, true).await?;
-        let result: GetCertTokenResponseControlPlane = self.parse_response(response).await?;
+        let result: T = self.parse_response(response).await?;
         Ok(result)
     }
 
@@ -209,5 +205,22 @@ impl CertProvisionerPayload for GetCertTokenResponseControlPlane {}
 impl GetCertTokenResponseControlPlane {
     pub fn token(&self) -> String {
         self.token.clone()
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GetE3TokenResponseControlPlane {
+    token: String,
+    token_id: String,
+}
+
+impl CertProvisionerPayload for GetE3TokenResponseControlPlane {}
+
+impl GetE3TokenResponseControlPlane {
+    pub fn token(&self) -> String {
+        self.token.clone()
+    }
+    pub fn token_id(&self) -> String {
+        self.token_id.clone()
     }
 }

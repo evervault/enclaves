@@ -1,4 +1,6 @@
-use crate::clients::cert_provisioner::CertProvisionerClient;
+use crate::clients::cert_provisioner::{
+    CertProvisionerClient, GetCertTokenResponseControlPlane, GetE3TokenResponseControlPlane,
+};
 use crate::error::{Result, ServerError};
 
 use hyper::server::conn;
@@ -6,7 +8,8 @@ use hyper::service::service_fn;
 use hyper::{Body, Request, Response};
 use serde::de::DeserializeOwned;
 use shared::server::config_server::requests::{
-    ConfigServerPayload, GetCertTokenResponseDataPlane, PostTrxLogsRequest,
+    ConfigServerPayload, GetCertTokenResponseDataPlane, GetE3TokenResponseDataPlane,
+    PostTrxLogsRequest,
 };
 use shared::server::config_server::routes::ConfigServerPath;
 use shared::server::Listener;
@@ -82,17 +85,26 @@ impl ConfigServer {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum TokenType {
+    Cert(ConfigServerPath),
+    E3(ConfigServerPath),
+}
 async fn handle_incoming_request(
     req: Request<Body>,
     cert_provisioner_client: CertProvisionerClient,
 ) -> Result<Response<Body>> {
     match ConfigServerPath::from_str(req.uri().path()) {
-        Ok(ConfigServerPath::GetCertToken) => {
-            Ok(handle_token_request(cert_provisioner_client, ConfigServerPath::GetCertToken).await)
-        }
-        Ok(ConfigServerPath::GetE3Token) => {
-            Ok(handle_token_request(cert_provisioner_client, ConfigServerPath::GetE3Token).await)
-        }
+        Ok(ConfigServerPath::GetCertToken) => Ok(handle_token_request(
+            cert_provisioner_client,
+            TokenType::Cert(ConfigServerPath::GetCertToken),
+        )
+        .await),
+        Ok(ConfigServerPath::GetE3Token) => Ok(handle_token_request(
+            cert_provisioner_client,
+            TokenType::E3(ConfigServerPath::GetE3Token),
+        )
+        .await),
         Ok(ConfigServerPath::PostTrxLogs) => Ok(handle_post_trx_logs_request(req).await),
         _ => Ok(build_bad_request_response()),
     }
@@ -100,37 +112,44 @@ async fn handle_incoming_request(
 
 async fn handle_token_request(
     cert_provisioner_client: CertProvisionerClient,
-    path: ConfigServerPath,
+    token_type: TokenType,
 ) -> Response<Body> {
-    let token_response = match cert_provisioner_client.get_token(path).await {
+    match get_token(cert_provisioner_client, token_type.clone()).await {
         Ok(res) => res,
-        Err(err) => {
-            println!("Request to cert provisioner for token failed. Err: {err}");
-            return build_error_response(format!(
-                "Request to cert provisioner for token failed. Err: {err}"
-            ));
-        }
-    };
+        Err(e) => build_error_response(format!(
+            "Failed to get token for token {token_type:?} err: {e}"
+        )),
+    }
+}
 
-    let body = match GetCertTokenResponseDataPlane::new(token_response.token()).into_body() {
-        Ok(body) => body,
-        Err(err) => {
-            return build_error_response(format!(
-                "Failed to serialise client provisioner token response: {err}"
-            ))
+async fn get_token(
+    cert_provisioner_client: CertProvisionerClient,
+    token_type: TokenType,
+) -> Result<Response<Body>> {
+    let body = match token_type {
+        TokenType::Cert(path) => {
+            let token_response = cert_provisioner_client
+                .get_token::<GetCertTokenResponseControlPlane>(path.clone())
+                .await?;
+            GetCertTokenResponseDataPlane::new(token_response.token()).into_body()?
+        }
+        TokenType::E3(path) => {
+            let token_response = cert_provisioner_client
+                .get_token::<GetE3TokenResponseControlPlane>(path.clone())
+                .await?;
+            GetE3TokenResponseDataPlane::new(token_response.token(), token_response.token_id())
+                .into_body()?
         }
     };
 
     let res = Response::builder()
         .status(200)
         .header("Content-Type", "application/json")
-        .body(body);
+        .body(body)?;
 
     println!("Token returned from cert provisioner, sending it back to the cage");
 
-    res.unwrap_or_else(|err| {
-        build_error_response(format!("Couldn't build cert token response. Error: {err}"))
-    })
+    Ok(res)
 }
 
 async fn handle_post_trx_logs_request(req: Request<Body>) -> Response<Body> {

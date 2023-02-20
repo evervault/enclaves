@@ -6,7 +6,6 @@ use crate::cert_provisioner_client::CertProvisionerClient;
 use crate::config_client::ConfigClient;
 use crate::{base_tls_client::ClientError, CageContext, CageContextError};
 use hyper::header::InvalidHeaderValue;
-use hyper::http::HeaderValue;
 use serde_json::json;
 use shared::server::config_server::requests::Secret;
 use thiserror::Error;
@@ -61,7 +60,6 @@ impl Environment {
             .find(|secret| secret.name == "EV_API_KEY")
             .ok_or(EnvError::MissingApiKey)?;
         env::set_var(api_key.clone().name, api_key.clone().secret);
-        let header = HeaderValue::from_str(&api_key.secret)?;
 
         let (encrypted_env, plaintext_env): (_, Vec<Secret>) = secrets
             .clone()
@@ -75,14 +73,11 @@ impl Environment {
         if !encrypted_env.is_empty() {
             let e3_response: CryptoResponse = self
                 .e3_client
-                .decrypt(
-                    &header,
-                    CryptoRequest {
-                        app_uuid: cage_context.app_uuid.clone(),
-                        team_uuid: cage_context.team_uuid.clone(),
-                        data: json!(encrypted_env.clone()),
-                    },
-                )
+                .decrypt(CryptoRequest {
+                    app_uuid: cage_context.app_uuid.clone(),
+                    team_uuid: cage_context.team_uuid.clone(),
+                    data: json!(encrypted_env.clone()),
+                })
                 .await?;
             let mut decrypted_env: Vec<Secret> = serde_json::from_value(e3_response.data)?;
             decrypted_env.append(&mut plaintext_env);
@@ -99,14 +94,9 @@ impl Environment {
         use shared::server::config_server::routes::ConfigServerPath;
 
         println!("Initializing env without TLS termination, sending request to control plane for cert provisioner token.");
-        let token = self
-            .config_client
-            .get_token(ConfigServerPath::GetCertToken)
-            .await
-            .unwrap()
-            .token();
+        let token = self.config_client.get_cert_token().await.unwrap().token();
         let cert_response = self.cert_provisioner_client.get_secrets(token).await?;
-        CageContext::set(cert_response.clone().context.into())?;
+        CageContext::set(cert_response.clone().context.into());
 
         self.init(cert_response.clone().secrets).await?;
         Ok(())

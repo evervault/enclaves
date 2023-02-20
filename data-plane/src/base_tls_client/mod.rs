@@ -9,6 +9,7 @@ use tokio_rustls::rustls::ServerName;
 use tokio_rustls::{client::TlsStream, TlsConnector};
 
 use crate::connection::{self, Connection};
+use crate::crypto::token::AttestationAuth;
 
 #[derive(Clone)]
 pub struct BaseClient {
@@ -19,7 +20,7 @@ pub struct BaseClient {
 
 pub enum AuthType {
     ApiKey(HeaderValue),
-    AttestationDoc(HeaderValue),
+    AttestationDoc(AttestationAuth),
 }
 
 impl BaseClient {
@@ -69,9 +70,10 @@ impl BaseClient {
 
         auth_type.map(|auth| match auth {
             AuthType::ApiKey(header_value) => request.headers_mut().insert("api-key", header_value),
-            AuthType::AttestationDoc(header_value) => request
-                .headers_mut()
-                .insert("attestation-token", header_value),
+            AuthType::AttestationDoc(auth) => {
+                request.headers_mut().insert("attestation-token", auth.doc);
+                request.headers_mut().insert("auth-token", auth.token)
+            }
         });
 
         let (mut request_sender, connection) = self.get_conn().await?;

@@ -13,6 +13,7 @@ type E3Error = ClientError;
 #[derive(Clone)]
 pub struct E3Client {
     base_client: BaseClient,
+    token_client: TokenClient,
 }
 
 impl std::default::Default for E3Client {
@@ -24,6 +25,7 @@ impl std::default::Default for E3Client {
 use crate::base_tls_client::tls_client_config::get_tls_client_config;
 use crate::base_tls_client::{AuthType, BaseClient, ClientError};
 use crate::configuration;
+use crate::crypto::token::TokenClient;
 
 impl E3Client {
     pub fn new() -> Self {
@@ -36,6 +38,7 @@ impl E3Client {
 
         Self {
             base_client: BaseClient::new(tls_connector, server_name, shared::ENCLAVE_CRYPTO_PORT),
+            token_client: TokenClient::new(),
         }
     }
 
@@ -48,18 +51,19 @@ impl E3Client {
         )
     }
 
-    pub async fn decrypt<T, P: E3Payload>(
-        &self,
-        e3_auth_token: &HeaderValue,
-        payload: P,
-    ) -> Result<T, E3Error>
+    pub async fn decrypt<T, P: E3Payload>(&self, payload: P) -> Result<T, E3Error>
     where
         T: DeserializeOwned,
     {
+        let token = self
+            .token_client
+            .get_token()
+            .await
+            .map_err(|e| E3Error::General(format!("Couldn't get E3 token {e}")))?;
         let response = self
             .base_client
             .send(
-                Some(AuthType::AttestationDoc(e3_auth_token.clone())),
+                Some(AuthType::AttestationDoc(token)),
                 "POST",
                 &self.uri("/decrypt"),
                 payload.try_into_body()?,
@@ -68,18 +72,19 @@ impl E3Client {
         self.parse_response(response).await
     }
 
-    pub async fn encrypt<T, P: E3Payload>(
-        &self,
-        e3_auth_token: &HeaderValue,
-        payload: P,
-    ) -> Result<T, E3Error>
+    pub async fn encrypt<T, P: E3Payload>(&self, payload: P) -> Result<T, E3Error>
     where
         T: DeserializeOwned,
     {
+        let token = self
+            .token_client
+            .get_token()
+            .await
+            .map_err(|e| E3Error::General(format!("Couldn't get E3 token {e}")))?;
         let response = self
             .base_client
             .send(
-                Some(AuthType::AttestationDoc(e3_auth_token.clone())),
+                Some(AuthType::AttestationDoc(token)),
                 "POST",
                 &self.uri("/encrypt"),
                 payload.try_into_body()?,
@@ -188,6 +193,9 @@ impl E3Payload for CryptoRequest {}
 impl CryptoRequest {
     pub fn data(&self) -> &Value {
         &self.data
+    }
+    pub fn to_vec(&self) -> Vec<u8> {
+        serde_json::to_vec(self).unwrap()
     }
 }
 

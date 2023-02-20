@@ -2,6 +2,7 @@ use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 
 pub mod base_tls_client;
+pub mod cache;
 pub mod cert_provisioner_client;
 pub mod config_client;
 pub mod configuration;
@@ -40,8 +41,6 @@ pub struct CageContext {
 pub enum CageContextError {
     #[error("Cage context has not yet been initialized")]
     ContextNotInitialized,
-    #[error("Cage context could not be initialized")]
-    InitializationError,
 }
 
 impl CageContext {
@@ -52,10 +51,8 @@ impl CageContext {
             .ok_or(CageContextError::ContextNotInitialized)
     }
 
-    fn set(ctx: CageContext) -> Result<(), CageContextError> {
-        CAGE_CONTEXT
-            .set(ctx)
-            .map_err(|_| CageContextError::InitializationError)
+    fn set(ctx: CageContext) {
+        CAGE_CONTEXT.get_or_init(|| ctx);
     }
 
     pub fn try_from_env(

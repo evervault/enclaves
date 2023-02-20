@@ -1,6 +1,5 @@
 use openssl::pkey::{PKey, Private};
 use openssl::x509::X509;
-use shared::server::config_server::routes::ConfigServerPath;
 
 use crate::e3client::E3Client;
 use crate::env::Environment;
@@ -35,11 +34,7 @@ impl InterCaRetreiver {
 
     pub async fn get_intermediate_ca(&self) -> Result<(X509, PKey<Private>)> {
         println!("Sending request to control plane for cert provisioner token.");
-        let token = self
-            .config_client
-            .get_token(ConfigServerPath::GetCertToken)
-            .await?
-            .token();
+        let token = self.config_client.get_cert_token().await?.token();
 
         println!("Received token for cert provisioner. Requesting intermediate CA.");
         let cert_response = self
@@ -47,13 +42,12 @@ impl InterCaRetreiver {
             .get_cert(token)
             .await
             .map_err(|err| Error::CertServer(err.to_string()))?;
-        CageContext::set(cert_response.clone().context.into())?;
+        CageContext::set(cert_response.clone().context.into());
         self.env
             .clone()
             .init(cert_response.clone().secrets.unwrap())
             .await?;
 
-        lazy_static::initialize(&EV_API_KEY);
         let inter_ca_cert = parse_cert(cert_response.cert())?;
         let inter_ca_key_pair = parse_key(cert_response.key_pair())?;
 

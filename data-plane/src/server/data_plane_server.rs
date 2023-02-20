@@ -11,7 +11,6 @@ use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
 
 use futures::StreamExt;
 
-use crate::server::tls::inter_ca_retreiver::EV_API_KEY;
 use hyper::http::HeaderValue;
 use hyper::http::{self, request::Parts};
 use hyper::server::conn;
@@ -140,7 +139,7 @@ async fn handle_incoming_request(
     // Run parser over payload
     // Serialize request onto socket
 
-    let api_key = if cage_context.api_key_auth {
+    if cage_context.api_key_auth {
         println!("Authenticating request");
         let api_key = match req
             .headers()
@@ -175,8 +174,6 @@ async fn handle_incoming_request(
                     println!("Failed to authenticate request using provided API Key");
                     let response = AuthError::FailedToAuthenticateApiKey.into();
                     return response;
-                } else {
-                    api_key.clone()
                 }
             }
             Err(ClientError::FailedRequest(status)) if status.as_u16() == 401 => {
@@ -191,8 +188,6 @@ async fn handle_incoming_request(
                             println!("Failed to authenticate request using provided API Key");
                             let response = AuthError::FailedToAuthenticateApiKey.into();
                             return response;
-                        } else {
-                            api_key
                         }
                     }
                     Err(ClientError::FailedRequest(status)) if status.as_u16() == 401 => {
@@ -210,8 +205,6 @@ async fn handle_incoming_request(
                 return build_error_response(Some("Connection to E3 failed.".to_string()));
             }
         }
-    } else {
-        HeaderValue::from_str(&EV_API_KEY).unwrap()
     };
 
     let (req_info, req_body) = req.into_parts();
@@ -226,7 +219,6 @@ async fn handle_incoming_request(
         build_error_response(None)
     } else {
         handle_standard_request(
-            &api_key,
             (req_info, req_body),
             compression,
             customer_port,
@@ -239,7 +231,6 @@ async fn handle_incoming_request(
 }
 
 pub async fn handle_standard_request(
-    api_key: &HeaderValue,
     req_parts: (Parts, Body),
     _compression: Option<super::http::ContentEncoding>,
     customer_port: u16,
@@ -274,7 +265,7 @@ pub async fn handle_standard_request(
             serde_json::Value::Array(decryption_payload),
             cage_context,
         ));
-        let decrypted: DecryptRequest = match e3_client.decrypt(api_key, request_payload).await {
+        let decrypted: DecryptRequest = match e3_client.decrypt(request_payload).await {
             Ok(decrypted) => decrypted,
             Err(e) => {
                 eprintln!("Failed to decrypt — {e}");

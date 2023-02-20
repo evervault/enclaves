@@ -94,13 +94,13 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
         let mut attempts = 0;
         loop {
             match inter_ca_retriever.get_intermediate_ca().await {
-                Err(_) if attempts < 7 => {
+                Err(e) if attempts < 7 => {
                     let mut rng = rand::thread_rng();
                     let exp_duration =
                         Duration::from_millis(((2 ^ attempts) * 100) + rng.gen_range(50..150));
                     thread::sleep(exp_duration);
                     println!(
-                        "Error from provisioner sleeping for {} ms",
+                        "Error from provisioner sleeping for {} ms, error: {e}",
                         exp_duration.as_millis()
                     );
                     attempts += 1;

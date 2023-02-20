@@ -1,11 +1,7 @@
-use cached::{Cached, TimedSizedCache};
-use hyper::http::HeaderValue;
 use hyper::{self, Body};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_json::{self};
-use sha2::{Digest, Sha256};
-use shared::server::config_server::routes::ConfigServerPath;
 use shared::server::error::ServerResult;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use thiserror::Error;
@@ -16,7 +12,6 @@ use hyper::{
 };
 
 use crate::base_tls_client::ClientError;
-use crate::config_client::ConfigClient;
 use crate::e3client::{CryptoRequest, CryptoResponse, E3Client};
 use crate::error::Error;
 use crate::{CageContext, CageContextError};
@@ -26,8 +21,6 @@ use super::attest;
 
 pub struct CryptoApi {
     e3_client: E3Client,
-    cache: TimedSizedCache<String, String>,
-    config_client: ConfigClient,
 }
 
 impl Default for CryptoApi {
@@ -35,8 +28,6 @@ impl Default for CryptoApi {
         Self::new()
     }
 }
-
-const CACHE_ITEM_LIFETIME: u64 = 280;
 
 #[derive(Debug, Error)]
 pub enum CryptoApiError {
@@ -86,8 +77,6 @@ impl CryptoApi {
     pub fn new() -> Self {
         Self {
             e3_client: E3Client::new(),
-            cache: TimedSizedCache::with_size_and_lifespan(1, CACHE_ITEM_LIFETIME),
-            config_client: ConfigClient::new(),
         }
     }
 
@@ -124,72 +113,25 @@ impl CryptoApi {
         }
     }
 
-    async fn get_token(&mut self, body: Vec<u8>) -> Result<String, CryptoApiError> {
-        let token_key: String = "e3_token".to_string();
-        let token = match self.cache.cache_get(&token_key) {
-            Some(token) => token.clone(),
-            None => {
-                let token = self
-                    .config_client
-                    .get_token(ConfigServerPath::GetE3Token)
-                    .await?
-                    .token();
-                self.cache.cache_set(token_key, token.clone());
-                token
-            }
-        };
-
-        let mut sha256 = Sha256::new();
-        sha256.update(body);
-        let payload_digest = sha256.finalize().to_vec();
-        println!(
-            "TEMP DEBUG: Generating attestation doc with nonce len: {}, token len: {} digest {}",
-            payload_digest.len(),
-            token.as_bytes().len(),
-            base64::encode(payload_digest.clone())
-        );
-        Self::get_attestation_doc_token(token, payload_digest)
-    }
-
-    #[cfg(feature = "enclave")]
-    fn get_attestation_doc_token(token: String, nonce: Vec<u8>) -> Result<String, CryptoApiError> {
-        use openssl::base64::encode_block;
-
-        let attestation_doc =
-            attest::get_attestation_doc(Some(token.as_bytes().to_vec()), Some(nonce))?;
-        Ok(encode_block(&attestation_doc))
-    }
-
-    #[cfg(not(feature = "enclave"))]
-    fn get_attestation_doc_token(_: String, _: Vec<u8>) -> Result<String, CryptoApiError> {
-        Ok("local-attestation-token".to_string())
-    }
-
-    async fn build_request(
-        &mut self,
-        req: Request<Body>,
-    ) -> Result<(HeaderValue, CryptoRequest), CryptoApiError> {
+    async fn build_request(&mut self, req: Request<Body>) -> Result<CryptoRequest, CryptoApiError> {
         let (_, body) = req.into_parts();
         let body_bytes = hyper::body::to_bytes(body).await?;
         let cage_context = CageContext::get()?;
         let body: Value =
             serde_json::from_slice(&body_bytes).map_err(|_| CryptoApiError::SerializationError)?;
         let payload = CryptoRequest::from((body, &cage_context));
-        let payload_bytes = serde_json::to_vec(&payload).unwrap();
-        let token = self.get_token(payload_bytes).await.unwrap();
-        let token_header = hyper::http::header::HeaderValue::from_str(&token).unwrap();
-        Ok((token_header, payload))
+        Ok(payload)
     }
 
     async fn encrypt(&mut self, req: Request<Body>) -> Result<Body, CryptoApiError> {
-        let (token, request) = self.build_request(req).await?;
-        let e3_response: CryptoResponse = self.e3_client.encrypt(&token, request).await?;
+        let request = self.build_request(req).await?;
+        let e3_response: CryptoResponse = self.e3_client.encrypt(request).await?;
         Ok(hyper::Body::from(serde_json::to_vec(&e3_response.data)?))
     }
 
     async fn decrypt(&mut self, req: Request<Body>) -> Result<Body, CryptoApiError> {
-        let (token, request) = self.build_request(req).await?;
-        let e3_response: CryptoResponse = self.e3_client.decrypt(&token, request).await?;
+        let request = self.build_request(req).await?;
+        let e3_response: CryptoResponse = self.e3_client.decrypt(request).await?;
         Ok(hyper::Body::from(serde_json::to_vec(&e3_response.data)?))
     }
 
