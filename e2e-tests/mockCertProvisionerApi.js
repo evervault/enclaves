@@ -31,7 +31,7 @@ const mutualTlsMiddleware = () => (req, res, next) => {
 app.use(mutualTlsMiddleware());
 
 
-app.get('/token/cert', async (req, res) => {
+app.get('/cert/token', async (req, res) => {
   try {
     console.log("Received cert token request from cage control plane")
     var result = {
@@ -43,7 +43,7 @@ app.get('/token/cert', async (req, res) => {
   }
 })
 
-app.get('/token/e3', async (req, res) => {
+app.get('/e3/token', async (req, res) => {
   try {
     console.log("Received E3 token request from cage control plane")
     var result = {
