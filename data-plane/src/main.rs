@@ -1,6 +1,6 @@
-use shared::print_version;
 #[cfg(not(feature = "tls_termination"))]
 use shared::server::Listener;
+use shared::{print_version, server::get_vsock_server};
 
 #[cfg(feature = "network_egress")]
 use data_plane::configuration;
@@ -13,7 +13,6 @@ use futures::future::join_all;
 
 #[cfg(not(feature = "tls_termination"))]
 use data_plane::env::Environment;
-use data_plane::get_tcp_server;
 use data_plane::health::start_health_check_server;
 use shared::{env_var_present_and_true, ENCLAVE_CONNECT_PORT};
 
@@ -80,7 +79,7 @@ async fn start(data_plane_port: u16) {
 
 async fn start_data_plane(data_plane_port: u16) {
     println!("Data plane starting up. Forwarding traffic to {data_plane_port}");
-    let server = match get_tcp_server(ENCLAVE_CONNECT_PORT).await {
+    let server = match get_vsock_server(ENCLAVE_CONNECT_PORT).await {
         Ok(server) => server,
         Err(error) => return eprintln!("Error creating server: {error}"),
     };

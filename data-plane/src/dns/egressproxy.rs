@@ -4,8 +4,9 @@ use crate::dns::error::DNSError::MissingIP;
 use shared::rpc::request::ExternalRequest;
 use shared::server::error::ServerResult;
 use shared::server::tcp::TcpServer;
-use shared::server::Listener;
+use shared::server::{get_vsock_client, Listener};
 use shared::utils::pipe_streams;
+use shared::EGRESS_PROXY_VSOCK_PORT;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tls_parser::nom::Finish;
 use tls_parser::{
@@ -13,10 +14,6 @@ use tls_parser::{
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-#[cfg(not(feature = "enclave"))]
-use tokio::net::TcpStream;
-#[cfg(feature = "enclave")]
-use tokio_vsock::VsockStream;
 
 use rand::seq::SliceRandom;
 
@@ -69,20 +66,6 @@ impl EgressProxy {
         Ok(Some(destination))
     }
 
-    #[cfg(not(feature = "enclave"))]
-    async fn get_listener() -> Result<TcpStream, tokio::io::Error> {
-        TcpStream::connect(std::net::SocketAddr::new(
-            std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
-            4433,
-        ))
-        .await
-    }
-
-    #[cfg(feature = "enclave")]
-    async fn get_listener() -> Result<VsockStream, tokio::io::Error> {
-        VsockStream::connect(3, 4433).await
-    }
-
     async fn handle_egress_connection<T: AsyncRead + AsyncWrite + Unpin>(
         mut external_stream: T,
         port: u16,
@@ -104,7 +87,7 @@ impl EgressProxy {
             .and_then(|ips| ips.choose(&mut rand::thread_rng()))
         {
             Some(remote_ip) => {
-                let mut data_plane_stream = Self::get_listener().await?;
+                let mut data_plane_stream = get_vsock_client(EGRESS_PROXY_VSOCK_PORT).await?;
 
                 let external_request = ExternalRequest {
                     ip: remote_ip.to_string(),

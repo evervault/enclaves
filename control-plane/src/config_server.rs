@@ -12,13 +12,7 @@ use shared::server::config_server::requests::{
     PostTrxLogsRequest,
 };
 use shared::server::config_server::routes::ConfigServerPath;
-use shared::server::Listener;
-#[cfg(not(feature = "enclave"))]
-use shared::server::TcpServer;
-#[cfg(feature = "enclave")]
-use shared::server::VsockServer;
-#[cfg(not(feature = "enclave"))]
-use std::net::{IpAddr, Ipv4Addr};
+use shared::server::{get_vsock_server, Listener};
 use std::str::FromStr;
 
 #[derive(Clone)]
@@ -34,16 +28,7 @@ impl ConfigServer {
     }
 
     pub async fn listen(&self) -> Result<()> {
-        #[cfg(feature = "enclave")]
-        let mut enclave_conn =
-            VsockServer::bind(shared::PARENT_CID, shared::ENCLAVE_CONFIG_PORT.into()).await?;
-
-        #[cfg(not(feature = "enclave"))]
-        let mut enclave_conn = TcpServer::bind(std::net::SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-            shared::ENCLAVE_CONFIG_PORT,
-        ))
-        .await?;
+        let mut enclave_conn = get_vsock_server(shared::ENCLAVE_CONFIG_PORT).await?;
 
         let server = conn::Http::new();
 

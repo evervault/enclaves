@@ -7,10 +7,15 @@ pub use tcp::TcpServer;
 #[cfg(feature = "enclave")]
 pub mod vsock;
 #[cfg(feature = "enclave")]
-pub use vsock::VsockServer;
-
+use crate::PARENT_CID;
 use async_trait::async_trait;
 use tokio::io::{AsyncRead, AsyncWrite};
+#[cfg(not(feature = "enclave"))]
+use tokio::net::TcpStream;
+#[cfg(feature = "enclave")]
+use tokio_vsock::VsockStream;
+#[cfg(feature = "enclave")]
+pub use vsock::VsockServer;
 
 #[async_trait]
 pub trait Listener: Sized {
@@ -20,21 +25,32 @@ pub trait Listener: Sized {
 }
 
 #[cfg(feature = "enclave")]
-use tokio_vsock::VsockListener;
-#[cfg(feature = "enclave")]
-pub async fn get_server_listener(port: u16) -> error::ServerResult<VsockListener> {
-    let listener = VsockListener::bind(crate::ENCLAVE_CID, port.into())?;
+pub async fn get_vsock_server(port: u16) -> error::ServerResult<VsockServer> {
+    let listener = VsockServer::bind(PARENT_CID, port.into()).await?;
     Ok(listener)
 }
 
 #[cfg(not(feature = "enclave"))]
-use tokio::net::TcpListener;
+pub async fn get_vsock_server(port: u16) -> error::ServerResult<TcpServer> {
+    use std::net::{IpAddr, Ipv4Addr};
+    let listener = TcpServer::bind(std::net::SocketAddr::new(
+        IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+        port,
+    ))
+    .await?;
+    Ok(listener)
+}
+
 #[cfg(not(feature = "enclave"))]
-pub async fn get_server_listener(port: u16) -> error::ServerResult<TcpListener> {
-    let addr = std::net::SocketAddr::new(
+pub async fn get_vsock_client(port: u16) -> Result<TcpStream, tokio::io::Error> {
+    TcpStream::connect(std::net::SocketAddr::new(
         std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
         port,
-    );
-    let listener = TcpListener::bind(addr).await?;
-    Ok(listener)
+    ))
+    .await
+}
+
+#[cfg(feature = "enclave")]
+pub async fn get_vsock_client(port: u16) -> Result<VsockStream, tokio::io::Error> {
+    VsockStream::connect(PARENT_CID, port.into()).await
 }

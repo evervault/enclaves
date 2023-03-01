@@ -19,10 +19,6 @@ pub mod utils;
 pub mod server;
 
 use shared::server::config_server::requests::ProvisionerContext;
-#[cfg(not(feature = "enclave"))]
-use shared::server::TcpServer;
-#[cfg(feature = "enclave")]
-use shared::{server::VsockServer, ENCLAVE_CID};
 use thiserror::Error;
 
 static CAGE_CONTEXT: OnceCell<CageContext> = OnceCell::new();
@@ -135,21 +131,4 @@ impl From<ProvisionerContext> for CageContext {
         )
         .expect("Couldn't instantiate cage context")
     }
-}
-
-#[cfg(not(feature = "enclave"))]
-pub async fn get_tcp_server(
-    port: u16,
-) -> std::result::Result<TcpServer, shared::server::error::ServerError> {
-    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-
-    TcpServer::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), port)).await
-}
-
-#[cfg(feature = "enclave")]
-pub async fn get_tcp_server(
-    port: u16,
-) -> std::result::Result<VsockServer, shared::server::error::ServerError> {
-    println!("Creating VSock server");
-    VsockServer::bind(ENCLAVE_CID, port.into()).await
 }

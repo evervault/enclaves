@@ -1,13 +1,7 @@
 use crate::error::Result;
 use crate::internal_dns;
-use shared::server::Listener;
-#[cfg(not(feature = "enclave"))]
-use shared::server::TcpServer;
-#[cfg(feature = "enclave")]
-use shared::server::VsockServer;
+use shared::server::{get_vsock_server, Listener};
 use std::net::SocketAddr;
-#[cfg(not(feature = "enclave"))]
-use std::net::{IpAddr, Ipv4Addr};
 #[cfg(not(feature = "enclave"))]
 use tokio::io::AsyncWriteExt;
 use trust_dns_resolver::name_server::{GenericConnection, GenericConnectionProvider, TokioRuntime};
@@ -48,16 +42,7 @@ impl E3Proxy {
     }
 
     pub async fn listen(self) -> Result<()> {
-        #[cfg(feature = "enclave")]
-        let mut enclave_conn =
-            VsockServer::bind(shared::PARENT_CID, shared::ENCLAVE_CRYPTO_PORT.into()).await?;
-
-        #[cfg(not(feature = "enclave"))]
-        let mut enclave_conn = TcpServer::bind(std::net::SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-            shared::ENCLAVE_CRYPTO_PORT,
-        ))
-        .await?;
+        let mut enclave_conn = get_vsock_server(shared::ENCLAVE_CRYPTO_PORT).await?;
 
         println!("Running e3 proxy on {}", shared::ENCLAVE_CRYPTO_PORT);
         loop {

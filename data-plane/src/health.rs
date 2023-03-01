@@ -1,10 +1,10 @@
-use crate::get_tcp_server;
 use hyper::{Body, Request, Response};
+use shared::server::get_vsock_server;
 use shared::server::health::{HealthCheckLog, HealthCheckStatus};
 use shared::{server::Listener, ENCLAVE_HEALTH_CHECK_PORT};
 
 pub async fn start_health_check_server() {
-    let mut health_check_server = get_tcp_server(ENCLAVE_HEALTH_CHECK_PORT).await.unwrap();
+    let mut health_check_server = get_vsock_server(ENCLAVE_HEALTH_CHECK_PORT).await.unwrap();
     println!("Data plane health check server running on port {ENCLAVE_HEALTH_CHECK_PORT}");
 
     loop {

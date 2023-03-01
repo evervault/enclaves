@@ -4,13 +4,11 @@ use bytes::{Bytes, BytesMut};
 use dns_message_parser::rr::A;
 use dns_message_parser::rr::RR;
 use dns_message_parser::Dns;
+use shared::server::get_vsock_client;
+use shared::DNS_PROXY_VSOCK_PORT;
 use std::net::Ipv4Addr;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-#[cfg(not(feature = "enclave"))]
-use tokio::net::TcpStream;
 use tokio::net::UdpSocket;
-#[cfg(feature = "enclave")]
-use tokio_vsock::VsockStream;
 
 pub struct EnclaveDns;
 
@@ -55,20 +53,6 @@ impl EnclaveDns {
             .collect()
     }
 
-    #[cfg(not(feature = "enclave"))]
-    async fn get_listener() -> Result<TcpStream, tokio::io::Error> {
-        TcpStream::connect(std::net::SocketAddr::new(
-            std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
-            8585,
-        ))
-        .await
-    }
-
-    #[cfg(feature = "enclave")]
-    async fn get_listener() -> Result<VsockStream, tokio::io::Error> {
-        VsockStream::connect(3, 8585).await
-    }
-
     fn local_packet(dns: Dns) -> Result<BytesMut, DNSError> {
         let domain_name = dns
             .questions
@@ -96,7 +80,7 @@ impl EnclaveDns {
     }
 
     async fn forward_dns_lookup(bytes: Bytes) -> Result<Bytes, DNSError> {
-        let mut stream = Self::get_listener().await?;
+        let mut stream = get_vsock_client(DNS_PROXY_VSOCK_PORT).await?;
         stream.write_all(&bytes).await?;
         let mut buffer = [0; 512];
         let packet_size = stream.read(&mut buffer).await?;

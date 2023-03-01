@@ -1,26 +1,15 @@
 use crate::error::{Result, ServerError};
-use shared::env_var_present_and_true;
 use shared::rpc::request::ExternalRequest;
-#[cfg(not(feature = "enclave"))]
-use shared::server::tcp::TcpServer;
-#[cfg(feature = "enclave")]
-use shared::server::vsock::VsockServer;
-use shared::server::Listener;
+use shared::server::{get_vsock_server, Listener};
 use shared::utils::pipe_streams;
+use shared::{env_var_present_and_true, EGRESS_PROXY_VSOCK_PORT};
 use std::net::Ipv4Addr;
-#[cfg(not(feature = "enclave"))]
-use std::net::{IpAddr, SocketAddr};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
 use lazy_static::lazy_static;
 
 pub struct EgressProxy;
-
-#[cfg(feature = "enclave")]
-const PARENT_CID: u32 = 3;
-#[cfg(feature = "enclave")]
-const PROXY_PORT: u32 = 4433;
 
 #[allow(dead_code)] // is used in lazy static
 const ALLOW_PRIVATE_EGRESS_OVERRIDE_KEY: &str = "EV_ALLOW_PRIVATE_IP_EGRESS";
@@ -33,12 +22,7 @@ lazy_static! {
 impl EgressProxy {
     pub async fn listen() -> Result<()> {
         println!("Egress proxy started");
-        #[cfg(not(feature = "enclave"))]
-        let mut server =
-            TcpServer::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 4433)).await?;
-
-        #[cfg(feature = "enclave")]
-        let mut server = VsockServer::bind(shared::PARENT_CID, PROXY_PORT).await?;
+        let mut server = get_vsock_server(EGRESS_PROXY_VSOCK_PORT).await?;
 
         loop {
             match server.accept().await {

@@ -1,9 +1,6 @@
 use crate::error::{Result, ServerError};
-use shared::server::Listener;
-#[cfg(not(feature = "enclave"))]
-use shared::server::TcpServer;
-#[cfg(feature = "enclave")]
-use shared::server::VsockServer;
+use shared::server::{get_vsock_server, Listener};
+use shared::DNS_PROXY_VSOCK_PORT;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::UdpSocket;
@@ -37,16 +34,7 @@ impl DnsProxy {
     }
 
     pub async fn listen(self) -> Result<()> {
-        const DNS_LISTENING_PORT: u16 = 8585;
-        #[cfg(not(feature = "enclave"))]
-        let mut server = TcpServer::bind(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-            DNS_LISTENING_PORT,
-        ))
-        .await?;
-
-        #[cfg(feature = "enclave")]
-        let mut server = VsockServer::bind(shared::PARENT_CID, DNS_LISTENING_PORT.into()).await?;
+        let mut server = get_vsock_server(DNS_PROXY_VSOCK_PORT).await?;
 
         loop {
             match server.accept().await {
