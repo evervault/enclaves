@@ -1,5 +1,6 @@
 use crate::error::{Result, ServerError};
 use shared::rpc::request::ExternalRequest;
+use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
 use shared::utils::pipe_streams;
 use shared::{env_var_present_and_true, EGRESS_PROXY_VSOCK_PORT};
@@ -22,7 +23,7 @@ lazy_static! {
 impl EgressProxy {
     pub async fn listen() -> Result<()> {
         println!("Egress proxy started");
-        let mut server = get_vsock_server(EGRESS_PROXY_VSOCK_PORT).await?;
+        let mut server = get_vsock_server(EGRESS_PROXY_VSOCK_PORT, Parent).await?;
 
         loop {
             match server.accept().await {

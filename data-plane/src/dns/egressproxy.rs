@@ -4,6 +4,7 @@ use crate::dns::error::DNSError::MissingIP;
 use shared::rpc::request::ExternalRequest;
 use shared::server::error::ServerResult;
 use shared::server::tcp::TcpServer;
+use shared::server::CID::Parent;
 use shared::server::{get_vsock_client, Listener};
 use shared::utils::pipe_streams;
 use shared::EGRESS_PROXY_VSOCK_PORT;
@@ -87,7 +88,8 @@ impl EgressProxy {
             .and_then(|ips| ips.choose(&mut rand::thread_rng()))
         {
             Some(remote_ip) => {
-                let mut data_plane_stream = get_vsock_client(EGRESS_PROXY_VSOCK_PORT).await?;
+                let mut data_plane_stream =
+                    get_vsock_client(EGRESS_PROXY_VSOCK_PORT, Parent).await?;
 
                 let external_request = ExternalRequest {
                     ip: remote_ip.to_string(),

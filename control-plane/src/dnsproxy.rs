@@ -1,4 +1,5 @@
 use crate::error::{Result, ServerError};
+use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
 use shared::DNS_PROXY_VSOCK_PORT;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -34,7 +35,7 @@ impl DnsProxy {
     }
 
     pub async fn listen(self) -> Result<()> {
-        let mut server = get_vsock_server(DNS_PROXY_VSOCK_PORT).await?;
+        let mut server = get_vsock_server(DNS_PROXY_VSOCK_PORT, Parent).await?;
 
         loop {
             match server.accept().await {

@@ -5,6 +5,7 @@ use dns_message_parser::rr::A;
 use dns_message_parser::rr::RR;
 use dns_message_parser::Dns;
 use shared::server::get_vsock_client;
+use shared::server::CID::Parent;
 use shared::DNS_PROXY_VSOCK_PORT;
 use std::net::Ipv4Addr;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -80,7 +81,7 @@ impl EnclaveDns {
     }
 
     async fn forward_dns_lookup(bytes: Bytes) -> Result<Bytes, DNSError> {
-        let mut stream = get_vsock_client(DNS_PROXY_VSOCK_PORT).await?;
+        let mut stream = get_vsock_client(DNS_PROXY_VSOCK_PORT, Parent).await?;
         stream.write_all(&bytes).await?;
         let mut buffer = [0; 512];
         let packet_size = stream.read(&mut buffer).await?;

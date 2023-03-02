@@ -12,6 +12,7 @@ use shared::server::config_server::requests::{
     PostTrxLogsRequest,
 };
 use shared::server::config_server::routes::ConfigServerPath;
+use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
 use std::str::FromStr;
 
@@ -28,7 +29,7 @@ impl ConfigServer {
     }
 
     pub async fn listen(&self) -> Result<()> {
-        let mut enclave_conn = get_vsock_server(shared::ENCLAVE_CONFIG_PORT).await?;
+        let mut enclave_conn = get_vsock_server(shared::ENCLAVE_CONFIG_PORT, Parent).await?;
 
         let server = conn::Http::new();
 

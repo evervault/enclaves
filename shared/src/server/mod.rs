@@ -7,6 +7,8 @@ pub use tcp::TcpServer;
 #[cfg(feature = "enclave")]
 pub mod vsock;
 #[cfg(feature = "enclave")]
+use crate::ENCLAVE_CID;
+#[cfg(feature = "enclave")]
 use crate::PARENT_CID;
 use async_trait::async_trait;
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -25,13 +27,22 @@ pub trait Listener: Sized {
 }
 
 #[cfg(feature = "enclave")]
-pub async fn get_vsock_server(port: u16) -> error::ServerResult<VsockServer> {
-    let listener = VsockServer::bind(PARENT_CID, port.into()).await?;
+pub async fn get_vsock_server(port: u16, cid: CID) -> error::ServerResult<VsockServer> {
+    let context_id = match cid {
+        CID::Parent => PARENT_CID,
+        CID::Enclave => ENCLAVE_CID,
+    };
+    let listener = VsockServer::bind(context_id, port.into()).await?;
     Ok(listener)
 }
 
+pub enum CID {
+    Parent,
+    Enclave,
+}
+
 #[cfg(not(feature = "enclave"))]
-pub async fn get_vsock_server(port: u16) -> error::ServerResult<TcpServer> {
+pub async fn get_vsock_server(port: u16, _: CID) -> error::ServerResult<TcpServer> {
     use std::net::{IpAddr, Ipv4Addr};
     let listener = TcpServer::bind(std::net::SocketAddr::new(
         IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
@@ -42,7 +53,7 @@ pub async fn get_vsock_server(port: u16) -> error::ServerResult<TcpServer> {
 }
 
 #[cfg(not(feature = "enclave"))]
-pub async fn get_vsock_client(port: u16) -> Result<TcpStream, tokio::io::Error> {
+pub async fn get_vsock_client(port: u16, _: CID) -> Result<TcpStream, tokio::io::Error> {
     TcpStream::connect(std::net::SocketAddr::new(
         std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
         port,
@@ -51,6 +62,10 @@ pub async fn get_vsock_client(port: u16) -> Result<TcpStream, tokio::io::Error> 
 }
 
 #[cfg(feature = "enclave")]
-pub async fn get_vsock_client(port: u16) -> Result<VsockStream, tokio::io::Error> {
-    VsockStream::connect(PARENT_CID, port.into()).await
+pub async fn get_vsock_client(port: u16, cid: CID) -> Result<VsockStream, tokio::io::Error> {
+    let context_id = match cid {
+        CID::Parent => PARENT_CID,
+        CID::Enclave => ENCLAVE_CID,
+    };
+    VsockStream::connect(context_id, port.into()).await
 }

@@ -2,6 +2,7 @@
 use crate::configuration;
 use crate::error::Result;
 use crate::internal_dns;
+use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
 use std::net::SocketAddr;
 #[cfg(not(feature = "enclave"))]
@@ -44,7 +45,7 @@ impl CertProxy {
     }
 
     pub async fn listen(self) -> Result<()> {
-        let mut enclave_conn = get_vsock_server(shared::ENCLAVE_CERT_PORT).await?;
+        let mut enclave_conn = get_vsock_server(shared::ENCLAVE_CERT_PORT, Parent).await?;
 
         println!("Running cert proxy on {}", shared::ENCLAVE_CERT_PORT);
         loop {
