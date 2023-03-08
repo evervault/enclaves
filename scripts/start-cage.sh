@@ -3,12 +3,6 @@ INSTANCE_ID=$(wget -q -O - http://169.254.169.254/latest/dynamic/instance-identi
 
 export EC2_INSTANCE_ID=${INSTANCE_ID}
 
-# Kill all existing enclaves on this host
-echo "[HOST] Deployment started. Terminating old enclave..."
-nitro-cli terminate-enclave --all
-echo "[HOST] Enclave terminated. Waiting 10s..."
-sleep 10
-
 # Provision new enclave using customer config
 echo "[HOST] Starting enclave..."
 
@@ -22,8 +16,8 @@ else
   eval "$enclave_run_command"
 fi
 
-echo "[HOST] Enclave started... Waiting 10 seconds for warmup."
-sleep 10
+echo "[HOST] Enclave started... Waiting 5 seconds for warmup."
+sleep 5
 
 if [ "$ENCLAVE_DEBUG_MODE" = "true" ] ; then
   # Create stdout streams for any running enclaves
