@@ -16,9 +16,6 @@ else
   eval "$enclave_run_command"
 fi
 
-echo "[HOST] Enclave started... Waiting 5 seconds for warmup."
-sleep 5
-
 if [ "$ENCLAVE_DEBUG_MODE" = "true" ] ; then
   # Create stdout streams for any running enclaves
   echo "[HOST] Attaching headless console for running enclaves..."

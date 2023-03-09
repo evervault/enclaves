@@ -209,8 +209,8 @@ fn listen_for_shutdown_signal() {
                 // All of this is temporary - don't merge production
                 use tokio::time::{sleep, Duration};
 
-                // Wait for 5 seconds before terminating enclave
-                sleep(Duration::from_millis(5000)).await;
+                // Wait for 50 seconds before terminating enclave - ECS waits 60 seconds to kill the container
+                sleep(Duration::from_millis(50000)).await;
 
                 let output = Command::new("sh")
                     .arg("-c")
