@@ -17,6 +17,7 @@ pub enum HealthCheckStatus {
     Ok,
     Unknown,
     Err,
+    Uninitialized,
 }
 
 impl HealthCheckStatus {
@@ -36,6 +37,7 @@ impl std::fmt::Display for HealthCheckStatus {
             Ok => write!(f, "Ok"),
             Unknown => write!(f, "Unknown"),
             Err => write!(f, "Err"),
+            Uninitialized => write!(f, "Uninitialized"),
         }
     }
 }

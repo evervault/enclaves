@@ -1,4 +1,4 @@
-use std::{env, fs::File, io::Write};
+use std::{fs::File, io::Write};
 
 #[cfg(not(feature = "tls_termination"))]
 use crate::cert_provisioner_client::CertProvisionerClient;
@@ -20,8 +20,6 @@ pub enum EnvError {
     Io(#[from] std::io::Error),
     #[error("{0}")]
     Hyper(#[from] hyper::Error),
-    #[error("No api key was provided in the env")]
-    MissingApiKey,
     #[error("Deserialization Error — {0:?}")]
     SerdeError(#[from] serde_json::Error),
     #[error("Client error — {0}")]
@@ -55,12 +53,6 @@ impl Environment {
     }
 
     pub async fn init(self, secrets: Vec<Secret>) -> Result<(), EnvError> {
-        let api_key = secrets
-            .iter()
-            .find(|secret| secret.name == "EV_API_KEY")
-            .ok_or(EnvError::MissingApiKey)?;
-        env::set_var(api_key.clone().name, api_key.clone().secret);
-
         let (encrypted_env, plaintext_env): (_, Vec<Secret>) = secrets
             .clone()
             .into_iter()
@@ -110,6 +102,11 @@ impl Environment {
             let value = &format!("export {}={}  ", env.name, env.secret);
             env_string.push_str(value)
         });
+        // Set var to let customer process know the env is ready and it can start up
+        env_string.push_str("export EV_CAGE_INITIALIZED=true");
+        // Backwards compatibility for customers that are still using old versions of the CLI - remove after full launch
+        env_string.push_str("export EV_API_KEY=placeholder");
+
         file.write_all(env_string.as_bytes())?;
         Ok(())
     }

@@ -31,8 +31,6 @@ impl Default for CryptoApi {
 
 #[derive(Debug, Error)]
 pub enum CryptoApiError {
-    #[error("Missing API key")]
-    MissingApiKey,
     #[error("Missing cage context — {0:?}")]
     MissingCageContext(#[from] std::env::VarError),
     #[error("Deserialization Error — {0:?}")]
@@ -58,7 +56,6 @@ pub enum CryptoApiError {
 impl From<CryptoApiError> for hyper::Response<hyper::Body> {
     fn from(err: CryptoApiError) -> Self {
         match err {
-            CryptoApiError::MissingApiKey => build_response(401, Body::from(err.to_string())),
             CryptoApiError::SerdeError(error) => build_response(400, Body::from(error.to_string())),
             CryptoApiError::SerializationError => build_response(400, Body::from(err.to_string())),
             _ => build_response(500, Body::from(err.to_string())),

@@ -6,12 +6,7 @@ use crate::env::Environment;
 use crate::error::{Error, Result};
 use crate::{cert_provisioner_client, config_client, CageContext};
 use crate::{cert_provisioner_client::CertProvisionerClient, config_client::ConfigClient};
-use lazy_static::lazy_static;
 
-lazy_static! {
-    pub static ref EV_API_KEY: String =
-        std::env::var("EV_API_KEY").expect("Couldn't get EV_API_KEY from env");
-}
 pub struct InterCaRetreiver {
     cert_provisioner_client: CertProvisionerClient,
     config_client: ConfigClient,
