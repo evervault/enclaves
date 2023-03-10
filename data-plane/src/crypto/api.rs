@@ -122,13 +122,13 @@ impl CryptoApi {
 
     async fn encrypt(&mut self, req: Request<Body>) -> Result<Body, CryptoApiError> {
         let request = self.build_request(req).await?;
-        let e3_response: CryptoResponse = self.e3_client.encrypt(request).await?;
+        let e3_response: CryptoResponse = self.e3_client.encrypt_with_retries(2, request).await?;
         Ok(hyper::Body::from(serde_json::to_vec(&e3_response.data)?))
     }
 
     async fn decrypt(&mut self, req: Request<Body>) -> Result<Body, CryptoApiError> {
         let request = self.build_request(req).await?;
-        let e3_response: CryptoResponse = self.e3_client.decrypt(request).await?;
+        let e3_response: CryptoResponse = self.e3_client.decrypt_with_retries(2, request).await?;
         Ok(hyper::Body::from(serde_json::to_vec(&e3_response.data)?))
     }
 

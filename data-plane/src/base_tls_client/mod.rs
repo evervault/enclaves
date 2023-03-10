@@ -18,6 +18,7 @@ pub struct BaseClient {
     port: u16,
 }
 
+#[derive(Clone)]
 pub enum AuthType {
     ApiKey(HeaderValue),
     AttestationDoc(AttestationAuth),

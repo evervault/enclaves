@@ -265,7 +265,10 @@ pub async fn handle_standard_request(
             serde_json::Value::Array(decryption_payload),
             cage_context,
         ));
-        let decrypted: DecryptRequest = match e3_client.decrypt(request_payload).await {
+        let decrypted: DecryptRequest = match e3_client
+            .decrypt_with_retries(2, request_payload)
+            .await
+        {
             Ok(decrypted) => decrypted,
             Err(e) => {
                 eprintln!("Failed to decrypt — {e}");

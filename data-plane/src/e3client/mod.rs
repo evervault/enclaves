@@ -10,6 +10,9 @@ use tokio_rustls::TlsConnector;
 
 type E3Error = ClientError;
 
+use tokio_retry::strategy::{jitter, ExponentialBackoff};
+use tokio_retry::Retry;
+
 #[derive(Clone)]
 pub struct E3Client {
     base_client: BaseClient,
@@ -72,6 +75,25 @@ impl E3Client {
         self.parse_response(response).await
     }
 
+    pub async fn decrypt_with_retries<T, P: E3Payload>(
+        &self,
+        retries: usize,
+        payload: P,
+    ) -> Result<T, E3Error>
+    where
+        T: DeserializeOwned,
+        P: Clone,
+    {
+        let retry_strategy = ExponentialBackoff::from_millis(10)
+            .map(jitter)
+            .take(retries);
+
+        Retry::spawn(retry_strategy, || async {
+            self.decrypt(payload.clone()).await
+        })
+        .await
+    }
+
     pub async fn encrypt<T, P: E3Payload>(&self, payload: P) -> Result<T, E3Error>
     where
         T: DeserializeOwned,
@@ -91,6 +113,25 @@ impl E3Client {
             )
             .await?;
         self.parse_response(response).await
+    }
+
+    pub async fn encrypt_with_retries<T, P: E3Payload>(
+        &self,
+        retries: usize,
+        payload: P,
+    ) -> Result<T, E3Error>
+    where
+        T: DeserializeOwned,
+        P: Clone,
+    {
+        let retry_strategy = ExponentialBackoff::from_millis(10)
+            .map(jitter)
+            .take(retries);
+
+        Retry::spawn(retry_strategy, || async {
+            self.encrypt(payload.clone()).await
+        })
+        .await
     }
 
     pub async fn authenticate(
@@ -182,7 +223,7 @@ impl std::convert::From<(Vec<EncryptedDataEntry>, &crate::CageContext)> for Decr
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct CryptoRequest {
     pub team_uuid: String,
     pub app_uuid: String,
@@ -208,7 +249,6 @@ impl std::convert::From<(Value, &crate::CageContext)> for CryptoRequest {
         }
     }
 }
-
 pub trait E3Payload: Sized + Serialize {
     fn try_into_body(self) -> Result<hyper::Body, E3Error> {
         Ok(hyper::Body::from(serde_json::to_vec(&self)?))
