@@ -1,0 +1,25 @@
+on:
+  push:
+    paths:
+      - control-plane/**
+      - data-plane/**
+      - shared/**
+      - .github/workflows/lint.yml
+name: Lint
+jobs:
+  clippy_check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: rustup component add clippy 
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "standard-cache"
+      - uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --features enclave -- -D warnings
+      - uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --features not_enclave -- -D warnings  

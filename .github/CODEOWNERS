@@ -1,0 +1,6 @@
+# This file is used to automatically request reviews on PRs.
+
+# These owners will be the default owners for everything in
+# the repo, unless a match on a later line takes precedence.
+# "@evervault/product-engineering" below requests review from all members of Product Engineering.
+*       @evervault/product-engineering

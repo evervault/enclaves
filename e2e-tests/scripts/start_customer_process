@@ -1,0 +1,14 @@
+#!/bin/sh
+
+
+# Wait for environment to be placed in env faile before starting process
+while ! grep -q "EV_CAGE_INITIALIZED" /etc/customer-env;
+do 
+    echo "Environment not ready, sleeping user process for one second";
+    sleep 1;
+done
+
+echo "Environment ready.. Starting user process"
+
+source /etc/customer-env
+node /services/customerProcess.js

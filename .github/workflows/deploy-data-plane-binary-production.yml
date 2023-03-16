@@ -1,0 +1,142 @@
+name: Release data-plane binary production
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  RUST_BACKTRACE: 1
+  LINUX_TARGET: x86_64-unknown-linux-musl
+  STAGE: production
+
+jobs:
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+    steps:
+      - id: get-version
+        run: |
+          echo "using version tag ${GITHUB_REF:11}"
+          echo ::set-output name=version::${GITHUB_REF:11}
+
+  build-data-plane-binary:
+    needs: get-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Inject Version
+        run: |
+          sh ./scripts/insert-data-plane-version.sh ${{ needs.get-version.outputs.version }}
+
+      - name: Configure Production AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build data-plane (egress enabled, tls termination enabled)
+        uses: evervault/cargo-static-build@master
+        with:
+          cmd: cargo build -p data-plane --features enclave,network_egress --release --target ${{ env.LINUX_TARGET }}
+
+      - name: Upload data-plane to S3 (egress enabled, tls termination enabled)
+        env:
+          VERSION_TAG: ${{ needs.get-version.outputs.version }}
+          FEATURE_LABEL: egress-enabled/tls-termination-enabled
+        run: |
+          aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
+
+      - name: Build data-plane (egress enabled, tls termination disabled)
+        uses: evervault/cargo-static-build@master
+        with:
+          cmd: cargo build -p data-plane --no-default-features --features enclave,network_egress --release --target ${{ env.LINUX_TARGET }}
+
+      - name: Upload data-plane to S3 (egress enabled, tls termination disabled)
+        env:
+          VERSION_TAG: ${{ needs.get-version.outputs.version }}
+          FEATURE_LABEL: egress-enabled/tls-termination-disabled
+        run: |
+          aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
+
+      - name: Build data-plane (egress disabled, tls termination enabled)
+        uses: evervault/cargo-static-build@master
+        with:
+          cmd: cargo build -p data-plane --features enclave --release --target ${{ env.LINUX_TARGET }}
+
+      - name: Upload data-plane to S3 (egress disabled, tls termination enabled)
+        env:
+          VERSION_TAG: ${{ needs.get-version.outputs.version }}
+          FEATURE_LABEL: egress-disabled/tls-termination-enabled
+        run: |
+          aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
+
+      - name: Build data-plane (egress disabled, tls termination disabled)
+        uses: evervault/cargo-static-build@master
+        with:
+          cmd: cargo build -p data-plane --no-default-features --features enclave --release --target ${{ env.LINUX_TARGET }}
+
+      - name: Upload data-plane to S3 (egress disabled, tls termination disabled)
+        env:
+          VERSION_TAG: ${{ needs.get-version.outputs.version }}
+          FEATURE_LABEL: egress-disabled/tls-termination-disabled
+        run: |
+          aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
+
+  mark-new-data-plane-binary-as-latest:
+    needs: [get-version, build-data-plane-binary]
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    strategy:
+      matrix:
+        feature:
+          [
+            egress-enabled/tls-termination-enabled,
+            egress-enabled/tls-termination-disabled,
+            egress-disabled/tls-termination-enabled,
+            egress-disabled/tls-termination-disabled,
+          ]
+    steps:
+      - name: Configure Production AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Upload data-plane to S3 (${{ matrix.feature }})
+        env:
+          VERSION_TAG: ${{ needs.get-version.outputs.version }}
+        run: |
+          aws s3 cp s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ matrix.feature }} s3://cage-build-assets-${{ env.STAGE }}/runtime/latest/data-plane/${{ matrix.feature }}
+
+  update-latest-with-new-data-plane-version-tag:
+    needs:
+      [
+        get-version,
+        build-data-plane-binary,
+        mark-new-data-plane-binary-as-latest,
+      ]
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+      - name: Configure Production AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Upload version tag to latest
+        env:
+          VERSION_TAG: ${{ needs.get-version.outputs.version }}
+        run: |
+          echo "{ \"data-plane\": \"${{ env.VERSION_TAG }}\" }" > latest.txt
+          aws s3 cp ./latest.txt s3://cage-build-assets-${{ env.STAGE }}/runtime/latest

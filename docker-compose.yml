@@ -1,0 +1,38 @@
+version: "3.9"
+networks:
+  mynetwork:
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+services:
+  statsd:
+    image: statsd/statsd
+    restart: always
+    ports:
+      - 8125:8125/udp
+      - 8126:8126
+    networks:
+      mynetwork:
+        ipv4_address: 172.20.0.6  
+  cages:
+    build: .
+    dns: 127.0.0.1
+    ports:
+      - "443:3031"
+      - "3032:3032"
+    depends_on:
+      - statsd
+    networks:
+      mynetwork:
+        ipv4_address: 172.20.0.7    
+      
+    environment:
+      - MOCK_CRYPTO_CERT=${MOCK_CRYPTO_CERT}
+      - MOCK_CRYPTO_KEY=${MOCK_CRYPTO_KEY}
+      - MOCK_CERT_PROVISIONER_CLIENT_CERT=${MOCK_CERT_PROVISIONER_CLIENT_CERT}
+      - MOCK_CERT_PROVISIONER_CLIENT_KEY=${MOCK_CERT_PROVISIONER_CLIENT_KEY}
+      - MOCK_CERT_PROVISIONER_ROOT_CERT=${MOCK_CERT_PROVISIONER_ROOT_CERT}
+      - MOCK_CERT_PROVISIONER_SERVER_KEY=${MOCK_CERT_PROVISIONER_SERVER_KEY}
+      - MOCK_CERT_PROVISIONER_SERVER_CERT=${MOCK_CERT_PROVISIONER_SERVER_CERT}
+      - DEREGISTRATION_TOPIC_ARN=testarn
+      - EV_API_KEY_AUTH=${EV_API_KEY_AUTH}

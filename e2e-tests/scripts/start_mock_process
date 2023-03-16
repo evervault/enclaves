@@ -1,0 +1,5 @@
+#!/bin/sh
+
+echo "Starting mock crypto process"
+
+/services/mock-crypto

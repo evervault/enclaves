@@ -1,0 +1,73 @@
+on:
+  push:
+    paths:
+      - data-plane/**
+      - .github/workflows/lint-and-test-data-plane.yml
+name: Lint and Test Data Plane
+jobs:
+  lint_data_plane:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "standard-cache"
+      - name: Format project
+        run: cargo fmt --check
+  check_data_plane:
+    needs: [lint_data_plane]
+    strategy:
+      matrix:
+        feature-flags:
+          [
+            "tls_termination,enclave",
+            "tls_termination,not_enclave",
+            "enclave",
+            "not_enclave",
+            "tls_termination,enclave,network_egress",
+            "tls_termination,not_enclave,network_egress",
+            "enclave,network_egress",
+            "not_enclave,network_egress",
+          ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "standard-cache"
+      - name: Compile project with features ${{ matrix.feature-flags }}
+        run: cargo check -p data-plane --no-default-features --features ${{ matrix.feature-flags }}
+
+  test_data_plane:
+    needs: [lint_data_plane, check_data_plane]
+    strategy:
+      matrix:
+        feature-flags:
+          [
+            "not_enclave",
+            "not_enclave,network_egress",
+            "not_enclave,tls_termination",
+            "not_enclave,tls_termination,network_egress",
+          ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "standard-cache"
+      - name: Test project with features ${{ matrix.feature-flags }}
+        run: cargo test -p data-plane --no-default-features --features ${{ matrix.feature-flags }}
+      - name: Test project with features ${{ matrix.feature-flags }} using staging flag
+        run: cargo test -p data-plane --no-default-features --features ${{ matrix.feature-flags }}
+        env:
+          RUSTFLAGS: "--cfg staging"

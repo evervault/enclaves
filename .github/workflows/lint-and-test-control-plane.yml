@@ -1,0 +1,26 @@
+on:
+  push:
+    paths:
+      - control-plane/**
+      - .github/workflows/lint-and-test-control-plane.yml
+name: Lint and Test Control Plane
+jobs:
+  clippy_check_control_plane:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "standard-cache"
+      - name: Compile project feature -enclave
+        run: cargo build --features enclave,network_egress -p control-plane 
+      - name: Compile project feature -not_enclave
+        run: cargo build --features not_enclave,network_egress -p control-plane 
+      - name: Test project
+        run: cargo test --features enclave,network_egress -p control-plane
+      - name: Format project
+        run: cargo fmt --check

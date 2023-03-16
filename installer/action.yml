@@ -1,0 +1,5 @@
+name: "Compile Cage Runtime Installer"
+description: "Action to pull in the Cage Runtime dependencies, compile them from source, and bundle their binaries with an installer."
+runs:
+  using: "docker"
+  image: "Dockerfile"

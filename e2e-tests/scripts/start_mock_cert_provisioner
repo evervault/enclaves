@@ -1,0 +1,9 @@
+#!/bin/sh
+
+echo "Running mock cert provisioner startup script."
+
+export MOCK_CERT_PROVISIONER_SERVER_KEY=$MOCK_CERT_PROVISIONER_SERVER_KEY
+export MOCK_CERT_PROVISIONER_SERVER_CERT=$MOCK_CERT_PROVISIONER_SERVER_CERT
+export MOCK_CERT_PROVISIONER_ROOT_CERT=$MOCK_CERT_PROVISIONER_ROOT_CERT
+
+node /services/mockCertProvisionerApi.js

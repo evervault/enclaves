@@ -1,0 +1,31 @@
+[package]
+name = "control-plane"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.24.2", features = ["net", "macros", "rt", "rt-multi-thread", "io-util", "time", "fs"] }
+dashmap = "4.0.2"
+trust-dns-resolver = { version = "*" }
+dns-message-parser = { version = "~0.6.0" }
+bytes = "1"
+thiserror = "1.0"
+tokio-vsock = { version = "0.3.2", optional = true }
+tokio-rustls = { version = "0.23.4", features = ["dangerous_configuration"] }
+tls-parser = "*"
+shared = { path = "../shared" }
+rand = { version = "0.8.5" }
+ctrlc = { version = "3.2.3", features = ["termination"] }
+rusoto_sns = "0.48.0"
+rusoto_core = "0.48.0"
+serde = { version = "1.0.126", features = ["derive"] }
+serde_json = "1.0.64"
+hyper = { version = "0.14.4", features = ["server", "client", "http1", "tcp" ] }
+lazy_static = "1.4.0"
+rustls-pemfile = "1.0.1"
+
+[features]
+default = []
+network_egress = []
+enclave = ["dep:tokio-vsock", "shared/enclave"]
+not_enclave = ["network_egress"]
