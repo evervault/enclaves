@@ -2,6 +2,7 @@
 name = "control-plane"
 version = "0.1.0"
 edition = "2021"
+authors = ["Evervault <engineering@evervault.com>"]
 
 [dependencies]
 tokio = { version = "1.24.2", features = ["net", "macros", "rt", "rt-multi-thread", "io-util", "time", "fs"] }

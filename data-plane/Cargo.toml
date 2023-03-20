@@ -2,6 +2,7 @@
 name = "data-plane"
 version = "0.0.0-dev"
 edition = "2021"
+authors = ["Evervault <engineering@evervault.com>"]
 
 [dependencies]
 hyper = { version = "0.14.4", features = ["server","http1","http2","tcp","stream","client"] }
