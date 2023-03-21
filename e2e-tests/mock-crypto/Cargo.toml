@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rust-crypto = { version = "=1.0.0-beta.6", registry="evervault-rust-libraries", features=["vendored-openssl"] }
+rust-crypto = { version = "1.0.0-beta.6", registry="evervault-rust-libraries", features=["vendored-openssl"] }
 axum = "0.5.16"
 axum-server = { version = "0.4.2", features = ["tls-rustls"] }
 tokio = {version="1.24.2", features=["macros", "rt-multi-thread"]}
