@@ -71,9 +71,30 @@ impl EgressProxy {
     }
 }
 
+// https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry.xhtml
+fn is_not_globally_reachable_ip(ip_addr: &Ipv4Addr) -> bool {
+    if ip_addr.is_private()
+        || ip_addr.is_loopback()
+        || ip_addr.is_link_local()
+        || ip_addr.is_broadcast()
+        || ip_addr.is_documentation()
+    {
+        return true;
+    }
+    match ip_addr.octets() {
+        [192, 88, 99, ..] => true, // 6to4 Relay Anycast
+        [192, 0, 0, final_octet] => final_octet == 170 || final_octet == 171, // NAT64/DNS64 Discovery
+        [198, second_octet, ..] => second_octet == 18 || second_octet == 19,  // Benchmarking
+        [100, second_octet, ..] => second_octet & 0b1100_0000 == 0b0100_0000, // Shared
+        [leading_octet, ..] => leading_octet >= 240 || leading_octet == 0, // Reserved or this host
+    }
+}
+
 fn validate_requested_ip(ip_addr: &str, allow_egress_to_internal: bool) -> Result<Ipv4Addr> {
     match ip_addr.parse::<Ipv4Addr>() {
-        Ok(parsed_addr) if parsed_addr.is_private() && !allow_egress_to_internal => {
+        Ok(parsed_addr)
+            if is_not_globally_reachable_ip(&parsed_addr) && !allow_egress_to_internal =>
+        {
             println!("Blocking request to internal IP");
             Err(ServerError::IllegalInternalIp(parsed_addr))
         }
@@ -115,6 +136,51 @@ mod test {
         match validate_requested_ip(ip_addr, false) {
             Ok(_) => panic!(),
             Err(e) => assert!(matches!(e, ServerError::InvalidIp(_))),
+        }
+    }
+
+    #[test]
+    fn attempt_egress_to_valid_public_ip() {
+        let ip_addr = "76.76.21.21";
+        match validate_requested_ip(ip_addr, false) {
+            Ok(parsed_addr) => assert_eq!(ip_addr.parse::<Ipv4Addr>().unwrap(), parsed_addr),
+            Err(_) => panic!(),
+        }
+    }
+
+    #[test]
+    fn attempt_egress_to_loopback() {
+        let ip_addr = "127.0.0.1";
+        match validate_requested_ip(ip_addr, false) {
+            Ok(_) => panic!(),
+            Err(e) => assert!(matches!(e, ServerError::IllegalInternalIp(_))),
+        }
+    }
+
+    #[test]
+    fn attempt_egress_to_link_local() {
+        let ip_addr = "169.254.0.1";
+        match validate_requested_ip(ip_addr, false) {
+            Ok(_) => panic!(),
+            Err(e) => assert!(matches!(e, ServerError::IllegalInternalIp(_))),
+        }
+    }
+
+    #[test]
+    fn attempt_egress_to_shared_address_space() {
+        let ip_addr = "100.64.0.2";
+        match validate_requested_ip(ip_addr, false) {
+            Ok(_) => panic!(),
+            Err(e) => assert!(matches!(e, ServerError::IllegalInternalIp(_))),
+        }
+    }
+
+    #[test]
+    fn attempt_egress_to_this_host() {
+        let ip_addr = "0.0.0.0";
+        match validate_requested_ip(ip_addr, false) {
+            Ok(_) => panic!(),
+            Err(e) => assert!(matches!(e, ServerError::IllegalInternalIp(_))),
         }
     }
 }
