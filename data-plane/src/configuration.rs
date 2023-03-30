@@ -28,3 +28,11 @@ pub fn get_egress_ports() -> Vec<u16> {
         })
         .collect()
 }
+
+pub fn get_egress_allow_list() -> Vec<String> {
+    let domain_str = std::env::var("EGRESS_ALLOW_LIST").unwrap_or("".to_string());
+    domain_str
+        .split(',')
+        .map(|domain| domain.to_string())
+        .collect()
+}

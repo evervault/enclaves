@@ -21,7 +21,7 @@ use rand::seq::SliceRandom;
 pub struct EgressProxy;
 
 impl EgressProxy {
-    pub async fn listen(port: u16) -> ServerResult<()> {
+    pub async fn listen(port: u16, allowed_domains: Vec<String>) -> ServerResult<()> {
         println!("Egress proxy started on port {port}");
 
         let mut server =
@@ -29,7 +29,7 @@ impl EgressProxy {
 
         loop {
             if let Ok(stream) = server.accept().await {
-                tokio::spawn(Self::handle_egress_connection(stream, port));
+                tokio::spawn(Self::handle_egress_connection(stream, port, allowed_domains.clone()   ));
             }
         }
         #[allow(unreachable_code)]
@@ -67,9 +67,18 @@ impl EgressProxy {
         Ok(Some(destination))
     }
 
+    fn check_allow_list(hostname: String, allowed_domains: Vec<String>) -> Result<(), DNSError>{
+        if allowed_domains.contains(&hostname) {
+            Ok(())
+        } else {
+            Err(DNSError::EgressDomainNotAllowed(hostname))
+        }
+    }
+
     async fn handle_egress_connection<T: AsyncRead + AsyncWrite + Unpin>(
         mut external_stream: T,
         port: u16,
+        allowed_domains: Vec<String>
     ) -> Result<(), DNSError> {
         let mut buf = vec![0u8; 4096];
 
@@ -80,6 +89,8 @@ impl EgressProxy {
             Some(hostname) => hostname,
             None => return Err(DNSError::NoHostnameFound),
         };
+
+        Self::check_allow_list(hostname.clone(), allowed_domains.clone())?;
 
         let cached_ips = Cache::get_ip(hostname.as_ref());
 
