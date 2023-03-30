@@ -105,8 +105,6 @@ where
                                         if let Err(e) = tx_for_req.send(LogHandlerMessage::new_log_message(ctx)) {
                                             println!("Failed to send transaction context to log handler. err: {e}")
                                         }
-                                    } else {
-                                        ctx.record_trx();
                                     }
                                 },
                                 Err(e) => {
