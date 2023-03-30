@@ -38,6 +38,26 @@ pub fn get_aws_region() -> Region {
         .unwrap_or(Ok(Region::UsEast1))
         .expect("Expected AWS Region to be set under AWS_PROFILE")
 }
+#[derive(Clone)]
+pub struct CageContext {
+    pub cage_uuid: String,
+    pub cage_version: String,
+    pub cage_name: String,
+    pub app_uuid: String,
+    pub team_uuid: String,
+}
+
+impl CageContext {
+    pub fn from_env_vars() -> CageContext {
+        CageContext {
+            cage_uuid: get_cage_uuid(),
+            cage_version: get_cage_version(),
+            cage_name: get_cage_name(),
+            app_uuid: get_app_uuid(),
+            team_uuid: get_team_uuid(),
+        }
+    }
+}
 
 pub fn get_cage_uuid() -> String {
     std::env::var("CAGE_UUID").expect("CAGE_UUID is not set in env")

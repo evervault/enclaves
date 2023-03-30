@@ -32,10 +32,10 @@ pub struct TrxContext {
     response_code: Option<String>,
     #[builder(default)]
     status_group: Option<String>,
-    cage_name: String,
-    cage_uuid: String,
-    app_uuid: String,
-    team_uuid: String,
+    pub cage_name: String,
+    pub cage_uuid: String,
+    pub app_uuid: String,
+    pub team_uuid: String,
     #[builder(default)]
     n_decrypted_fields: Option<u32>,
     #[builder(default)]

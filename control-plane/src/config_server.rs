@@ -1,12 +1,14 @@
 use crate::clients::cert_provisioner::{
     CertProvisionerClient, GetCertTokenResponseControlPlane, GetE3TokenResponseControlPlane,
 };
+use crate::configuration;
 use crate::error::{Result, ServerError};
 
 use hyper::server::conn;
 use hyper::service::service_fn;
 use hyper::{Body, Request, Response};
 use serde::de::DeserializeOwned;
+use shared::logging::TrxContext;
 use shared::server::config_server::requests::{
     ConfigServerPayload, GetCertTokenResponseDataPlane, GetE3TokenResponseDataPlane,
     PostTrxLogsRequest,
@@ -19,12 +21,14 @@ use std::str::FromStr;
 #[derive(Clone)]
 pub struct ConfigServer {
     cert_provisioner_client: CertProvisionerClient,
+    cage_context: configuration::CageContext,
 }
 
 impl ConfigServer {
     pub fn new(cert_provisioner_client: CertProvisionerClient) -> Self {
         Self {
             cert_provisioner_client,
+            cage_context: configuration::CageContext::from_env_vars(),
         }
     }
 
@@ -34,10 +38,12 @@ impl ConfigServer {
         let server = conn::Http::new();
 
         let cert_client = self.cert_provisioner_client.clone();
+        let cage_context = self.cage_context.clone();
 
         println!("Running config server on {}", shared::ENCLAVE_CONFIG_PORT);
         loop {
             let cert_client = cert_client.clone();
+            let cage_context = cage_context.clone();
             let connection = match enclave_conn.accept().await {
                 Ok(conn) => conn,
                 Err(e) => {
@@ -50,15 +56,20 @@ impl ConfigServer {
 
             tokio::spawn(async move {
                 let cert_client = cert_client.clone();
-                let sent_response = server
-                    .serve_connection(
-                        connection,
-                        service_fn(|req: Request<Body>| {
-                            let cert_client = cert_client.clone();
-                            async move { handle_incoming_request(req, cert_client).await }
-                        }),
-                    )
-                    .await;
+                let cage_context = cage_context.clone();
+                let sent_response =
+                    server
+                        .serve_connection(
+                            connection,
+                            service_fn(|req: Request<Body>| {
+                                let cert_client = cert_client.clone();
+                                let cage_context = cage_context.clone();
+                                async move {
+                                    handle_incoming_request(req, cert_client, cage_context).await
+                                }
+                            }),
+                        )
+                        .await;
 
                 if let Err(processing_err) = sent_response {
                     eprintln!("An error occurred while processing the request — {processing_err}");
@@ -79,6 +90,7 @@ pub enum TokenType {
 async fn handle_incoming_request(
     req: Request<Body>,
     cert_provisioner_client: CertProvisionerClient,
+    cage_context: configuration::CageContext,
 ) -> Result<Response<Body>> {
     match ConfigServerPath::from_str(req.uri().path()) {
         Ok(ConfigServerPath::GetCertToken) => Ok(handle_token_request(
@@ -91,7 +103,9 @@ async fn handle_incoming_request(
             TokenType::E3(ConfigServerPath::GetE3Token),
         )
         .await),
-        Ok(ConfigServerPath::PostTrxLogs) => Ok(handle_post_trx_logs_request(req).await),
+        Ok(ConfigServerPath::PostTrxLogs) => {
+            Ok(handle_post_trx_logs_request(req, cage_context).await)
+        }
         _ => Ok(build_bad_request_response()),
     }
 }
@@ -138,13 +152,25 @@ async fn get_token(
     Ok(res)
 }
 
-async fn handle_post_trx_logs_request(req: Request<Body>) -> Response<Body> {
+fn validate_trx_log(trx_log: &TrxContext, cage_context: &configuration::CageContext) -> bool {
+    trx_log.cage_uuid == cage_context.cage_uuid
+        && trx_log.cage_name == cage_context.cage_name
+        && trx_log.team_uuid == cage_context.team_uuid
+        && trx_log.app_uuid == cage_context.app_uuid
+}
+
+async fn handle_post_trx_logs_request(
+    req: Request<Body>,
+    cage_context: configuration::CageContext,
+) -> Response<Body> {
     println!("Recieved request in config server to log transactions");
     let parsed_result: Result<PostTrxLogsRequest> = parse_request(req).await;
     match parsed_result {
         Ok(log_body) => {
             log_body.trx_logs().into_iter().for_each(|trx| {
-                trx.record_trx();
+                if validate_trx_log(&trx, &cage_context) {
+                    trx.record_trx();
+                }
             });
             build_success_response()
         }
