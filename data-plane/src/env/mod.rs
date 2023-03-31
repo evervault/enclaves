@@ -4,7 +4,7 @@ use std::{fs::File, io::Write};
 use crate::cert_provisioner_client::CertProvisionerClient;
 #[cfg(not(feature = "tls_termination"))]
 use crate::config_client::ConfigClient;
-use crate::{base_tls_client::ClientError, CageContext, CageContextError};
+use crate::{base_tls_client::ClientError, CageContextError};
 use hyper::header::InvalidHeaderValue;
 use serde_json::json;
 use shared::server::config_server::requests::Secret;
@@ -60,14 +60,10 @@ impl Environment {
 
         let mut plaintext_env = plaintext_env;
 
-        let cage_context = CageContext::get()?;
-
         if !encrypted_env.is_empty() {
             let e3_response: CryptoResponse = self
                 .e3_client
                 .decrypt(CryptoRequest {
-                    app_uuid: cage_context.app_uuid.clone(),
-                    team_uuid: cage_context.team_uuid.clone(),
                     data: json!(encrypted_env.clone()),
                 })
                 .await?;
