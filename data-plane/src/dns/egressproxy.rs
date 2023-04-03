@@ -1,4 +1,5 @@
 use super::error::DNSError;
+use crate::configuration::EgressDomains;
 use crate::dns::cache::Cache;
 use crate::dns::error::DNSError::MissingIP;
 use shared::rpc::request::ExternalRequest;
@@ -21,7 +22,7 @@ use rand::seq::SliceRandom;
 pub struct EgressProxy;
 
 impl EgressProxy {
-    pub async fn listen(port: u16, allowed_domains: Vec<String>) -> ServerResult<()> {
+    pub async fn listen(port: u16, allowed_domains: EgressDomains) -> ServerResult<()> {
         println!("Egress proxy started on port {port}");
 
         let mut server =
@@ -71,8 +72,16 @@ impl EgressProxy {
         Ok(Some(destination))
     }
 
-    fn check_allow_list(hostname: String, allowed_domains: Vec<String>) -> Result<(), DNSError> {
-        if allowed_domains.contains(&hostname) {
+    fn check_allow_list(hostname: String, allowed_domains: EgressDomains) -> Result<(), DNSError> {
+        let valid_wildcard = allowed_domains
+            .wildcard
+            .iter()
+            .any(|wildcard| hostname.ends_with(wildcard));
+
+        if allowed_domains.exact.contains(&hostname)
+            || allowed_domains.exact.contains(&"*".to_string())
+            || valid_wildcard
+        {
             Ok(())
         } else {
             Err(DNSError::EgressDomainNotAllowed(hostname))
@@ -82,7 +91,7 @@ impl EgressProxy {
     async fn handle_egress_connection<T: AsyncRead + AsyncWrite + Unpin>(
         mut external_stream: T,
         port: u16,
-        allowed_domains: Vec<String>,
+        allowed_domains: EgressDomains,
     ) -> Result<(), DNSError> {
         let mut buf = vec![0u8; 4096];
 
@@ -120,5 +129,55 @@ impl EgressProxy {
             }
             None => Err(MissingIP(format!("Couldn't find cached ip for {hostname}"))),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::dns::egressproxy::EgressDomains;
+    use crate::dns::egressproxy::EgressProxy;
+    use crate::dns::error::DNSError::EgressDomainNotAllowed;
+
+    #[test]
+    fn test_valid_all_domains() {
+        let egress_domains = EgressDomains {
+            exact: vec!["*".to_string()],
+            wildcard: vec![],
+        };
+        assert_eq!(
+            EgressProxy::check_allow_list("app.evervault.com".to_string(), egress_domains).unwrap(),
+            ()
+        );
+    }
+    #[test]
+    fn test_valid_exact_domain() {
+        let egress_domains = EgressDomains {
+            exact: vec!["app.evervault.com".to_string()],
+            wildcard: vec![],
+        };
+        assert_eq!(
+            EgressProxy::check_allow_list("app.evervault.com".to_string(), egress_domains).unwrap(),
+            ()
+        );
+    }
+    #[test]
+    fn test_valid_wildcard_domain() {
+        let egress_domains = EgressDomains {
+            exact: vec![],
+            wildcard: vec!["evervault.com".to_string()],
+        };
+        assert_eq!(
+            EgressProxy::check_allow_list("app.evervault.com".to_string(), egress_domains).unwrap(),
+            ()
+        );
+    }
+    #[test]
+    fn test_invalid_domain() {
+        let egress_domains = EgressDomains {
+            exact: vec![],
+            wildcard: vec!["evervault.com".to_string()],
+        };
+        let result = EgressProxy::check_allow_list("google.com".to_string(), egress_domains);
+        assert!(matches!(result, Err(EgressDomainNotAllowed(_))));
     }
 }

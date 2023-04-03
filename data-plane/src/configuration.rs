@@ -29,10 +29,21 @@ pub fn get_egress_ports() -> Vec<u16> {
         .collect()
 }
 
-pub fn get_egress_allow_list() -> Vec<String> {
+pub fn get_egress_allow_list() -> EgressDomains {
     let domain_str = std::env::var("EGRESS_ALLOW_LIST").unwrap_or("".to_string());
-    domain_str
+    let domains: Vec<String> = domain_str
         .split(',')
         .map(|domain| domain.to_string())
-        .collect()
+        .collect();
+    let (wildcard, exact): (Vec<String>, Vec<String>) = domains
+        .clone()
+        .into_iter()
+        .partition(|domain| domain.starts_with("*."));
+    EgressDomains { wildcard, exact }
+}
+
+#[derive(Clone)]
+pub struct EgressDomains {
+    pub wildcard: Vec<String>,
+    pub exact: Vec<String>,
 }
