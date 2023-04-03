@@ -78,9 +78,7 @@ impl EgressProxy {
             .iter()
             .any(|wildcard| hostname.ends_with(wildcard));
 
-        if allowed_domains.exact.contains(&hostname)
-            || allowed_domains.exact.contains(&"*".to_string())
-            || valid_wildcard
+        if allowed_domains.exact.contains(&hostname) || allowed_domains.allow_all || valid_wildcard
         {
             Ok(())
         } else {
@@ -141,8 +139,9 @@ mod tests {
     #[test]
     fn test_valid_all_domains() {
         let egress_domains = EgressDomains {
-            exact: vec!["*".to_string()],
+            exact: vec![],
             wildcard: vec![],
+            allow_all: true,
         };
         assert_eq!(
             EgressProxy::check_allow_list("app.evervault.com".to_string(), egress_domains).unwrap(),
@@ -154,6 +153,7 @@ mod tests {
         let egress_domains = EgressDomains {
             exact: vec!["app.evervault.com".to_string()],
             wildcard: vec![],
+            allow_all: false,
         };
         assert_eq!(
             EgressProxy::check_allow_list("app.evervault.com".to_string(), egress_domains).unwrap(),
@@ -165,6 +165,7 @@ mod tests {
         let egress_domains = EgressDomains {
             exact: vec![],
             wildcard: vec!["evervault.com".to_string()],
+            allow_all: false,
         };
         assert_eq!(
             EgressProxy::check_allow_list("app.evervault.com".to_string(), egress_domains).unwrap(),
@@ -176,6 +177,7 @@ mod tests {
         let egress_domains = EgressDomains {
             exact: vec![],
             wildcard: vec!["evervault.com".to_string()],
+            allow_all: false,
         };
         let result = EgressProxy::check_allow_list("google.com".to_string(), egress_domains);
         assert!(matches!(result, Err(EgressDomainNotAllowed(_))));
