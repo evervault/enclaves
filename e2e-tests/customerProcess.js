@@ -28,6 +28,15 @@ app.get('/egress', async (req, res) => {
   }
 })
 
+app.get('/egressBanned', async (req, res) => {
+  try {
+    const result = await axios.get("https://evervault.com")
+    res.send({...result.data})
+  } catch (e) {
+    res.status(500).send(e)
+  }
+})
+
 async function encrypt(payload) {
   const result = await axios.post("http://127.0.0.1:9999/encrypt", payload, { headers: { 'api-key': 'placeholder' } });
   return result.data;

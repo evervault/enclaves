@@ -10,7 +10,6 @@ describe('POST data to enclave', () => {
         })
     });
     it('enclave responds and echos back body', () => {
-        console.log('Sending post request to enclave');
         return allowAllCerts.post('https://cage.localhost:443/hello',{ secret: 'ev:123' }, { headers: { 'api-key': 'placeholder' } }).then((result) => {
             console.log('Post request sent to the enclave');
             expect(result.data).to.deep.equal({ response: 'Hello from enclave',  secret: 'ev:123'});
@@ -20,10 +19,9 @@ describe('POST data to enclave', () => {
         });
     });
 
-    it('calls out to the internet', () => {
+    it('calls out to the internet for allowed domain', () => {
         console.log('Sending get request to the enclave');
         return allowAllCerts.get('https://cage.localhost:443/egress', { headers: { 'api-key': 'placeholder' } }).then((result) => {
-            console.log('Get request sent to the enclave');
             expect(result.data).to.deep.equal({
                 userId :1,
                 id:1,
@@ -32,6 +30,15 @@ describe('POST data to enclave', () => {
         }).catch((err) => {
           console.error(err);
           throw err;
+        });
+    });
+
+    it('calls out to the internet for banned domain', () => {
+        console.log('Sending get request to the enclave');
+        return allowAllCerts.get('https://cage.localhost:443/egressBanned', { headers: { 'api-key': 'placeholder' } }).then((result) => {
+            throw Error("Egress request should have failed for banned domain")
+        }).catch((err) => {
+          expect(err.response.data.message).to.deep.equal("Client network socket disconnected before secure TLS connection was established")
         });
     });
 

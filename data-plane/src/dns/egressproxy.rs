@@ -29,7 +29,11 @@ impl EgressProxy {
 
         loop {
             if let Ok(stream) = server.accept().await {
-                tokio::spawn(Self::handle_egress_connection(stream, port, allowed_domains.clone()   ));
+                tokio::spawn(Self::handle_egress_connection(
+                    stream,
+                    port,
+                    allowed_domains.clone(),
+                ));
             }
         }
         #[allow(unreachable_code)]
@@ -67,7 +71,7 @@ impl EgressProxy {
         Ok(Some(destination))
     }
 
-    fn check_allow_list(hostname: String, allowed_domains: Vec<String>) -> Result<(), DNSError>{
+    fn check_allow_list(hostname: String, allowed_domains: Vec<String>) -> Result<(), DNSError> {
         if allowed_domains.contains(&hostname) {
             Ok(())
         } else {
@@ -78,7 +82,7 @@ impl EgressProxy {
     async fn handle_egress_connection<T: AsyncRead + AsyncWrite + Unpin>(
         mut external_stream: T,
         port: u16,
-        allowed_domains: Vec<String>
+        allowed_domains: Vec<String>,
     ) -> Result<(), DNSError> {
         let mut buf = vec![0u8; 4096];
 
