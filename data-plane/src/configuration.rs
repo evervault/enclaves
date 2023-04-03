@@ -39,11 +39,37 @@ pub fn get_egress_allow_list() -> EgressDomains {
         .clone()
         .into_iter()
         .partition(|domain| domain.starts_with("*."));
-    EgressDomains { wildcard, exact }
+    let wildcard_stripped = wildcard
+        .iter()
+        .filter_map(|w| w.strip_prefix("*.").map(|domain| domain.to_string()))
+        .collect();
+    EgressDomains {
+        wildcard: wildcard_stripped,
+        exact,
+    }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct EgressDomains {
     pub wildcard: Vec<String>,
     pub exact: Vec<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{configuration::{get_egress_allow_list, EgressDomains}};
+
+    #[test]
+    fn test_valid_all_domains() {
+        std::env::set_var("EGRESS_ALLOW_LIST", "*");
+        let egress = get_egress_allow_list();
+        assert_eq!(egress, EgressDomains { exact: vec!["*".to_string()], wildcard: vec![]})
+    }
+
+    #[test]
+    fn test_wildcard_and_exact() {
+        std::env::set_var("EGRESS_ALLOW_LIST", "*.evervault.com,google.com");
+        let egress = get_egress_allow_list();
+        assert_eq!(egress, EgressDomains { exact: vec!["google.com".to_string()], wildcard: vec!["evervault.com".to_string()]})
+    }
 }

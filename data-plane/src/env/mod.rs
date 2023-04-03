@@ -12,7 +12,7 @@ use thiserror::Error;
 
 use crate::e3client::{CryptoRequest, CryptoResponse, E3Client};
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error)] 
 pub enum EnvError {
     #[error("{0}")]
     Crypto(String),
