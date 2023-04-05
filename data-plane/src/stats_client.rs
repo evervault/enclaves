@@ -89,12 +89,8 @@ impl StatsClient {
         if let Ok(context) = CageContext::get() {
             publish_gauge!("memory.total", mem_info.total as f64, context);
             publish_gauge!("memory.avail", mem_info.avail as f64, context);
-            publish_gauge!("memory.free", mem_info.total as f64, context);
-
             publish_gauge!("cpu.cores", cpu_num as f64, context);
             publish_gauge!("cpu.one", cpu.one, context);
-            publish_gauge!("cpu.five", cpu.five, context);
-            publish_gauge!("cpu.fifteen", cpu.fifteen, context);
         };
         Ok(())
     }
