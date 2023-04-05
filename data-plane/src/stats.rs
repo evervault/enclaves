@@ -40,6 +40,7 @@ impl StatsProxy {
     async fn forward_stats(bytes: Bytes) -> Result<(), std::io::Error> {
         let mut stream = get_vsock_client(STATS_VSOCK_PORT, Parent).await?;
         stream.write_all(&bytes).await?;
+        stream.flush().await?;
 
         Ok(())
     }

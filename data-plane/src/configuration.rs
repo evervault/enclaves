@@ -58,6 +58,12 @@ mod tests {
     use crate::configuration::{get_egress_allow_list, EgressDomains};
 
     #[test]
+    fn test_sequentially() {
+        test_valid_all_domains();
+        test_wildcard_and_exact();
+        test_backwards_compat();
+    }
+
     fn test_valid_all_domains() {
         std::env::set_var("EV_EGRESS_ALLOW_LIST", "*");
         let egress = get_egress_allow_list();
@@ -68,10 +74,10 @@ mod tests {
                 wildcard: vec![],
                 allow_all: true
             }
-        )
+        );
+        std::env::remove_var("EV_EGRESS_ALLOW_LIST");
     }
 
-    #[test]
     fn test_wildcard_and_exact() {
         std::env::set_var("EV_EGRESS_ALLOW_LIST", "*.evervault.com,google.com");
         let egress = get_egress_allow_list();
@@ -86,7 +92,6 @@ mod tests {
         std::env::remove_var("EV_EGRESS_ALLOW_LIST");
     }
 
-    #[test]
     fn test_backwards_compat() {
         std::env::set_var("EV_EGRESS_ALLOW_LIST", "");
         let egress = get_egress_allow_list();
