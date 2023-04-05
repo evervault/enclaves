@@ -69,12 +69,6 @@ impl StatsClient {
         }
     }
 
-    pub fn record_request() {
-        if let Ok(context) = CageContext::get() {
-            publish_count!("request.count", 1, context);
-        }
-    }
-
     pub fn record_system_metrics() {
         if let Err(e) = Self::try_record_system_metrics() {
             println!("Couldn't get system metrics: {e}");
