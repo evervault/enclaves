@@ -61,12 +61,11 @@ impl ControlPlaneSnsClient {
         // Use local profile for local development
         let region_provider =
             RegionProviderChain::default_provider().or_else(configuration::get_aws_region());
-        aws_config::from_env()
+        let config = aws_config::from_env()
             .profile_name(configuration::get_aws_profile())
             .region(region_provider)
             .load()
             .await;
-        let config = load_from_env().await;
         let sns_client = SnsClient::new(&config);
 
         Self {
