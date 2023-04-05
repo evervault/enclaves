@@ -345,6 +345,7 @@ mod tests {
             trx_logging,
         );
         let server_name = Some(ctx.get_cert_name());
+        CageContext::set(ctx);
         let (cert, key) = generate_ca().unwrap();
         let resolver = AttestableCertResolver::new(cert, key).unwrap();
         let first_cert = resolver
