@@ -17,7 +17,7 @@ cd e2e-tests && npm install && cd ..
 if [[ -z "${CI}" ]];
 then
   cd ./e2e-tests/mock-crypto
-  cargo build --release --target x86_64-unknown-linux-musl
+  cargo build --release --target x86_64-unknown-linux-musl -Z registry-auth
   cd ../..
 fi
 

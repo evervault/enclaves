@@ -3,7 +3,8 @@ use super::http::ContentEncoding;
 use super::tls::TlsServerBuilder;
 
 use crate::base_tls_client::ClientError;
-use crate::e3client::{self, AuthRequest, DecryptRequest, E3Client};
+use crate::e3client::DecryptRequest;
+use crate::e3client::{self, AuthRequest, E3Client};
 use crate::error::{AuthError, Result};
 use crate::{CageContext, CAGE_CONTEXT};
 
@@ -221,7 +222,6 @@ async fn handle_incoming_request(
             compression,
             customer_port,
             e3_client,
-            &cage_context,
             trx_context,
         )
         .await
@@ -233,7 +233,6 @@ pub async fn handle_standard_request(
     _compression: Option<super::http::ContentEncoding>,
     customer_port: u16,
     e3_client: Arc<E3Client>,
-    cage_context: &CageContext,
     trx_context: &mut TrxContextBuilder,
 ) -> Response<Body> {
     let (mut req_info, req_body) = req_parts;
@@ -259,10 +258,8 @@ pub async fn handle_standard_request(
 
     let mut bytes_vec = request_bytes.to_vec();
     if !decryption_payload.is_empty() {
-        let request_payload = e3client::CryptoRequest::from((
-            serde_json::Value::Array(decryption_payload),
-            cage_context,
-        ));
+        let request_payload =
+            e3client::CryptoRequest::new(serde_json::Value::Array(decryption_payload));
         let decrypted: DecryptRequest = match e3_client
             .decrypt_with_retries(2, request_payload)
             .await

@@ -161,8 +161,6 @@ async fn attestation_handler() -> Result<Vec<u8>, Infallible> {
 
 #[derive(Debug, Deserialize, Serialize)]
 struct RequestPayload {
-  app_uuid: String,
-  team_uuid: String,
   data: Value
 }
 

@@ -14,7 +14,7 @@ use hyper::{
 use crate::base_tls_client::ClientError;
 use crate::e3client::{CryptoRequest, CryptoResponse, E3Client};
 use crate::error::Error;
-use crate::{CageContext, CageContextError};
+use crate::CageContextError;
 
 #[cfg(feature = "enclave")]
 use super::attest;
@@ -113,10 +113,9 @@ impl CryptoApi {
     async fn build_request(&mut self, req: Request<Body>) -> Result<CryptoRequest, CryptoApiError> {
         let (_, body) = req.into_parts();
         let body_bytes = hyper::body::to_bytes(body).await?;
-        let cage_context = CageContext::get()?;
         let body: Value =
             serde_json::from_slice(&body_bytes).map_err(|_| CryptoApiError::SerializationError)?;
-        let payload = CryptoRequest::from((body, &cage_context));
+        let payload = CryptoRequest::new(body);
         Ok(payload)
     }
 
