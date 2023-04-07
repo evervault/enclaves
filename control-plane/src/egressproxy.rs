@@ -28,9 +28,16 @@ impl EgressProxy {
         let allowed_domains = shared::server::egress::get_egress_allow_list();
 
         loop {
+            let domains = allowed_domains.clone();
             match server.accept().await {
                 Ok(stream) => {
-                    tokio::spawn(Self::connect(stream, allowed_domains.clone()));
+                    tokio::spawn(async move {
+                        if let Err(e) = Self::handle_connection(stream, domains).await {
+                            eprintln!(
+                                "An error occurred while handling an egress connection - {e:?}"
+                            );
+                        }
+                    });
                 }
                 Err(e) => {
                     eprintln!("An error occurred accepting the egress connection — {e:?}");
@@ -39,15 +46,6 @@ impl EgressProxy {
         }
         #[allow(unreachable_code)]
         Ok(())
-    }
-
-    async fn connect<T: AsyncReadExt + AsyncWriteExt + Unpin>(
-        stream: T,
-        egress_domains: EgressDomains,
-    ) {
-        if let Err(e) = Self::handle_connection(stream, egress_domains).await {
-            eprintln!("An error occurred while handling an egress connection - {e:?}");
-        }
     }
 
     async fn handle_connection<T: AsyncReadExt + AsyncWriteExt + Unpin>(
