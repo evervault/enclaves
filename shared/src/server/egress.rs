@@ -12,7 +12,7 @@ pub enum EgressError {
     EgressDomainNotAllowed(String),
     #[error("Client Hello not found")]
     ClientHelloMissing,
-    #[error("TLS extention missing")]
+    #[error("TLS extension missing")]
     ExtensionMissing,
 }
 
