@@ -1,5 +1,8 @@
 use crate::error::{Result, ServerError};
 use shared::rpc::request::ExternalRequest;
+use shared::server::egress::check_allow_list;
+use shared::server::egress::get_hostname;
+use shared::server::egress::EgressDomains;
 use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
 use shared::utils::pipe_streams;
@@ -24,17 +27,12 @@ impl EgressProxy {
     pub async fn listen() -> Result<()> {
         println!("Egress proxy started");
         let mut server = get_vsock_server(EGRESS_PROXY_VSOCK_PORT, Parent).await?;
+        let allowed_domains = shared::server::egress::get_egress_allow_list();
 
         loop {
             match server.accept().await {
                 Ok(stream) => {
-                    tokio::spawn(async move {
-                        if let Err(e) = Self::handle_connection(stream).await {
-                            eprintln!(
-                                "An error occurred while handling an egress connection - {e:?}"
-                            );
-                        }
-                    });
+                    tokio::spawn(Self::connect(stream, allowed_domains.clone()));
                 }
                 Err(e) => {
                     eprintln!("An error occurred accepting the egress connection — {e:?}");
@@ -45,8 +43,18 @@ impl EgressProxy {
         Ok(())
     }
 
+    async fn connect<T: AsyncReadExt + AsyncWriteExt + Unpin>(
+        stream: T,
+        egress_domains: EgressDomains,
+    ) {
+        if let Err(e) = Self::handle_connection(stream, egress_domains).await {
+            eprintln!("An error occurred while handling an egress connection - {e:?}");
+        }
+    }
+
     async fn handle_connection<T: AsyncReadExt + AsyncWriteExt + Unpin>(
         mut external_stream: T,
+        egress_domains: EgressDomains,
     ) -> Result<(u64, u64)> {
         println!("Received request to egress proxy");
         let mut request_buffer = [0; 4096];
@@ -63,6 +71,10 @@ impl EgressProxy {
                 }
             };
 
+        let hostname = get_hostname(external_request.data.clone())?;
+        check_allow_list(hostname.clone(), egress_domains)?;
+
+        println!("CP: PARSED HOSTNAME!! {}", hostname.clone());
         let mut remote_stream = TcpStream::connect((connect_ip, external_request.port)).await?;
         remote_stream.write_all(&external_request.data).await?;
 

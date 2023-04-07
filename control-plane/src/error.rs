@@ -1,3 +1,4 @@
+use shared::server::egress::EgressError;
 use thiserror::Error;
 use trust_dns_resolver::error::ResolveError;
 
@@ -27,6 +28,8 @@ pub enum ServerError {
     CertProvisionerMtls(String),
     #[error(transparent)]
     EnvError(#[from] std::env::VarError),
+    #[error("Egress error: {0}")]
+    EgressError(#[from] EgressError),
 }
 
 pub type Result<T> = std::result::Result<T, ServerError>;

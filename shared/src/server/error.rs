@@ -1,12 +1,15 @@
 use std::fmt::Formatter;
 use thiserror::Error;
 
+use super::egress::EgressError;
+
 #[derive(Error, Debug)]
 pub enum ServerError {
     IoError(#[from] std::io::Error),
     Hyper(#[from] hyper::Error),
     JsonError(#[from] serde_json::Error),
     InvalidPath(String),
+    EgressError(#[from] EgressError),
 }
 
 impl std::fmt::Display for ServerError {

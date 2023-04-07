@@ -489,7 +489,6 @@ dependencies = [
  "shared",
  "sys-info",
  "thiserror",
- "tls-parser",
  "tokio",
  "tokio-retry",
  "tokio-rustls",
@@ -1931,6 +1930,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "thiserror",
+ "tls-parser",
  "tokio",
  "tokio-vsock",
 ]

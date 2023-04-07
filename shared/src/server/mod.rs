@@ -1,4 +1,5 @@
 pub mod config_server;
+pub mod egress;
 pub mod error;
 pub mod health;
 pub mod tcp;
