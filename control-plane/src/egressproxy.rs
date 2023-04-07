@@ -72,7 +72,7 @@ impl EgressProxy {
             };
 
         let hostname = get_hostname(external_request.data.clone())?;
-        if let Err(err) = check_allow_list(hostname.clone(), egress_domains){
+        if let Err(err) = check_allow_list(hostname.clone(), egress_domains) {
             let _ = external_stream.shutdown().await;
             return Err(err.into());
         };

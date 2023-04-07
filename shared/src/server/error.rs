@@ -1,7 +1,6 @@
 use std::fmt::Formatter;
 use thiserror::Error;
 
-
 #[derive(Error, Debug)]
 pub enum ServerError {
     IoError(#[from] std::io::Error),

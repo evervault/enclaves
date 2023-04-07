@@ -27,6 +27,6 @@ rustls-pemfile = "1.0.1"
 
 [features]
 default = []
-network_egress = []
+network_egress = ["shared/network_egress"]
 enclave = ["dep:tokio-vsock", "shared/enclave"]
 not_enclave = ["network_egress"]
