@@ -73,8 +73,6 @@ impl EgressProxy {
 
         let hostname = get_hostname(external_request.data.clone())?;
         check_allow_list(hostname.clone(), egress_domains)?;
-
-        println!("CP: PARSED HOSTNAME!! {}", hostname.clone());
         let mut remote_stream = TcpStream::connect((connect_ip, external_request.port)).await?;
         remote_stream.write_all(&external_request.data).await?;
 

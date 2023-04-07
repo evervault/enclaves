@@ -1,7 +1,6 @@
 use std::fmt::Formatter;
 use thiserror::Error;
 
-use super::egress::EgressError;
 
 #[derive(Error, Debug)]
 pub enum ServerError {
@@ -9,7 +8,8 @@ pub enum ServerError {
     Hyper(#[from] hyper::Error),
     JsonError(#[from] serde_json::Error),
     InvalidPath(String),
-    EgressError(#[from] EgressError),
+    #[cfg(feature = "network_egress")]
+    EgressError(#[from] super::egress::EgressError),
 }
 
 impl std::fmt::Display for ServerError {

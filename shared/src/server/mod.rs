@@ -1,4 +1,5 @@
 pub mod config_server;
+#[cfg(feature = "network_egress")]
 pub mod egress;
 pub mod error;
 pub mod health;
