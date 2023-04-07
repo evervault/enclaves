@@ -1,8 +1,6 @@
 use crate::error::{Result, ServerError};
 use shared::rpc::request::ExternalRequest;
-use shared::server::egress::check_allow_list;
-use shared::server::egress::get_hostname;
-use shared::server::egress::EgressDomains;
+use shared::server::egress::{check_allow_list, get_hostname, EgressDomains};
 use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
 use shared::utils::pipe_streams;
