@@ -1,5 +1,6 @@
 use crate::error::{Result, ServerError};
 use shared::rpc::request::ExternalRequest;
+use shared::server::egress::{check_allow_list, get_hostname, EgressDomains};
 use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
 use shared::utils::pipe_streams;
@@ -24,12 +25,14 @@ impl EgressProxy {
     pub async fn listen() -> Result<()> {
         println!("Egress proxy started");
         let mut server = get_vsock_server(EGRESS_PROXY_VSOCK_PORT, Parent).await?;
+        let allowed_domains = shared::server::egress::get_egress_allow_list();
 
         loop {
+            let domains = allowed_domains.clone();
             match server.accept().await {
                 Ok(stream) => {
                     tokio::spawn(async move {
-                        if let Err(e) = Self::handle_connection(stream).await {
+                        if let Err(e) = Self::handle_connection(stream, domains).await {
                             eprintln!(
                                 "An error occurred while handling an egress connection - {e:?}"
                             );
@@ -47,6 +50,7 @@ impl EgressProxy {
 
     async fn handle_connection<T: AsyncReadExt + AsyncWriteExt + Unpin>(
         mut external_stream: T,
+        egress_domains: EgressDomains,
     ) -> Result<(u64, u64)> {
         println!("Received request to egress proxy");
         let mut request_buffer = [0; 4096];
@@ -63,6 +67,11 @@ impl EgressProxy {
                 }
             };
 
+        let hostname = get_hostname(external_request.data.clone())?;
+        if let Err(err) = check_allow_list(hostname.clone(), egress_domains) {
+            let _ = external_stream.shutdown().await;
+            return Err(err.into());
+        };
         let mut remote_stream = TcpStream::connect((connect_ip, external_request.port)).await?;
         remote_stream.write_all(&external_request.data).await?;
 

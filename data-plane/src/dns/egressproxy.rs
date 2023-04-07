@@ -1,8 +1,10 @@
 use super::error::DNSError;
-use crate::configuration::EgressDomains;
 use crate::dns::cache::Cache;
 use crate::dns::error::DNSError::MissingIP;
 use shared::rpc::request::ExternalRequest;
+use shared::server::egress::check_allow_list;
+use shared::server::egress::get_hostname;
+use shared::server::egress::EgressDomains;
 use shared::server::error::ServerResult;
 use shared::server::tcp::TcpServer;
 use shared::server::CID::Parent;
@@ -10,10 +12,6 @@ use shared::server::{get_vsock_client, Listener};
 use shared::utils::pipe_streams;
 use shared::EGRESS_PROXY_VSOCK_PORT;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use tls_parser::nom::Finish;
-use tls_parser::{
-    parse_tls_extensions, parse_tls_plaintext, TlsExtension, TlsMessage, TlsMessageHandshake,
-};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -41,51 +39,6 @@ impl EgressProxy {
         Ok(())
     }
 
-    fn get_hostname(data: Vec<u8>) -> Result<Option<String>, DNSError> {
-        let (_, parsed_request) = parse_tls_plaintext(&data)
-            .finish()
-            .map_err(|tls_parse_err| DNSError::TlsParseError(format!("{tls_parse_err:?}")))?;
-
-        let client_hello = match &parsed_request.msg[0] {
-            TlsMessage::Handshake(TlsMessageHandshake::ClientHello(client_hello)) => client_hello,
-            _ => return Ok(None),
-        };
-
-        let raw_extensions = match client_hello.ext {
-            Some(raw_extensions) => raw_extensions,
-            _ => return Ok(None),
-        };
-        let mut destination = "".to_string();
-        let (_, extensions) = parse_tls_extensions(raw_extensions)
-            .finish()
-            .map_err(|tls_parse_err| DNSError::TlsParseError(format!("{tls_parse_err:?}")))?;
-
-        for extension in extensions {
-            if let TlsExtension::SNI(sni_vec) = extension {
-                for (_, item) in sni_vec {
-                    if let Ok(hostname) = std::str::from_utf8(item) {
-                        destination = hostname.to_string();
-                    }
-                }
-            }
-        }
-        Ok(Some(destination))
-    }
-
-    fn check_allow_list(hostname: String, allowed_domains: EgressDomains) -> Result<(), DNSError> {
-        let valid_wildcard = allowed_domains
-            .wildcard
-            .iter()
-            .any(|wildcard| hostname.ends_with(wildcard));
-
-        if allowed_domains.exact.contains(&hostname) || allowed_domains.allow_all || valid_wildcard
-        {
-            Ok(())
-        } else {
-            Err(DNSError::EgressDomainNotAllowed(hostname))
-        }
-    }
-
     async fn handle_egress_connection<T: AsyncRead + AsyncWrite + Unpin>(
         mut external_stream: T,
         port: u16,
@@ -96,12 +49,8 @@ impl EgressProxy {
         let n = external_stream.read(&mut buf).await?;
         let customer_data = &mut buf[..n];
 
-        let hostname = match Self::get_hostname(customer_data.to_vec())? {
-            Some(hostname) => hostname,
-            None => return Err(DNSError::NoHostnameFound),
-        };
-
-        Self::check_allow_list(hostname.clone(), allowed_domains.clone())?;
+        let hostname = get_hostname(customer_data.to_vec())?;
+        check_allow_list(hostname.clone(), allowed_domains.clone())?;
 
         let cached_ips = Cache::get_ip(hostname.as_ref());
 

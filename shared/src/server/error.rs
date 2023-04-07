@@ -7,6 +7,8 @@ pub enum ServerError {
     Hyper(#[from] hyper::Error),
     JsonError(#[from] serde_json::Error),
     InvalidPath(String),
+    #[cfg(feature = "network_egress")]
+    EgressError(#[from] super::egress::EgressError),
 }
 
 impl std::fmt::Display for ServerError {
