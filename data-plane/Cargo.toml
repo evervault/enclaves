@@ -45,6 +45,6 @@ tokio-test = "0.4.2"
 [features]
 default = ["tls_termination"]
 tls_termination = ["dep:nom"]
-network_egress = ["dep:dns-message-parser", "dep:dashmap"]
+network_egress = ["dep:dns-message-parser", "dep:dashmap", "shared/network_egress"]
 enclave = ["dep:tokio-vsock", "shared/enclave"]
 not_enclave = []
