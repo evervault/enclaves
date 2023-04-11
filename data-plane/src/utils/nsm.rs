@@ -12,7 +12,7 @@ pub enum NsmConnectionError {
 
 impl NsmConnection {
     pub fn try_new() -> Result<Self, NsmConnectionError> {
-        let nsm_fd = nitro::driver::nsm_init()();
+        let nsm_fd = nitro::driver::nsm_init();
         if nsm_fd < 0 {
             return Err(NsmConnectionError::InitFailed);
         }
