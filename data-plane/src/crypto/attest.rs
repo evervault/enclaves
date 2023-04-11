@@ -1,3 +1,4 @@
+use crate::utils::nsm::{NsmConnection, NsmConnectionError};
 use aws_nitro_enclaves_cose as cose;
 use aws_nitro_enclaves_nsm_api as nitro;
 use chrono::{TimeZone, Utc};
@@ -38,14 +39,16 @@ pub enum AttestationError {
     AttestationDocParseFailed(serde_cbor::Error),
     #[error("Could not parse signing cert: {0}")]
     SigningCertParseFailed(openssl::error::ErrorStack),
+    #[error(transparent)]
+    ConnectionFailed(#[from] NsmConnectionError),
 }
 
 pub fn get_attestation_doc(
     challenge: Option<Vec<u8>>,
     nonce: Option<Vec<u8>>,
 ) -> Result<Vec<u8>, AttestationError> {
-    let nsm_fd: i32 = nitro::driver::nsm_init();
-    let nonce = get_nonce(nonce, nsm_fd)?;
+    let nsm_conn = NsmConnection::try_new()?;
+    let nonce = get_nonce(nonce, nsm_conn.fd())?;
 
     let nsm_request = nitro::api::Request::Attestation {
         user_data: challenge.map(ByteBuf::from),
@@ -53,7 +56,7 @@ pub fn get_attestation_doc(
         public_key: None,
     };
 
-    match nitro::driver::nsm_process_request(nsm_fd, nsm_request) {
+    match nitro::driver::nsm_process_request(nsm_conn.fd(), nsm_request) {
         nitro::api::Response::Attestation { document } => Ok(document),
         nitro::api::Response::Error(err) => Err(AttestationError::AttestationFailed(err)),
         unexpected_response => Err(AttestationError::UnexpectedResponse(
