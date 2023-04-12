@@ -82,8 +82,7 @@ impl EgressProxy {
 #[cfg(test)]
 mod tests {
     use crate::dns::egressproxy::EgressDomains;
-    use crate::dns::egressproxy::EgressProxy;
-    use crate::dns::error::DNSError::EgressDomainNotAllowed;
+    use shared::server::egress::{check_allow_list, EgressError::EgressDomainNotAllowed};
 
     #[test]
     fn test_valid_all_domains() {
@@ -93,7 +92,7 @@ mod tests {
             allow_all: true,
         };
         assert_eq!(
-            EgressProxy::check_allow_list("app.evervault.com".to_string(), egress_domains).unwrap(),
+            check_allow_list("app.evervault.com".to_string(), egress_domains).unwrap(),
             ()
         );
     }
@@ -105,7 +104,7 @@ mod tests {
             allow_all: false,
         };
         assert_eq!(
-            EgressProxy::check_allow_list("app.evervault.com".to_string(), egress_domains).unwrap(),
+            check_allow_list("app.evervault.com".to_string(), egress_domains).unwrap(),
             ()
         );
     }
@@ -117,7 +116,7 @@ mod tests {
             allow_all: false,
         };
         assert_eq!(
-            EgressProxy::check_allow_list("app.evervault.com".to_string(), egress_domains).unwrap(),
+            check_allow_list("app.evervault.com".to_string(), egress_domains).unwrap(),
             ()
         );
     }
@@ -128,7 +127,7 @@ mod tests {
             wildcard: vec!["evervault.com".to_string()],
             allow_all: false,
         };
-        let result = EgressProxy::check_allow_list("google.com".to_string(), egress_domains);
+        let result = check_allow_list("google.com".to_string(), egress_domains);
         assert!(matches!(result, Err(EgressDomainNotAllowed(_))));
     }
 }
