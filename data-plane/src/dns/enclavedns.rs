@@ -44,7 +44,7 @@ impl EnclaveDns {
             socket
                 .send_to(&dns_response, &src)
                 .await
-                .map_err(|_| DNSError::SendError)
+                .map_err(|e| e.into())
         } else {
             let rr = Self::get_records(resource_records);
             Cache::store_ip(&domain_name, rr);
@@ -53,7 +53,7 @@ impl EnclaveDns {
             socket
                 .send_to(&local_response, &src)
                 .await
-                .map_err(|_| DNSError::SendError)
+                .map_err(|e| e.into())
         }
     }
 

@@ -21,6 +21,4 @@ pub enum DNSError {
     NoHostnameFound,
     #[error("Egress error {0}")]
     EgressError(#[from] EgressError),
-    #[error("Error sending DNS request")]
-    SendError,
 }
