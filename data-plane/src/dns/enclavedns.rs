@@ -19,28 +19,41 @@ impl EnclaveDns {
         let socket = UdpSocket::bind("127.0.0.1:53").await?;
 
         loop {
-            let mut buffer = [0; 512];
-            let (amt, src) = socket.recv_from(&mut buffer).await?;
-            let buf = Bytes::copy_from_slice(&buffer[..amt]);
+            if let Err(err) = Self::process_dns_request(&socket).await {
+                eprintln!("Error in DNS proxy: {err:?}");
+                continue;
+            };
+        }
+    }
 
-            let dns_response = Self::forward_dns_lookup(buf.clone()).await?;
-            let dns = Dns::decode(dns_response.clone())?;
-            let domain_name = dns
-                .questions
-                .get(0)
-                .ok_or(DNSError::DNSNoQuestionsFound)?
-                .domain_name
-                .to_string();
-            let resource_records = dns.answers.clone();
-            if resource_records.is_empty() {
-                socket.send_to(&dns_response, &src).await?;
-            } else {
-                let rr = Self::get_records(resource_records);
-                Cache::store_ip(&domain_name, rr);
+    async fn process_dns_request(socket: &UdpSocket) -> Result<usize, DNSError> {
+        let mut buffer = [0; 512];
+        let (amt, src) = socket.recv_from(&mut buffer).await?;
+        let buf = Bytes::copy_from_slice(&buffer[..amt]);
 
-                let local_response = Self::local_packet(dns.clone())?;
-                socket.send_to(&local_response, &src).await?;
-            }
+        let dns_response = Self::forward_dns_lookup(buf.clone()).await?;
+        let dns = Dns::decode(dns_response.clone())?;
+        let domain_name = dns
+            .questions
+            .get(0)
+            .ok_or(DNSError::DNSNoQuestionsFound)?
+            .domain_name
+            .to_string();
+        let resource_records = dns.answers.clone();
+        if resource_records.is_empty() {
+            socket
+                .send_to(&dns_response, &src)
+                .await
+                .map_err(|_| DNSError::SendError)
+        } else {
+            let rr = Self::get_records(resource_records);
+            Cache::store_ip(&domain_name, rr);
+
+            let local_response = Self::local_packet(dns.clone())?;
+            socket
+                .send_to(&local_response, &src)
+                .await
+                .map_err(|_| DNSError::SendError)
         }
     }
 
