@@ -84,7 +84,7 @@ pub async fn try_parse_proxy_protocol<S: AsyncRead + AsyncWrite + Unpin + Sync>(
         }
         total_read_bytes += read_len;
 
-        let relevant_slice = (&buf[..total_read_bytes]).to_vec();
+        let relevant_slice = (buf[..total_read_bytes]).to_vec();
         let parsed = PPHeader::try_from(&relevant_slice[..]);
         match parsed {
             Ok(header) => {
