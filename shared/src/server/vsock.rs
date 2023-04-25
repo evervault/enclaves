@@ -37,11 +37,11 @@ impl VsockServerWithProxyProtocol {
 
 #[async_trait]
 impl Listener for VsockServerWithProxyProtocol {
-    type Connection = proxy_protocol::AcceptedConn<VsockStream>;
+    type Connection = super::proxy_protocol::AcceptedConn<VsockStream>;
     type Error = ServerError;
     async fn accept(&mut self) -> Result<Self::Connection, Self::Error> {
         let (conn, _socket_addr) = self.inner.accept().await?;
-        let proxy_protocol_conn = proxy_protocol::try_parse_proxy_protocol(conn).await?;
+        let proxy_protocol_conn = super::proxy_protocol::try_parse_proxy_protocol(conn).await?;
         Ok(proxy_protocol_conn)
     }
 }
