@@ -1,7 +1,7 @@
 #[cfg(not(feature = "tls_termination"))]
 use shared::server::Listener;
 use shared::server::CID::Enclave;
-use shared::{print_version, server::get_vsock_server};
+use shared::{print_version, server::get_vsock_server_with_proxy_protocol};
 
 #[cfg(feature = "network_egress")]
 use data_plane::configuration;
@@ -100,7 +100,7 @@ async fn start(data_plane_port: u16) {
 
 async fn start_data_plane(data_plane_port: u16) {
     println!("Data plane starting up. Forwarding traffic to {data_plane_port}");
-    let server = match get_vsock_server(ENCLAVE_CONNECT_PORT, Enclave).await {
+    let server = match get_vsock_server_with_proxy_protocol(ENCLAVE_CONNECT_PORT, Enclave).await {
         Ok(server) => server,
         Err(error) => return eprintln!("Error creating server: {error}"),
     };

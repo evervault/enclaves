@@ -19,6 +19,7 @@ use hyper::service::service_fn;
 use hyper::{Body, Request, Response};
 use sha2::Digest;
 use shared::logging::TrxContextBuilder;
+use shared::server::proxy_protocol::ProxiedConnection;
 use shared::server::Listener;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -27,7 +28,7 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 pub async fn run<L: Listener + Send + Sync>(tcp_server: L, port: u16)
 where
     TlsError: From<<L as Listener>::Error>,
-    <L as Listener>::Connection: 'static,
+    <L as Listener>::Connection: ProxiedConnection + 'static,
 {
     let mut server = TlsServerBuilder::new()
         .with_server(tcp_server)
@@ -59,6 +60,7 @@ where
                 continue;
             }
         };
+
         let server = http_server.clone();
         let e3_client_for_connection = e3_client.clone();
         let cage_context_for_connection = cage_context.clone();

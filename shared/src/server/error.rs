@@ -9,6 +9,7 @@ pub enum ServerError {
     InvalidPath(String),
     #[cfg(feature = "network_egress")]
     EgressError(#[from] super::egress::EgressError),
+    UnexpectedEOF,
 }
 
 impl std::fmt::Display for ServerError {
