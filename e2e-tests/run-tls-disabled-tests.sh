@@ -3,7 +3,7 @@ set -e
 
 
 # kill container if it is left running by hanging test, then generate local testing certs
-if [[ -z "${CI}" ]];
+if [ "${CI:-unset}" = "unset" ];
 then
   docker compose down || true
   cargo build --release --target x86_64-unknown-linux-musl --no-default-features
