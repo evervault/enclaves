@@ -8,6 +8,9 @@ then
   docker compose down || true
   cargo build --release --target x86_64-unknown-linux-musl --features network_egress
   . e2e-tests/mtls-testing-certs/ca/generate-certs.sh &
+else 
+  # if in CI, generate certs and export them
+  . e2e-tests/mtls-testing-certs/ca/generate-certs.sh
 fi
 
 # install the node modules for customer process and test script
