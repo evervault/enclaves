@@ -18,9 +18,8 @@ impl<S: AsyncRead + AsyncWrite + Sync> AcceptedConn<S> {
     ) -> Self {
         // if the preread buffer is empty, we don't need to store it
         let preread_buffer = match opt_preread_buffer.as_deref() {
-            Some(buf) if buf.len() == 0 => None,
-            Some(_) => opt_preread_buffer,
-            None => None,
+            Some(buf) if buf.len() > 0 => buf,
+            _ => None,
         };
         Self {
             inner,
