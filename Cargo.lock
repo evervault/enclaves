@@ -1959,6 +1959,7 @@ dependencies = [
  "tls-parser",
  "tokio",
  "tokio-rustls",
+ "tokio-test",
  "tokio-vsock",
 ]
 

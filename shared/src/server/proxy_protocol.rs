@@ -14,8 +14,14 @@ impl<S: AsyncRead + AsyncWrite + Sync> AcceptedConn<S> {
     fn new(
         inner: S,
         proxy_protocol: Option<PPHeader<'static>>,
-        preread_buffer: Option<Vec<u8>>,
+        opt_preread_buffer: Option<Vec<u8>>,
     ) -> Self {
+        // if the preread buffer is empty, we don't need to store it
+        let preread_buffer = match opt_preread_buffer.as_deref() {
+            Some(buf) if buf.len() == 0 => None,
+            Some(_) => opt_preread_buffer,
+            None => None,
+        };
         Self {
             inner,
             proxy_protocol,
@@ -79,6 +85,7 @@ pub async fn try_parse_proxy_protocol<S: AsyncRead + AsyncWrite + Unpin + Sync>(
     loop {
         let read_len = incoming_conn.read_buf(&mut buf).await?;
         if read_len == 0 {
+            println!("empty read");
             let _ = incoming_conn.shutdown().await;
             return Err(ServerError::UnexpectedEOF);
         }
@@ -88,6 +95,8 @@ pub async fn try_parse_proxy_protocol<S: AsyncRead + AsyncWrite + Unpin + Sync>(
         let parsed = PPHeader::try_from(&relevant_slice[..]);
         match parsed {
             Ok(header) => {
+                println!("parsed header");
+                println!("Adresses: {:?}", header.addresses);
                 let owned_header = header.to_owned();
                 drop(header);
                 let _header_bytes: Vec<_> = buf.drain(..owned_header.len()).collect();
@@ -100,9 +109,11 @@ pub async fn try_parse_proxy_protocol<S: AsyncRead + AsyncWrite + Unpin + Sync>(
             }
             // don't need to reserve more bytes for incomplete — will only throw on first read, so default buf size will be sufficient
             Err(ppp::v2::ParseError::Incomplete(_)) => {
+                println!("incomplete");
                 continue;
             }
             Err(ppp::v2::ParseError::Partial(_, required_bytes)) => {
+                println!("partial, {required_bytes}");
                 buf.reserve_exact(required_bytes);
             }
             Err(e) => {
@@ -138,5 +149,109 @@ impl<C: AsyncRead + AsyncWrite + Sync> ProxiedConnection for AcceptedConn<C> {
 
     fn has_proxy_protocol(&self) -> bool {
         self.proxy_protocol.is_some()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ProxiedConnection;
+    use std::net::SocketAddr;
+    use tokio::io::AsyncReadExt;
+    use tokio_test::io::Builder;
+
+    fn build_proxy_protocol_header() -> Vec<u8> {
+        let header = ppp::v2::Builder::with_addresses(
+            ppp::v2::Version::Two | ppp::v2::Command::Proxy,
+            ppp::v2::Protocol::Stream,
+            (
+                "1.2.3.4:80"
+                    .parse::<SocketAddr>()
+                    .expect("Infallible - hardcoded"),
+                "5.6.7.8:443"
+                    .parse::<SocketAddr>()
+                    .expect("Infallible - hardcoded"),
+            ),
+        );
+        header.build().expect("Infallible - hardcoded")
+    }
+
+    #[tokio::test]
+    async fn test_parse_proxy_protocol() {
+        let buf = build_proxy_protocol_header();
+        let mut mock_builder = Builder::new();
+        mock_builder.read(&buf[..]);
+        let mut mock = mock_builder.build();
+        let accepted_conn = super::try_parse_proxy_protocol(&mut mock).await.unwrap();
+        let parsed_header = accepted_conn.proxy_protocol().unwrap();
+        assert_eq!(&buf[..], parsed_header.header.as_ref());
+    }
+
+    #[tokio::test]
+    async fn test_parse_invalid_proxy_protocol() {
+        let buf = build_proxy_protocol_header();
+        let mut mock_builder = Builder::new();
+        mock_builder.read(&buf[..buf.len() - 10]);
+        let mut mock = mock_builder.build();
+        let parse_result = super::try_parse_proxy_protocol(&mut mock).await;
+        assert!(parse_result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_read_from_socket_after_proxy_parse() {
+        use tokio::io::AsyncReadExt;
+        let buf = build_proxy_protocol_header();
+        let mut mock_builder = Builder::new();
+        mock_builder.read(&buf[..]);
+        let client_hello = b"TLS Client Hello";
+        mock_builder.read(client_hello);
+        let mut mock = mock_builder.build();
+        let mut accepted_conn: crate::server::proxy_protocol::AcceptedConn<
+            &mut tokio_test::io::Mock,
+        > = super::try_parse_proxy_protocol(&mut mock).await.unwrap();
+        let parsed_header = accepted_conn.proxy_protocol().unwrap();
+        assert_eq!(&buf[..], parsed_header.header.as_ref());
+
+        // Validate that subsequent bytes are uneffected
+        let mut read_buf = Vec::with_capacity(client_hello.len());
+        accepted_conn.read_buf(&mut read_buf).await.unwrap();
+        assert_eq!(client_hello, &read_buf[..]);
+    }
+
+    #[tokio::test]
+    async fn test_parsing_with_valid_proxy_header() {
+        let buf = build_proxy_protocol_header();
+        let mut mock_builder = Builder::new();
+        mock_builder.read(&buf[..]);
+        let mut mock = mock_builder.build();
+        let accepted_conn: crate::server::proxy_protocol::AcceptedConn<&mut tokio_test::io::Mock> =
+            super::try_parse_proxy_protocol(&mut mock).await.unwrap();
+        assert!(accepted_conn.has_proxy_protocol());
+    }
+
+    #[tokio::test]
+    async fn test_parsing_with_invalid_proxy_header() {
+        let mut buf = build_proxy_protocol_header();
+        let mut mock_builder = Builder::new();
+        // remove 13 bytes off the end of the proxy protocol header so it's incomplete
+        let _: Vec<_> = buf.drain(..buf.len() - 13).collect();
+
+        mock_builder.read(&buf[..]);
+
+        // put some dummy data in the socket
+        let dummy_data = [1_u8; 20].to_vec();
+        mock_builder.read(&dummy_data[..]);
+        let mut mock = mock_builder.build();
+        let parse_result = super::try_parse_proxy_protocol(&mut mock).await;
+
+        // Should still be able to read from the socket
+        assert!(parse_result.is_ok());
+        let mut accepted_conn = parse_result.unwrap();
+        // no proxy protocol parsed for this connection
+        assert_eq!(accepted_conn.has_proxy_protocol(), false);
+        let mut read_buf = Vec::with_capacity(20);
+        // reading to EOF should return us everything from the socket including the incomplete proxy protocol
+        accepted_conn.read_to_end(&mut read_buf).await.unwrap();
+        let entire_content = vec![buf, dummy_data].concat();
+        assert_eq!(&entire_content[..], &read_buf[..]);
     }
 }
