@@ -18,7 +18,7 @@ impl<S: AsyncRead + AsyncWrite + Sync> AcceptedConn<S> {
     ) -> Self {
         // if the preread buffer is empty, we don't need to store it
         let preread_buffer = match opt_preread_buffer.as_deref() {
-            Some(buf) if buf.len() > 0 => Some(buf),
+            Some(buf) if buf.len() > 0 => opt_preread_buffer,
             _ => None,
         };
         Self {
@@ -110,7 +110,7 @@ pub async fn try_parse_proxy_protocol<S: AsyncRead + AsyncWrite + Unpin + Sync>(
             Err(ppp::v2::ParseError::Partial(_, required_bytes)) => {
                 buf.reserve_exact(required_bytes);
             }
-            Err(e) => {
+            Err(_) => {
                 return Ok(AcceptedConn::new(incoming_conn, None, Some(buf)));
             }
         }
