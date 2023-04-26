@@ -31,14 +31,6 @@ jobs:
       - name: Run end-to-end test script
         env:
           CI: true
-          # MOCK_CRYPTO_CERT: ${{ secrets.MOCK_CRYPTO_CERT }}
-          # MOCK_CRYPTO_KEY: ${{ secrets.MOCK_CRYPTO_KEY }}
-          # RUST_CRYPTO_REGISTRY: ${{ secrets.RUST_CRYPTO_REGISTRY }}
-          # MOCK_CERT_PROVISIONER_CLIENT_CERT: ${{ secrets.MOCK_CERT_PROVISIONER_CLIENT_CERT }}
-          # MOCK_CERT_PROVISIONER_CLIENT_KEY: ${{ secrets.MOCK_CERT_PROVISIONER_CLIENT_KEY }}
-          # MOCK_CERT_PROVISIONER_ROOT_CERT: ${{ secrets.MOCK_CERT_PROVISIONER_ROOT_CERT }}
-          # MOCK_CERT_PROVISIONER_SERVER_CERT: ${{ secrets.MOCK_CERT_PROVISIONER_SERVER_CERT }}
-          # MOCK_CERT_PROVISIONER_SERVER_KEY: ${{ secrets.MOCK_CERT_PROVISIONER_SERVER_KEY }}
         run: sh e2e-tests/run-all-feature-tests.sh
   run_e2e_tests_no_tls_termination:
     runs-on: ubuntu-latest
@@ -64,12 +56,4 @@ jobs:
       - name: Run end-to-end test script
         env:
           CI: true
-          # MOCK_CRYPTO_CERT: ${{ secrets.MOCK_CRYPTO_CERT }}
-          # MOCK_CRYPTO_KEY: ${{ secrets.MOCK_CRYPTO_KEY }}
-          # RUST_CRYPTO_REGISTRY: ${{ secrets.RUST_CRYPTO_REGISTRY }}
-          # MOCK_CERT_PROVISIONER_CLIENT_CERT: ${{ secrets.MOCK_CERT_PROVISIONER_CLIENT_CERT }}
-          # MOCK_CERT_PROVISIONER_CLIENT_KEY: ${{ secrets.MOCK_CERT_PROVISIONER_CLIENT_KEY }}
-          # MOCK_CERT_PROVISIONER_ROOT_CERT: ${{ secrets.MOCK_CERT_PROVISIONER_ROOT_CERT }}
-          # MOCK_CERT_PROVISIONER_SERVER_CERT: ${{ secrets.MOCK_CERT_PROVISIONER_SERVER_CERT }}
-          # MOCK_CERT_PROVISIONER_SERVER_KEY: ${{ secrets.MOCK_CERT_PROVISIONER_SERVER_KEY }}
         run: sh e2e-tests/run-tls-disabled-tests.sh
