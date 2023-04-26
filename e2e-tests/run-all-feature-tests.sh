@@ -12,17 +12,17 @@ else
   # if in CI, generate certs and export them
   . e2e-tests/mtls-testing-certs/ca/generate-certs.sh
 
-  MOCK_CRYPTO_CERT=`cat e2e-tests/mtls-testing-certs/ca/certs/ca.crt` && export MOCK_CRYPTO_CERT
-  MOCK_CRYPTO_KEY=`cat e2e-tests/mtls-testing-certs/ca/certs/ca.key` && export MOCK_CRYPTO_KEY
+  MOCK_CRYPTO_CERT=`cat certs/ca.crt` && export MOCK_CRYPTO_CERT
+  MOCK_CRYPTO_KEY=`cat certs/ca.key` && export MOCK_CRYPTO_KEY
 
 
-  MOCK_CERT_PROVISIONER_CLIENT_CERT=`cat e2e-tests/mtls-testing-certs/ca/certs/client_0.crt` && export MOCK_CERT_PROVISIONER_CLIENT_CERT
-  MOCK_CERT_PROVISIONER_CLIENT_KEY=`cat e2e-tests/mtls-testing-certs/ca/certs/client_0.key` && export MOCK_CERT_PROVISIONER_CLIENT_KEY
-  MOCK_CERT_PROVISIONER_ROOT_CERT=`cat e2e-tests/mtls-testing-certs/ca/certs/ca.crt` && export MOCK_CERT_PROVISIONER_ROOT_CERT
+  MOCK_CERT_PROVISIONER_CLIENT_CERT=`cat certs/client_0.crt` && export MOCK_CERT_PROVISIONER_CLIENT_CERT
+  MOCK_CERT_PROVISIONER_CLIENT_KEY=`cat certs/client_0.key` && export MOCK_CERT_PROVISIONER_CLIENT_KEY
+  MOCK_CERT_PROVISIONER_ROOT_CERT=`cat certs/ca.crt` && export MOCK_CERT_PROVISIONER_ROOT_CERT
 
-  MOCK_CERT_PROVISIONER_SERVER_KEY=`cat e2e-tests/mtls-testing-certs/ca/certs/localhost.key` && export MOCK_CERT_PROVISIONER_SERVER_KEY
-  MOCK_CERT_PROVISIONER_ROOT_CERT=`cat e2e-tests/mtls-testing-certs/ca/certs/ca.crt` && export MOCK_CERT_PROVISIONER_ROOT_CERT
-  MOCK_CERT_PROVISIONER_SERVER_CERT=`cat e2e-tests/mtls-testing-certs/ca/certs/localhost.crt` && export MOCK_CERT_PROVISIONER_SERVER_CERT
+  MOCK_CERT_PROVISIONER_SERVER_KEY=`cat certs/localhost.key` && export MOCK_CERT_PROVISIONER_SERVER_KEY
+  MOCK_CERT_PROVISIONER_ROOT_CERT=`cat ca/certs/ca.crt` && export MOCK_CERT_PROVISIONER_ROOT_CERT
+  MOCK_CERT_PROVISIONER_SERVER_CERT=`cat certs/localhost.crt` && export MOCK_CERT_PROVISIONER_SERVER_CERT
 fi
 
 # install the node modules for customer process and test script
