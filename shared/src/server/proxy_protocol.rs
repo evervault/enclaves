@@ -84,7 +84,6 @@ pub async fn try_parse_proxy_protocol<S: AsyncRead + AsyncWrite + Unpin + Sync>(
     loop {
         let read_len = incoming_conn.read_buf(&mut buf).await?;
         if read_len == 0 {
-            println!("empty read");
             let _ = incoming_conn.shutdown().await;
             return Err(ServerError::UnexpectedEOF);
         }
@@ -94,8 +93,6 @@ pub async fn try_parse_proxy_protocol<S: AsyncRead + AsyncWrite + Unpin + Sync>(
         let parsed = PPHeader::try_from(&relevant_slice[..]);
         match parsed {
             Ok(header) => {
-                println!("parsed header");
-                println!("Adresses: {:?}", header.addresses);
                 let owned_header = header.to_owned();
                 drop(header);
                 let _header_bytes: Vec<_> = buf.drain(..owned_header.len()).collect();
@@ -108,15 +105,12 @@ pub async fn try_parse_proxy_protocol<S: AsyncRead + AsyncWrite + Unpin + Sync>(
             }
             // don't need to reserve more bytes for incomplete — will only throw on first read, so default buf size will be sufficient
             Err(ppp::v2::ParseError::Incomplete(_)) => {
-                println!("incomplete");
                 continue;
             }
             Err(ppp::v2::ParseError::Partial(_, required_bytes)) => {
-                println!("partial, {required_bytes}");
                 buf.reserve_exact(required_bytes);
             }
             Err(e) => {
-                eprintln!("{e:?}");
                 return Ok(AcceptedConn::new(incoming_conn, None, Some(buf)));
             }
         }
