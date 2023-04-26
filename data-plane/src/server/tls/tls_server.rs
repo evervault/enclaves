@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use openssl::pkey::PKey;
 use openssl::pkey::Private;
 use openssl::x509::X509;
-use shared::server::proxy_protocol::{PPHeader, ProxiedConnection};
+use shared::server::proxy_protocol::ProxiedConnection;
 use shared::server::Listener;
 use std::sync::Arc;
 use std::thread;

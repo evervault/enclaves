@@ -120,6 +120,15 @@ pub trait ProxiedConnection: Sync {
     fn has_proxy_protocol(&self) -> bool {
         false
     }
+
+    fn get_remote_addr(&self) -> Option<String> {
+        self.proxy_protocol()
+            .and_then(|header| match header.addresses {
+                ppp::v2::Addresses::IPv4(ipv4) => Some(ipv4.source_address.to_string()),
+                ppp::v2::Addresses::IPv6(ipv6) => Some(ipv6.source_address.to_string()),
+                _ => None,
+            })
+    }
 }
 
 impl<C: AsyncRead + AsyncWrite + Sync> ProxiedConnection for AcceptedConn<C> {
