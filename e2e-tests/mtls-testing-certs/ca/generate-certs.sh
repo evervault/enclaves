@@ -8,7 +8,11 @@ emit_msg() {
   echo "$DELIMETER"
 }
 
-export PATH=$(brew --prefix openssl)/bin:$PATH #make sure openssl is linked, not libressl
+PLATFORM=$(uname -s)
+if [ "$PLATFORM" = "Darwin" ]; then
+  emit_msg "Detected MacOS, setting path to use homebrew openssl"
+  export PATH=$(brew --prefix openssl)/bin:$PATH #make sure openssl is linked, not libressl
+fi
 
 mkdir -p certs 
 cd certs
@@ -41,9 +45,5 @@ openssl x509 -req -subj "/C=IE/ST=Leinster/L=Dublin/O=Evervault/OU=Engineering/C
 
 
 emit_msg "GENERATED CERTS FOR MTLS TESTING"
-
-
-emit_msg "Exporting env for E2E tests"
-sh ./export-certs.sh
 
 cd ..

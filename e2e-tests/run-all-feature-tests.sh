@@ -11,6 +11,20 @@ then
 else 
   # if in CI, generate certs and export them
   . e2e-tests/mtls-testing-certs/ca/generate-certs.sh
+
+  pushd e2e-tests/mtls-testing-certs/ca/certs
+  MOCK_CRYPTO_CERT=`cat ca.crt` && export MOCK_CRYPTO_CERT
+  MOCK_CRYPTO_KEY=`cat ca.key` && export MOCK_CRYPTO_KEY
+
+
+  MOCK_CERT_PROVISIONER_CLIENT_CERT=`cat client_0.crt` && export MOCK_CERT_PROVISIONER_CLIENT_CERT
+  MOCK_CERT_PROVISIONER_CLIENT_KEY=`cat client_0.key` && export MOCK_CERT_PROVISIONER_CLIENT_KEY
+  MOCK_CERT_PROVISIONER_ROOT_CERT=`cat ca.crt` && export MOCK_CERT_PROVISIONER_ROOT_CERT
+
+  MOCK_CERT_PROVISIONER_SERVER_KEY=`cat localhost.key` && export MOCK_CERT_PROVISIONER_SERVER_KEY
+  MOCK_CERT_PROVISIONER_ROOT_CERT=`cat ca.crt` && export MOCK_CERT_PROVISIONER_ROOT_CERT
+  MOCK_CERT_PROVISIONER_SERVER_CERT=`cat localhost.crt` && export MOCK_CERT_PROVISIONER_SERVER_CERT
+  popd
 fi
 
 # install the node modules for customer process and test script
