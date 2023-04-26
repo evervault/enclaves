@@ -12,10 +12,12 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v2
-      - uses: evervault/cargo-static-build@master
+      - name: Build Cages Project
+        uses: evervault/cargo-static-build@master
         with:
           cmd: cargo build --features network_egress --release --target x86_64-unknown-linux-musl
-      - uses: evervault/cargo-static-build@master
+      - name: Build mock crypto API
+        uses: evervault/cargo-static-build@master
         with:
           cmd: cd e2e-tests/mock-crypto ; cargo build --release --target x86_64-unknown-linux-musl
         env:
@@ -25,28 +27,22 @@ jobs:
           SKIP_LOGIN: true
       - uses: actions/setup-node@v1
         with:
-          node-version: '16.x'
+          node-version: "16.x"
       - name: Run end-to-end test script
         env:
           CI: true
-          MOCK_CRYPTO_CERT: ${{ secrets.MOCK_CRYPTO_CERT }}
-          MOCK_CRYPTO_KEY: ${{ secrets.MOCK_CRYPTO_KEY }}
-          RUST_CRYPTO_REGISTRY: ${{ secrets.RUST_CRYPTO_REGISTRY }}
-          MOCK_CERT_PROVISIONER_CLIENT_CERT: ${{ secrets.MOCK_CERT_PROVISIONER_CLIENT_CERT }}
-          MOCK_CERT_PROVISIONER_CLIENT_KEY: ${{ secrets.MOCK_CERT_PROVISIONER_CLIENT_KEY }}
-          MOCK_CERT_PROVISIONER_ROOT_CERT: ${{ secrets.MOCK_CERT_PROVISIONER_ROOT_CERT }}
-          MOCK_CERT_PROVISIONER_SERVER_CERT: ${{ secrets.MOCK_CERT_PROVISIONER_SERVER_CERT }}
-          MOCK_CERT_PROVISIONER_SERVER_KEY: ${{ secrets.MOCK_CERT_PROVISIONER_SERVER_KEY }}
         run: sh e2e-tests/run-all-feature-tests.sh
   run_e2e_tests_no_tls_termination:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v2
-      - uses: evervault/cargo-static-build@master
+      - name: Build Cages Project
+        uses: evervault/cargo-static-build@master
         with:
           cmd: cargo build --release --target x86_64-unknown-linux-musl --features not_enclave --no-default-features
-      - uses: evervault/cargo-static-build@master
+      - name: Build mock crypto API
+        uses: evervault/cargo-static-build@master
         with:
           cmd: cd e2e-tests/mock-crypto ; cargo build --release --target x86_64-unknown-linux-musl
         env:
@@ -56,16 +52,8 @@ jobs:
           SKIP_LOGIN: true
       - uses: actions/setup-node@v1
         with:
-          node-version: '16.x'
+          node-version: "16.x"
       - name: Run end-to-end test script
         env:
           CI: true
-          MOCK_CRYPTO_CERT: ${{ secrets.MOCK_CRYPTO_CERT }}
-          MOCK_CRYPTO_KEY: ${{ secrets.MOCK_CRYPTO_KEY }}
-          RUST_CRYPTO_REGISTRY: ${{ secrets.RUST_CRYPTO_REGISTRY }}
-          MOCK_CERT_PROVISIONER_CLIENT_CERT: ${{ secrets.MOCK_CERT_PROVISIONER_CLIENT_CERT }}
-          MOCK_CERT_PROVISIONER_CLIENT_KEY: ${{ secrets.MOCK_CERT_PROVISIONER_CLIENT_KEY }}
-          MOCK_CERT_PROVISIONER_ROOT_CERT: ${{ secrets.MOCK_CERT_PROVISIONER_ROOT_CERT }}
-          MOCK_CERT_PROVISIONER_SERVER_CERT: ${{ secrets.MOCK_CERT_PROVISIONER_SERVER_CERT }}
-          MOCK_CERT_PROVISIONER_SERVER_KEY: ${{ secrets.MOCK_CERT_PROVISIONER_SERVER_KEY }}
-        run: sh e2e-tests/run-tls-disabled-tests.sh      
+        run: sh e2e-tests/run-tls-disabled-tests.sh

@@ -3,11 +3,26 @@ set -e
 
 
 # kill container if it is left running by hanging test, then generate local testing certs
-if [[ -z "${CI}" ]];
+if [ "${CI:-unset}" = "unset" ];
 then
   docker compose down || true
   cargo build --release --target x86_64-unknown-linux-musl --features network_egress
   . e2e-tests/mtls-testing-certs/ca/generate-certs.sh &
+else 
+  # if in CI, generate certs and export them
+  . e2e-tests/mtls-testing-certs/ca/generate-certs.sh
+
+  MOCK_CRYPTO_CERT=`cat certs/ca.crt` && export MOCK_CRYPTO_CERT
+  MOCK_CRYPTO_KEY=`cat certs/ca.key` && export MOCK_CRYPTO_KEY
+
+
+  MOCK_CERT_PROVISIONER_CLIENT_CERT=`cat certs/client_0.crt` && export MOCK_CERT_PROVISIONER_CLIENT_CERT
+  MOCK_CERT_PROVISIONER_CLIENT_KEY=`cat certs/client_0.key` && export MOCK_CERT_PROVISIONER_CLIENT_KEY
+  MOCK_CERT_PROVISIONER_ROOT_CERT=`cat certs/ca.crt` && export MOCK_CERT_PROVISIONER_ROOT_CERT
+
+  MOCK_CERT_PROVISIONER_SERVER_KEY=`cat certs/localhost.key` && export MOCK_CERT_PROVISIONER_SERVER_KEY
+  MOCK_CERT_PROVISIONER_ROOT_CERT=`cat certs/ca.crt` && export MOCK_CERT_PROVISIONER_ROOT_CERT
+  MOCK_CERT_PROVISIONER_SERVER_CERT=`cat certs/localhost.crt` && export MOCK_CERT_PROVISIONER_SERVER_CERT
 fi
 
 # install the node modules for customer process and test script
