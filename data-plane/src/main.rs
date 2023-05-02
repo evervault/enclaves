@@ -3,7 +3,7 @@ use shared::server::Listener;
 use shared::server::CID::Enclave;
 use shared::{print_version, server::get_vsock_server_with_proxy_protocol};
 
-#[cfg(feature = "network_egress")]
+#[cfg(any(feature = "network_egress", not(feature = "tls_termination")))]
 use data_plane::configuration;
 #[cfg(feature = "network_egress")]
 use data_plane::dns::egressproxy::EgressProxy;
@@ -116,9 +116,16 @@ async fn start_data_plane(data_plane_port: u16) {
 }
 
 #[cfg(not(feature = "tls_termination"))]
-async fn run_tcp_passthrough<L: Listener>(mut server: L, port: u16) {
+use shared::server::proxy_protocol::ProxiedConnection;
+#[cfg(not(feature = "tls_termination"))]
+async fn run_tcp_passthrough<L: Listener>(mut server: L, port: u16)
+where
+    <L as Listener>::Connection: ProxiedConnection + 'static,
+{
     use shared::utils::pipe_streams;
+    use tokio::io::AsyncWriteExt;
     println!("Piping TCP streams directly to user process");
+    let should_forward_proxy_protocol = configuration::should_forward_proxy_protocol();
 
     let env_result = Environment::new().init_without_certs().await;
     if let Err(e) = env_result {
@@ -140,7 +147,7 @@ async fn run_tcp_passthrough<L: Listener>(mut server: L, port: u16) {
             }
         };
 
-        let customer_stream = match tokio::net::TcpStream::connect(("0.0.0.0", port)).await {
+        let mut customer_stream = match tokio::net::TcpStream::connect(("0.0.0.0", port)).await {
             Ok(customer_stream) => customer_stream,
             Err(e) => {
                 eprintln!(
@@ -150,6 +157,18 @@ async fn run_tcp_passthrough<L: Listener>(mut server: L, port: u16) {
                 continue;
             }
         };
+
+        if incoming_conn.has_proxy_protocol() && should_forward_proxy_protocol {
+            // flush proxy protocol bytes to customer process
+            let proxy_protocol = incoming_conn.proxy_protocol().unwrap();
+            if let Err(e) = customer_stream.write_all(proxy_protocol.as_bytes()).await {
+                eprintln!(
+                    "An error occurred while forwarding the proxy protocol to the customer process — {}",
+                    e
+                );
+                continue;
+            }
+        }
 
         if let Err(e) = pipe_streams(incoming_conn, customer_stream).await {
             eprintln!("An error occurred piping between the incoming connection and the customer process — {}", e);

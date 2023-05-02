@@ -28,3 +28,7 @@ pub fn get_egress_ports() -> Vec<u16> {
         })
         .collect()
 }
+
+pub fn should_forward_proxy_protocol() -> bool {
+    std::env::var("FORWARD_PROXY_PROTOCOL").is_ok()
+}
