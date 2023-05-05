@@ -10,7 +10,7 @@ enclaves=($(echo "$describe_res" | jq -c '.[]'))
 if [[ ${#enclaves[@]} -gt 0 ]]; then
   echo "[HOST] There is an enclave already running on this host. Terminating it..."
   nitro-cli terminate-enclave --all
-  echo " Enclave terminated. Waiting 10s..."
+  echo "[HOST] Enclave terminated. Waiting 10s..."
   sleep 10
 else
   echo "[HOST] No enclaves currently running on this host."
