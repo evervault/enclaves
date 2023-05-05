@@ -5,7 +5,6 @@ export EC2_INSTANCE_ID=${INSTANCE_ID}
 
 describe_res=$(nitro-cli describe-enclaves)
 
-# Convert the string into a bash array of objects
 enclaves=($(echo "$describe_res" | jq -c '.[]'))
 
 if [[ ${#enclaves[@]} -gt 0 ]]; then
