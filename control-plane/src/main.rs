@@ -3,8 +3,8 @@ use control_plane::stats_proxy::StatsProxy;
 use control_plane::{cert_proxy, config_server};
 use shared::{print_version, utils::pipe_streams, ENCLAVE_CONNECT_PORT};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use tokio::time::{sleep, Duration};
 use std::process::Command;
+use tokio::time::{sleep, Duration};
 
 use tokio::sync::mpsc;
 use tokio::{io::AsyncWriteExt, net::TcpListener};
