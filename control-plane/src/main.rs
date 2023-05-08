@@ -3,6 +3,8 @@ use control_plane::stats_proxy::StatsProxy;
 use control_plane::{cert_proxy, config_server};
 use shared::{print_version, utils::pipe_streams, ENCLAVE_CONNECT_PORT};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::process::Command;
+use tokio::time::{sleep, Duration};
 
 use tokio::sync::mpsc;
 use tokio::{io::AsyncWriteExt, net::TcpListener};
@@ -215,6 +217,21 @@ fn listen_for_shutdown_signal() {
                 ))
                 .expect("Error deserialising SNS message with serde");
                 sns_client.publish_message(sns_message).await;
+
+                println!("Received SIGTERM - sending message to SNS");
+                // Wait for 55 seconds before terminating enclave - ECS waits 60 seconds to kill the container
+                sleep(Duration::from_millis(55000)).await;
+
+                let output = Command::new("sh")
+                    .arg("-c")
+                    .arg("nitro-cli terminate-enclave --all")
+                    .output()
+                    .expect("failed to terminate enclave");
+
+                println!(
+                    "Terminated enclave: {}",
+                    String::from_utf8_lossy(&output.stdout)
+                );
             }
             None => {
                 eprintln!("Signal watcher returned None.");
