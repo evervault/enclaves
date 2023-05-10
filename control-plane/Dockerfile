@@ -1,6 +1,6 @@
 FROM amazonlinux:2023
 RUN yum -y update
-RUN yum install -y aws-nitro-enclaves-cli wget
+RUN yum install -y aws-nitro-enclaves-cli
 
 COPY ./control-plane .
 RUN chmod a+x ./control-plane
