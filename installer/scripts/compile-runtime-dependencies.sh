@@ -7,35 +7,113 @@ BASE_PATH=$GITHUB_WORKSPACE
 OUTPUT_PATH="$BASE_PATH/output"
 
 PACKAGES_PATH=/packages
-cd $PACKAGES_PATH
+
+# Cross-compiler for ARM
+CROSS_COMPILE=aarch64-linux-gnu-gcc
 
 ### Build runit
 gunzip runit-2.1.2.tar.gz
 tar -xpf runit-2.1.2.tar
-cd admin/runit-2.1.2 # runit contains a top level folder called admin
 
-# compile runit
-echo "****************************"
-echo "* compiling runit binaries *"
-echo "****************************"
+# Build runit for amd64
+build_runit_amd64() {
+    echo "****************************"
+    echo "* Building runit for amd64 *"
+    echo "****************************"
 
-# Configure static compilation of runit using dietlibc
-echo 'gcc -O2 -Wall -static' >src/conf-cc
-echo 'gcc -static -Os -pipe' >src/conf-ld
-./package/compile
-./package/check
+    cd ./admin/runit-2.1.2
 
-# Create expected directories for runit
-mkdir -p "$OUTPUT_PATH/runit-2.1.2/src"
+    # Configure static compilation of runit using dietlibc for amd64
+    echo 'gcc -O2 -Wall -static' > src/conf-cc
+    echo 'gcc -static -Os -pipe' > src/conf-ld
 
-# Move compiled runit commands into output commands folder
-echo "************************************"
-echo "* copying runit binaries to output *"
-echo "************************************"
-cp -r command "$OUTPUT_PATH/runit-2.1.2"
+    ./package/compile
+    ./package/check
 
-# Move compiled runit scripts into output scripts folder
-cp -r ./package "$OUTPUT_PATH/runit-2.1.2"
+    # Create amd64 output directory
+    mkdir -p "$OUTPUT_PATH/amd64/runit-2.1.2"
+    cp -r command "$OUTPUT_PATH/amd64/runit-2.1.2"
+    cp -r ./package "$OUTPUT_PATH/amd64/runit-2.1.2"
+
+}
+
+# Build runit for arm64
+build_runit_arm64() {
+    echo "****************************"
+    echo "* Building runit for arm64 *"
+    echo "****************************"
+
+    cd ./admin/runit-2.1.2
+
+    # Configure static compilation of runit using dietlibc for arm64
+    echo "$CROSS_COMPILE -O2 -Wall -static" > src/conf-cc
+    echo "$CROSS_COMPILE -static -Os -pipe" > src/conf-ld
+
+    ./package/compile
+    ./package/check
+
+    # Create arm64 output directory
+    mkdir -p "$OUTPUT_PATH/arm64/runit-2.1.2"
+    cp -r command "$OUTPUT_PATH/arm64/runit-2.1.2"
+    cp -r ./package "$OUTPUT_PATH/arm64/runit-2.1.2"
+}
+
+# Build runit for both architectures
+build_runit_amd64
+build_runit_arm64
+
+# Build net-tools for amd64
+build_net_tools_amd64() {
+    echo "****************************"
+    echo "* Building net-tools for amd64 *"
+    echo "****************************"
+
+    # Create amd64 output directory
+    mkdir -p "$OUTPUT_PATH/amd64/net-tools-2.10"
+
+    # Build net-tools for amd64
+    echo "**********************"
+    echo "* Building net-tools *"
+    echo "**********************"
+    (cd $PACKAGES_PATH/net-tools-2.10 &&
+        cp "$PACKAGES_PATH/net-tools.h" ./config.h &&
+        CFLAGS="-O2 -g -static" make subdirs &&
+        CFLAGS="-O2 -g -static" make ifconfig)
+
+    # Copy ifconfig binary to output directory
+    echo "*******************************"
+    echo "* Copying ifconfig to outputs *"
+    echo "*******************************"
+    mkdir -p "$OUTPUT_PATH/amd64/net-tools-2.10"
+    cp $PACKAGES_PATH/net-tools-2.10/ifconfig "$OUTPUT_PATH/amd64/net-tools-2.10"
+}
+
+# Build net-tools for arm64
+build_net_tools_arm64() {    
+    echo "****************************"
+    echo "* Building net-tools for arm64 *"
+    echo "****************************"
+
+    # Create arm64 output directory
+    mkdir -p "$OUTPUT_PATH/arm64/net-tools-2.10"
+
+    # Build net-tools for ARM
+    echo "**********************"
+    echo "* Building net-tools *"
+    echo "**********************"
+    (cd $PACKAGES_PATH/net-tools-2.10 &&
+        cp "$PACKAGES_PATH/net-tools.h" ./config.h &&
+        make CC=${CROSS_COMPILE} CFLAGS="-O2 -g -static" subdirs &&
+        make CC=${CROSS_COMPILE} CFLAGS="-O2 -g -static" ifconfig &&
+        cp ifconfig "$OUTPUT_PATH/arm64/net-tools-2.10")
+
+    # Copy ifconfig binary to output directory
+    echo "*******************************"
+    echo "* Copying ifconfig to outputs *"
+    echo "*******************************"
+    mkdir -p "$OUTPUT_PATH/arm64/net-tools-2.10"
+    cp $PACKAGES_PATH/net-tools-2.10/ifconfig "$OUTPUT_PATH/arm64/net-tools-2.10"
+}
 
 # extract net-tools source
 cd $PACKAGES_PATH
@@ -51,18 +129,8 @@ cd net-tools-2.10
 # Use preconfigured config for Cage environment
 cp "$PACKAGES_PATH/net-tools.h" ./config.h
 
-
-# Run make commands required for ifconfig, include static flag
-CFLAGS="-O2 -g -static" make subdirs
-CFLAGS="-O2 -g -static" make ifconfig
-
-mkdir -p "$OUTPUT_PATH/net-tools-2.10"
-
-# Copy ifconfig binary to output directory
-echo "*******************************"
-echo "* copying ifconfig to outputs *"
-echo "*******************************"
-cp ./ifconfig "$OUTPUT_PATH/net-tools-2.10"
+build_net_tools_amd64
+build_net_tools_arm64
 
 # Create archive of static binaries and installer
 echo "******************************"
