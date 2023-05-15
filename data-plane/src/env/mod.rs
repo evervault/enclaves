@@ -1,4 +1,4 @@
-use std::{fs::File, io::Write};
+use std::{fs::OpenOptions, io::Write};
 
 #[cfg(not(feature = "tls_termination"))]
 use crate::cert_provisioner_client::CertProvisionerClient;
@@ -91,7 +91,11 @@ impl Environment {
     }
 
     fn write_env_file(self, secrets: Vec<Secret>) -> Result<(), EnvError> {
-        let mut file = File::create("/etc/customer-env")?;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .append(true)
+            .create(true)
+            .open("/etc/customer-env")?;
         let mut env_string: String = "".to_owned();
 
         secrets.iter().for_each(|env| {
@@ -99,11 +103,11 @@ impl Environment {
             env_string.push_str(value)
         });
         // Set var to let customer process know the env is ready and it can start up
-        env_string.push_str("export EV_CAGE_INITIALIZED=true");
+        env_string.push_str("export EV_CAGE_INITIALIZED=true ");
         // Backwards compatibility for customers that are still using old versions of the CLI - remove after full launch
         env_string.push_str("export EV_API_KEY=placeholder");
 
-        file.write_all(env_string.as_bytes())?;
+        writeln!(file, "{}", env_string)?;
         Ok(())
     }
 }
