@@ -99,7 +99,7 @@ impl HealthCheckServer {
                 {
                     Some(b"ECS-HealthCheck") => run_ecs_health_check_service().await,
                     _ => Response::builder()
-                        .status(500)
+                        .status(400)
                         .body(Body::from("Unsupported health check type!"))
                         .map_err(ServerError::from),
                 }
