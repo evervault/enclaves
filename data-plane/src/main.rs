@@ -16,7 +16,7 @@ use futures::future::join_all;
 use data_plane::env::Environment;
 use data_plane::health::start_health_check_server;
 use data_plane::stats_client::StatsClient;
-use shared::{env_var_present_and_true, ENCLAVE_CONNECT_PORT};
+use shared::ENCLAVE_CONNECT_PORT;
 
 #[tokio::main]
 async fn main() {
@@ -30,11 +30,7 @@ async fn main() {
         .and_then(|port_str| port_str.as_str().parse::<u16>().ok())
         .unwrap_or(8008);
 
-    if env_var_present_and_true!("DATA_PLANE_HEALTH_CHECKS") {
-        tokio::join!(start(data_plane_port), start_health_check_server(),);
-    } else {
-        start(data_plane_port).await;
-    }
+    tokio::join!(start(data_plane_port), start_health_check_server());
 }
 
 #[cfg(not(feature = "network_egress"))]
