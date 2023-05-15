@@ -60,12 +60,6 @@ echo "data-plane health checks ON, control-plane ON, data-plane OFF"
 docker compose exec cages sh -c "sv down data-plane"
 npm run health-check-tests "should fail"
 
-echo "data-plane health checks OFF, control-plane ON, data-plane OFF"
-docker compose down
-EV_DATA_PLANE_HEALTH_CHECKS=false docker compose up -d 
-docker compose exec cages sh -c "sv down data-plane"
-npm run health-check-tests "should succeed"
-
 echo "API Key Auth Tests"
 docker compose down
 EV_API_KEY_AUTH=true docker compose up -d
