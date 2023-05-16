@@ -3,6 +3,7 @@ use tls_parser::{
     nom::Finish, parse_tls_extensions, parse_tls_plaintext, TlsExtension, TlsMessage,
     TlsMessageHandshake,
 };
+use serde::Deserialize;
 
 #[derive(Debug, Error)]
 pub enum EgressError {
@@ -84,7 +85,7 @@ pub fn check_allow_list(
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Deserialize)]
 pub struct EgressDomains {
     pub wildcard: Vec<String>,
     pub exact: Vec<String>,

@@ -20,6 +20,8 @@ pub mod stats_client;
 pub mod utils;
 #[cfg(feature = "network_egress")]
 use shared::server::egress::EgressDomains;
+#[cfg(feature = "network_egress")]
+use serde::{Deserializer};
 #[cfg(feature = "tls_termination")]
 pub mod server;
 
@@ -105,7 +107,7 @@ impl From<ProvisionerContext> for CageContext {
 impl FeatureContext {
     pub fn set() {
         match read_dataplane_context() {
-            Some(context) => FEATURE_CONTEXT.get_or_init(|| context.into()),
+            Some(context) => FEATURE_CONTEXT.get_or_init(|| context),
             None => {
                 // Need to support these env vars for older versions of CLI - Remove after beta
                 let api_key_auth = std::env::var("EV_API_KEY_AUTH")
@@ -140,7 +142,7 @@ impl FeatureContext {
     }
 }
 #[cfg(feature = "network_egress")]
-#[derive(Clone)]
+#[derive(Clone, Deserialize)]
 pub struct FeatureContext {
     pub api_key_auth: bool,
     pub trx_logging_enabled: bool,
@@ -148,23 +150,37 @@ pub struct FeatureContext {
 }
 
 #[cfg(not(feature = "network_egress"))]
-#[derive(Clone)]
+#[derive(Clone, Deserialize)]
 pub struct FeatureContext {
     pub api_key_auth: bool,
     pub trx_logging_enabled: bool,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Default)]
-#[serde(rename_all = "snake_case")]
-pub struct FileEgressContext {
-    ports: String,
-    allow_list: String,
+
+#[cfg(feature = "network_egress")]
+fn deserialize_allowlist<'de, D>(deserializer: D) -> Result<EgressDomains, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let allow_list: String = Deserialize::deserialize(deserializer)?;
+    Ok(shared::server::egress::get_egress_allow_list(allow_list))
 }
 
 #[cfg(feature = "network_egress")]
-#[derive(Clone)]
+fn deserialize_ports<'de, D>(deserializer: D) -> Result<Vec<u16>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let ports: String = Deserialize::deserialize(deserializer)?;
+    Ok(get_egress_ports(ports))
+}
+
+#[cfg(feature = "network_egress")]
+#[derive(Clone, Deserialize)]
 pub struct EgressContext {
+    #[serde(deserialize_with = "deserialize_ports")]
     pub ports: Vec<u16>,
+    #[serde(deserialize_with = "deserialize_allowlist")]
     pub allow_list: EgressDomains,
 }
 
@@ -172,47 +188,27 @@ pub struct EgressContext {
 impl EgressContext {
     #[cfg(feature = "network_egress")]
     pub fn get() -> EgressContext {
-        let ports = get_egress_ports();
+        let ports = get_egress_ports_from_env();
         let allow_list = shared::server::egress::get_egress_allow_list_from_env();
         EgressContext { ports, allow_list }
     }
 }
 
-#[cfg(feature = "network_egress")]
-#[derive(Clone, Debug, Deserialize)]
-struct FeatureFileContext {
-    api_key_auth: bool,
-    trx_logging_enabled: bool,
-    egress: FileEgressContext,
-}
-
-#[cfg(not(feature = "network_egress"))]
-#[derive(Clone, Debug, Deserialize)]
-struct FeatureFileContext {
-    api_key_auth: bool,
-    trx_logging_enabled: bool,
-}
-
-fn read_dataplane_context() -> Option<FeatureFileContext> {
+fn read_dataplane_context() -> Option<FeatureContext> {
     fs::read_to_string("/etc/dataplane-config.json")
         .ok()
         .and_then(|contents| serde_json::from_str(&contents).ok())
 }
 
 #[cfg(feature = "network_egress")]
-impl From<FileEgressContext> for EgressContext {
-    //FileEgressContext
-    fn from(context: FileEgressContext) -> Self {
-        use shared::server::egress::get_egress_allow_list;
-        let allow_list = get_egress_allow_list(context.allow_list);
-        let ports = get_egress_ports();
-        EgressContext { ports, allow_list }
-    }
+pub fn get_egress_ports_from_env() -> Vec<u16> {
+    let port_str = std::env::var("EGRESS_PORTS").unwrap_or("443".to_string());
+    get_egress_ports(port_str)
 }
 
+
 #[cfg(feature = "network_egress")]
-pub fn get_egress_ports() -> Vec<u16> {
-    let port_str = std::env::var("EGRESS_PORTS").unwrap_or("443".to_string());
+pub fn get_egress_ports(port_str: String) -> Vec<u16> {
     port_str
         .split(',')
         .map(|port| {
@@ -220,22 +216,4 @@ pub fn get_egress_ports() -> Vec<u16> {
                 .unwrap_or_else(|_| panic!("Could not parse egress port as u16: {port}"))
         })
         .collect()
-}
-
-impl From<FeatureFileContext> for FeatureContext {
-    #[cfg(feature = "network_egress")]
-    fn from(context: FeatureFileContext) -> Self {
-        FeatureContext {
-            api_key_auth: context.api_key_auth,
-            trx_logging_enabled: context.trx_logging_enabled,
-            egress: context.egress.into(),
-        }
-    }
-    #[cfg(not(feature = "network_egress"))]
-    fn from(context: FeatureFileContext) -> Self {
-        FeatureContext {
-            api_key_auth: context.api_key_auth,
-            trx_logging_enabled: context.trx_logging_enabled,
-        }
-    }
 }

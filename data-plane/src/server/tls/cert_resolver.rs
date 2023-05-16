@@ -407,9 +407,7 @@ mod tests {
             app_uuid,
             team_uuid,
             cage_uuid,
-            cage_name,
-            api_key_auth,
-            trx_logging,
+            cage_name
         );
         let hostname = ctx.get_cert_name();
         assert!(hostname.ends_with(".dev"));
