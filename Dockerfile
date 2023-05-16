@@ -5,8 +5,6 @@ ENV DATA_PLANE_SERVICE_PATH=/etc/service/data-plane
 ENV CONTROL_PLANE_EXECUTABLE_PATH=/control-plane
 ENV CONTROL_PLANE_SERVICE_PATH=/etc/service/control-plane
 ENV START_EV_SERVICES_PATH=/etc/service/ev-services-entrypoint
-ENV EV_API_KEY_AUTH=true
-ENV EV_EGRESS_ALLOW_LIST=jsonplaceholder.typicode.com
 
 EXPOSE 443
 

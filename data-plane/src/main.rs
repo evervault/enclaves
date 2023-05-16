@@ -62,7 +62,6 @@ async fn start(data_plane_port: u16) {
 
     StatsClient::init();
     FeatureContext::set();
-    let ports = configuration::get_egress_ports();
     let allowed_domains = shared::server::egress::get_egress_allow_list();
     let egress_proxies = join_all(
         ports

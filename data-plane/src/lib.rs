@@ -117,7 +117,7 @@ impl FeatureContext {
                 let dataplane_context = FeatureContext {
                     api_key_auth,
                     trx_logging_enabled,
-                    egress: None,
+                    egress: EgressContext::get(),
                 };
                 FEATURE_CONTEXT.get_or_init(|| dataplane_context)
             }
@@ -136,8 +136,21 @@ pub struct FeatureContext {
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct EgressContext {
-    ports: String,
+    ports: Vec<u16>,
     allow_list: bool,
+}
+
+impl EgressContext {
+    #[cfg(feature = "network_egress")]
+    pub fn get() -> Option<EgressContext> {
+        let ports = get_egress_ports();
+        let allow_list = shared::server::egress::get_egress_allow_list();
+        ();
+        Some(EgressContext { ports, allow_list })
+    }
+    pub fn get() -> Option<EgressContext> {
+        None
+    }
 }
 
 fn read_dataplane_context() -> Option<FeatureContext> {
