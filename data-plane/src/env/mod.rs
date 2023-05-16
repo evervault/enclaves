@@ -4,8 +4,6 @@ use std::{fs::File, io::Write};
 use crate::cert_provisioner_client::CertProvisionerClient;
 #[cfg(not(feature = "tls_termination"))]
 use crate::config_client::ConfigClient;
-#[cfg(not(feature = "tls_termination"))]
-use crate::CageContext;
 use crate::{base_tls_client::ClientError, CageContextError};
 use hyper::header::InvalidHeaderValue;
 use serde_json::json;

@@ -75,11 +75,11 @@ where
                     service_fn(|mut req: Request<Body>| {
                         let e3_client_for_req = e3_client_for_tcp.clone();
                         let feature_context = FEATURE_CONTEXT.get().expect("Couldn't get cage context");
-                        let cage_context_for_req = CAGE_CONTEXT.get().expect("Couldn't get cage context");
+                        let cage_context = CAGE_CONTEXT.get().expect("Couldn't get cage context");
                         let tx_for_req = tx_for_tcp.clone();
                         let remote_ip = remote_ip.clone();
                         async move {
-                            let (mut trx_context, request_timer) = init_trx(&cage_context_for_req, &req);
+                            let (mut trx_context, request_timer) = init_trx(cage_context, &req);
                             let trx_id = trx_context.get_trx_id();
                             if remote_ip.is_some() {
                               trx_context.remote_ip(remote_ip.clone());
@@ -96,7 +96,7 @@ where
                                 req,
                                 port,
                                 e3_client_for_req,
-                                cage_context_for_req.clone(),
+                                cage_context.clone(),
                                 feature_context.clone(),
                                 &mut trx_context,
                             )

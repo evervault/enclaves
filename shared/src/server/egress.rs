@@ -47,8 +47,12 @@ pub fn get_hostname(data: Vec<u8>) -> Result<String, EgressError> {
     Ok(destination)
 }
 
-pub fn get_egress_allow_list() -> EgressDomains {
+pub fn get_egress_allow_list_from_env() -> EgressDomains {
     let domain_str = std::env::var("EV_EGRESS_ALLOW_LIST").unwrap_or("".to_string());
+    get_egress_allow_list(domain_str)
+}
+
+pub fn get_egress_allow_list(domain_str: String) -> EgressDomains {
     let (wildcard, exact): (Vec<String>, Vec<String>) = domain_str
         .split(',')
         .map(|domain| domain.to_string())

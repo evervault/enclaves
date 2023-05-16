@@ -1,6 +1,7 @@
 use super::error::DNSError;
 use crate::dns::cache::Cache;
 use crate::dns::error::DNSError::MissingIP;
+use crate::FEATURE_CONTEXT;
 use shared::rpc::request::ExternalRequest;
 use shared::server::egress::check_allow_list;
 use shared::server::egress::get_hostname;
@@ -20,9 +21,9 @@ use rand::seq::SliceRandom;
 pub struct EgressProxy;
 
 impl EgressProxy {
-    pub async fn listen(port: u16, allowed_domains: EgressDomains) -> ServerResult<()> {
+    pub async fn listen(port: u16) -> ServerResult<()> {
         println!("Egress proxy started on port {port}");
-
+        let allowed_domains = &FEATURE_CONTEXT.get().unwrap().egress.allow_list;
         let mut server =
             TcpServer::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), port)).await?;
 
