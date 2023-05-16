@@ -44,7 +44,6 @@ where
         UnboundedReceiver<LogHandlerMessage>,
     ) = unbounded_channel();
 
-    let cage_context = CAGE_CONTEXT.get().expect("Couldn't get cage context");
     let feature_context = FEATURE_CONTEXT.get().expect("Couldn't get cage context");
     if feature_context.trx_logging_enabled {
         let tx_for_handler = tx.clone();
@@ -65,13 +64,9 @@ where
 
         let server = http_server.clone();
         let e3_client_for_connection = e3_client.clone();
-        let cage_context_for_connection = cage_context.clone();
-        let feature_context_for_connection = feature_context.clone();
         let tx_for_connection = tx.clone();
         tokio::spawn(async move {
             let e3_client_for_tcp = e3_client_for_connection.clone();
-            let cage_context_for_tcp = cage_context_for_connection.clone();
-            let feature_context_for_tcp = feature_context_for_connection.clone();
             let tx_for_tcp = tx_for_connection.clone();
             let remote_ip = stream.get_remote_addr();
             let sent_response = server
@@ -79,8 +74,8 @@ where
                     stream,
                     service_fn(|mut req: Request<Body>| {
                         let e3_client_for_req = e3_client_for_tcp.clone();
-                        let cage_context_for_req = cage_context_for_tcp.clone();
-                        let feature_context_for_req = feature_context_for_tcp.clone();
+                        let feature_context = FEATURE_CONTEXT.get().expect("Couldn't get cage context");
+                        let cage_context_for_req = CAGE_CONTEXT.get().expect("Couldn't get cage context");
                         let tx_for_req = tx_for_tcp.clone();
                         let remote_ip = remote_ip.clone();
                         async move {
@@ -91,7 +86,7 @@ where
                               add_remote_ip_to_forwarded_for_header(&mut req, remote_ip.as_deref().unwrap());
                             }
 
-                            let trx_logging_enabled = feature_context_for_req.trx_logging_enabled;
+                            let trx_logging_enabled = feature_context.trx_logging_enabled;
 
                             if  trx_logging_enabled {
                                 add_ev_ctx_header_to_request(&mut req, &trx_id);
@@ -101,8 +96,8 @@ where
                                 req,
                                 port,
                                 e3_client_for_req,
-                                cage_context_for_req,
-                                feature_context_for_req,
+                                cage_context_for_req.clone(),
+                                feature_context.clone(),
                                 &mut trx_context,
                             )
                             .await;
