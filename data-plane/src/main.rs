@@ -62,7 +62,7 @@ async fn start(data_plane_port: u16) {
     StatsClient::init();
     FeatureContext::set();
     let ports = FeatureContext::get().egress.ports;
-    let egress_proxies = join_all(ports.into_iter().map(|port| EgressProxy::listen(port)));
+    let egress_proxies = join_all(ports.into_iter().map(EgressProxy::listen));
 
     let (_, dns_result, e3_api_result, egress_results, stats_result) = tokio::join!(
         start_data_plane(data_plane_port),

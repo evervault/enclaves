@@ -1,9 +1,10 @@
+use serde::Deserialize;
+use serde::Deserializer;
 use thiserror::Error;
 use tls_parser::{
     nom::Finish, parse_tls_extensions, parse_tls_plaintext, TlsExtension, TlsMessage,
     TlsMessageHandshake,
 };
-use serde::Deserialize;
 
 #[derive(Debug, Error)]
 pub enum EgressError {
@@ -90,6 +91,53 @@ pub struct EgressDomains {
     pub wildcard: Vec<String>,
     pub exact: Vec<String>,
     pub allow_all: bool,
+}
+
+fn deserialize_allowlist<'de, D>(deserializer: D) -> Result<EgressDomains, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let allow_list: String = Deserialize::deserialize(deserializer)?;
+    Ok(get_egress_allow_list(allow_list))
+}
+
+fn deserialize_ports<'de, D>(deserializer: D) -> Result<Vec<u16>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let ports: String = Deserialize::deserialize(deserializer)?;
+    Ok(get_egress_ports(ports))
+}
+
+#[derive(Clone, Deserialize)]
+pub struct EgressConfig {
+    #[serde(deserialize_with = "deserialize_ports")]
+    pub ports: Vec<u16>,
+    #[serde(deserialize_with = "deserialize_allowlist")]
+    pub allow_list: EgressDomains,
+}
+
+impl EgressConfig {
+    pub fn from_env() -> EgressConfig {
+        let ports = get_egress_ports_from_env();
+        let allow_list = get_egress_allow_list_from_env();
+        EgressConfig { ports, allow_list }
+    }
+}
+
+pub fn get_egress_ports_from_env() -> Vec<u16> {
+    let port_str = std::env::var("EGRESS_PORTS").unwrap_or("443".to_string());
+    get_egress_ports(port_str)
+}
+
+pub fn get_egress_ports(port_str: String) -> Vec<u16> {
+    port_str
+        .split(',')
+        .map(|port| {
+            port.parse::<u16>()
+                .unwrap_or_else(|_| panic!("Could not parse egress port as u16: {port}"))
+        })
+        .collect()
 }
 
 #[cfg(test)]

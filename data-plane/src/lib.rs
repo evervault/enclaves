@@ -19,9 +19,7 @@ pub mod stats;
 pub mod stats_client;
 pub mod utils;
 #[cfg(feature = "network_egress")]
-use shared::server::egress::EgressDomains;
-#[cfg(feature = "network_egress")]
-use serde::{Deserializer};
+use shared::server::egress::{get_egress_ports_from_env, EgressConfig};
 #[cfg(feature = "tls_termination")]
 pub mod server;
 
@@ -106,32 +104,9 @@ impl From<ProvisionerContext> for CageContext {
 
 impl FeatureContext {
     pub fn set() {
-        match read_dataplane_context() {
+        match Self::read_dataplane_context() {
             Some(context) => FEATURE_CONTEXT.get_or_init(|| context),
-            None => {
-                // Need to support these env vars for older versions of CLI - Remove after beta
-                let api_key_auth = std::env::var("EV_API_KEY_AUTH")
-                    .unwrap_or_else(|_| "true".to_string())
-                    .parse()
-                    .unwrap_or(true);
-                let trx_logging_enabled = std::env::var("EV_TRX_LOGGING_ENABLED")
-                    .unwrap_or_else(|_| "true".to_string())
-                    .parse()
-                    .unwrap_or(true);
-
-                #[cfg(feature = "network_egress")]
-                let dataplane_context = FeatureContext {
-                    api_key_auth,
-                    trx_logging_enabled,
-                    egress: EgressContext::get(),
-                };
-                #[cfg(not(feature = "network_egress"))]
-                let dataplane_context = FeatureContext {
-                    api_key_auth,
-                    trx_logging_enabled,
-                };
-                FEATURE_CONTEXT.get_or_init(|| dataplane_context)
-            }
+            None => FEATURE_CONTEXT.get_or_init(Self::from_env),
         };
     }
     pub fn get() -> FeatureContext {
@@ -140,13 +115,47 @@ impl FeatureContext {
             .expect("Couldn't get feature context")
             .clone()
     }
+
+    // Need to support from env for older versions of CLI - Remove after beta
+    fn from_env() -> FeatureContext {
+        let api_key_auth = std::env::var("EV_API_KEY_AUTH")
+            .unwrap_or_else(|_| "true".to_string())
+            .parse()
+            .unwrap_or(true);
+        let trx_logging_enabled = std::env::var("EV_TRX_LOGGING_ENABLED")
+            .unwrap_or_else(|_| "true".to_string())
+            .parse()
+            .unwrap_or(true);
+        #[cfg(feature = "network_egress")]
+        let dataplane_context = FeatureContext {
+            api_key_auth,
+            trx_logging_enabled,
+            egress: EgressConfig {
+                ports: get_egress_ports_from_env(),
+                allow_list: shared::server::egress::get_egress_allow_list_from_env(),
+            },
+        };
+        #[cfg(not(feature = "network_egress"))]
+        let dataplane_context = FeatureContext {
+            api_key_auth,
+            trx_logging_enabled,
+        };
+        dataplane_context
+    }
+
+    fn read_dataplane_context() -> Option<FeatureContext> {
+        fs::read_to_string("/etc/dataplane-config.json")
+            .ok()
+            .and_then(|contents| serde_json::from_str(&contents).ok())
+    }
 }
+
 #[cfg(feature = "network_egress")]
 #[derive(Clone, Deserialize)]
 pub struct FeatureContext {
     pub api_key_auth: bool,
     pub trx_logging_enabled: bool,
-    pub egress: EgressContext,
+    pub egress: EgressConfig,
 }
 
 #[cfg(not(feature = "network_egress"))]
@@ -154,66 +163,4 @@ pub struct FeatureContext {
 pub struct FeatureContext {
     pub api_key_auth: bool,
     pub trx_logging_enabled: bool,
-}
-
-
-#[cfg(feature = "network_egress")]
-fn deserialize_allowlist<'de, D>(deserializer: D) -> Result<EgressDomains, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let allow_list: String = Deserialize::deserialize(deserializer)?;
-    Ok(shared::server::egress::get_egress_allow_list(allow_list))
-}
-
-#[cfg(feature = "network_egress")]
-fn deserialize_ports<'de, D>(deserializer: D) -> Result<Vec<u16>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let ports: String = Deserialize::deserialize(deserializer)?;
-    Ok(get_egress_ports(ports))
-}
-
-#[cfg(feature = "network_egress")]
-#[derive(Clone, Deserialize)]
-pub struct EgressContext {
-    #[serde(deserialize_with = "deserialize_ports")]
-    pub ports: Vec<u16>,
-    #[serde(deserialize_with = "deserialize_allowlist")]
-    pub allow_list: EgressDomains,
-}
-
-#[cfg(feature = "network_egress")]
-impl EgressContext {
-    #[cfg(feature = "network_egress")]
-    pub fn get() -> EgressContext {
-        let ports = get_egress_ports_from_env();
-        let allow_list = shared::server::egress::get_egress_allow_list_from_env();
-        EgressContext { ports, allow_list }
-    }
-}
-
-fn read_dataplane_context() -> Option<FeatureContext> {
-    fs::read_to_string("/etc/dataplane-config.json")
-        .ok()
-        .and_then(|contents| serde_json::from_str(&contents).ok())
-}
-
-#[cfg(feature = "network_egress")]
-pub fn get_egress_ports_from_env() -> Vec<u16> {
-    let port_str = std::env::var("EGRESS_PORTS").unwrap_or("443".to_string());
-    get_egress_ports(port_str)
-}
-
-
-#[cfg(feature = "network_egress")]
-pub fn get_egress_ports(port_str: String) -> Vec<u16> {
-    port_str
-        .split(',')
-        .map(|port| {
-            port.parse::<u16>()
-                .unwrap_or_else(|_| panic!("Could not parse egress port as u16: {port}"))
-        })
-        .collect()
 }
