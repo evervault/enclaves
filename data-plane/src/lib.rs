@@ -143,11 +143,11 @@ pub struct EgressContext {
 impl EgressContext {
     #[cfg(feature = "network_egress")]
     pub fn get() -> Option<EgressContext> {
-        let ports = get_egress_ports();
+        let ports = configuration::get_egress_ports();
         let allow_list = shared::server::egress::get_egress_allow_list();
-        ();
         Some(EgressContext { ports, allow_list })
     }
+    #[cfg(not(feature = "network_egress"))]
     pub fn get() -> Option<EgressContext> {
         None
     }
