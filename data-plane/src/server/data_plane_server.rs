@@ -6,7 +6,7 @@ use crate::base_tls_client::ClientError;
 use crate::e3client::DecryptRequest;
 use crate::e3client::{self, AuthRequest, E3Client};
 use crate::error::{AuthError, Result};
-use crate::{CageContext, CAGE_CONTEXT, FEATURE_CONTEXT, FeatureContext};
+use crate::{CageContext, FeatureContext, CAGE_CONTEXT, FEATURE_CONTEXT};
 
 use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
 
