@@ -334,16 +334,7 @@ mod tests {
         let team_uuid = "team_456".to_string();
         let cage_uuid = "cage_123".to_string();
         let cage_name = "my-sick-cage".to_string();
-        let api_key_auth = true;
-        let trx_logging = true;
-        let ctx = CageContext::new(
-            app_uuid,
-            team_uuid,
-            cage_uuid,
-            cage_name,
-            api_key_auth,
-            trx_logging,
-        );
+        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name);
         let server_name = Some(ctx.get_cert_name());
         CageContext::set(ctx);
         let (cert, key) = generate_ca().unwrap();
@@ -375,16 +366,7 @@ mod tests {
         let team_uuid = "team_456".to_string();
         let cage_uuid = "cage_123".to_string();
         let cage_name = "my-sick-cage".to_string();
-        let api_key_auth = false;
-        let trx_logging = true;
-        let ctx = CageContext::new(
-            app_uuid,
-            team_uuid,
-            cage_uuid,
-            cage_name,
-            api_key_auth,
-            trx_logging,
-        );
+        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name);
         CageContext::set(ctx.clone());
         let server_name = Some(ctx.get_cert_name());
         let (cert, key) = generate_ca().unwrap();
@@ -421,8 +403,6 @@ mod tests {
         let team_uuid = "team_456".to_string();
         let cage_uuid = "cage_123".to_string();
         let cage_name = "a-cage".to_string();
-        let api_key_auth = true;
-        let trx_logging = true;
         let ctx = CageContext::new(
             app_uuid,
             team_uuid,
@@ -441,16 +421,7 @@ mod tests {
         let team_uuid = "team_456".to_string();
         let cage_uuid = "cage_123".to_string();
         let cage_name = "a-sick-cage-that-has-a-very-long-name".to_string();
-        let api_key_auth = true;
-        let trx_logging = true;
-        let ctx = CageContext::new(
-            app_uuid,
-            team_uuid,
-            cage_uuid,
-            cage_name,
-            api_key_auth,
-            trx_logging,
-        );
+        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name);
         let hostname = ctx.get_cert_name();
 
         if cfg!(staging) {
@@ -482,16 +453,7 @@ mod tests {
         let team_uuid = "team_456".to_string();
         let cage_uuid = "cage_123".to_string();
         let cage_name = "my-sick-cage".to_string();
-        let api_key_auth = true;
-        let trx_logging = true;
-        let ctx = CageContext::new(
-            app_uuid,
-            team_uuid,
-            cage_uuid,
-            cage_name,
-            api_key_auth,
-            trx_logging,
-        );
+        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name);
         let hostname = ctx.get_cert_name();
         if cfg!(staging) {
             assert!(hostname.ends_with(".dev"));

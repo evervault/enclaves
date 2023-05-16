@@ -1,3 +1,5 @@
+use std::fs;
+
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 
@@ -24,6 +26,7 @@ use shared::server::config_server::requests::ProvisionerContext;
 use thiserror::Error;
 
 static CAGE_CONTEXT: OnceCell<CageContext> = OnceCell::new();
+static FEATURE_CONTEXT: OnceCell<FeatureContext> = OnceCell::new();
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CageContext {
@@ -31,8 +34,6 @@ pub struct CageContext {
     app_uuid: String,
     cage_uuid: String,
     cage_name: String,
-    api_key_auth: bool,
-    trx_logging_enabled: bool,
 }
 
 #[derive(Error, Debug)]
@@ -53,46 +54,12 @@ impl CageContext {
         CAGE_CONTEXT.get_or_init(|| ctx);
     }
 
-    pub fn try_from_env(
-        team_uuid: String,
-        app_uuid: String,
-        cage_uuid: String,
-        cage_name: String,
-    ) -> std::result::Result<Self, std::env::VarError> {
-        let api_key_auth = std::env::var("EV_API_KEY_AUTH")
-            .unwrap_or_else(|_| "true".to_string())
-            .parse()
-            .unwrap_or(true);
-        let trx_logging_enabled = std::env::var("EV_TRX_LOGGING_ENABLED")
-            .unwrap_or_else(|_| "true".to_string())
-            .parse()
-            .unwrap_or(true);
-
-        Ok(Self {
-            app_uuid,
-            team_uuid,
-            cage_uuid,
-            cage_name,
-            api_key_auth,
-            trx_logging_enabled,
-        })
-    }
-
-    pub fn new(
-        app_uuid: String,
-        team_uuid: String,
-        cage_uuid: String,
-        cage_name: String,
-        api_key_auth: bool,
-        trx_logging_enabled: bool,
-    ) -> Self {
+    pub fn new(app_uuid: String, team_uuid: String, cage_uuid: String, cage_name: String) -> Self {
         Self {
             cage_uuid,
             app_uuid,
             team_uuid,
             cage_name,
-            api_key_auth,
-            trx_logging_enabled,
         }
     }
 
@@ -125,12 +92,56 @@ impl CageContext {
 
 impl From<ProvisionerContext> for CageContext {
     fn from(context: ProvisionerContext) -> Self {
-        CageContext::try_from_env(
+        CageContext::new(
             context.team_uuid,
             context.app_uuid,
             context.cage_uuid,
             context.cage_name,
         )
-        .expect("Couldn't instantiate cage context")
     }
+}
+
+impl FeatureContext {
+    pub fn set() {
+        match read_dataplane_context() {
+            Some(context) => FEATURE_CONTEXT.get_or_init(|| context),
+            None => {
+                let api_key_auth = std::env::var("EV_API_KEY_AUTH")
+                    .unwrap_or_else(|_| "true".to_string())
+                    .parse()
+                    .unwrap_or(true);
+                let trx_logging_enabled = std::env::var("EV_TRX_LOGGING_ENABLED")
+                    .unwrap_or_else(|_| "true".to_string())
+                    .parse()
+                    .unwrap_or(true);
+                let dataplane_context = FeatureContext {
+                    api_key_auth,
+                    trx_logging_enabled,
+                    egress: None,
+                };
+                FEATURE_CONTEXT.get_or_init(|| dataplane_context)
+            }
+        };
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FeatureContext {
+    #[serde(rename = "api_key_auth")]
+    api_key_auth: bool,
+    trx_logging_enabled: bool,
+    egress: Option<EgressContext>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub struct EgressContext {
+    ports: String,
+    allow_list: bool,
+}
+
+fn read_dataplane_context() -> Option<FeatureContext> {
+    fs::read_to_string("/etc/dataplane-config.json")
+        .ok()
+        .and_then(|contents| serde_json::from_str(&contents).ok())
 }

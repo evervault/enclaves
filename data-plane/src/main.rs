@@ -16,6 +16,7 @@ use futures::future::join_all;
 use data_plane::env::Environment;
 use data_plane::health::start_health_check_server;
 use data_plane::stats_client::StatsClient;
+use data_plane::FeatureContext;
 use shared::ENCLAVE_CONNECT_PORT;
 
 #[tokio::main]
@@ -38,6 +39,7 @@ async fn start(data_plane_port: u16) {
     use data_plane::{crypto::api::CryptoApi, stats::StatsProxy};
 
     StatsClient::init();
+    FeatureContext::set();
     println!("Running data plane with egress disabled");
     let (_, e3_api_result, stats_result) = tokio::join!(
         start_data_plane(data_plane_port),
@@ -59,6 +61,7 @@ async fn start(data_plane_port: u16) {
     use data_plane::{crypto::api::CryptoApi, stats::StatsProxy};
 
     StatsClient::init();
+    FeatureContext::set();
     let ports = configuration::get_egress_ports();
     let allowed_domains = shared::server::egress::get_egress_allow_list();
     let egress_proxies = join_all(

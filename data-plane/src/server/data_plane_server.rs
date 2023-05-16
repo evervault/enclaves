@@ -6,7 +6,7 @@ use crate::base_tls_client::ClientError;
 use crate::e3client::DecryptRequest;
 use crate::e3client::{self, AuthRequest, E3Client};
 use crate::error::{AuthError, Result};
-use crate::{CageContext, CAGE_CONTEXT};
+use crate::{CageContext, CAGE_CONTEXT, FEATURE_CONTEXT, FeatureContext};
 
 use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
 
@@ -45,7 +45,8 @@ where
     ) = unbounded_channel();
 
     let cage_context = CAGE_CONTEXT.get().expect("Couldn't get cage context");
-    if cage_context.trx_logging_enabled {
+    let feature_context = FEATURE_CONTEXT.get().expect("Couldn't get cage context");
+    if feature_context.trx_logging_enabled {
         let tx_for_handler = tx.clone();
         tokio::spawn(async move {
             start_log_handler(tx_for_handler, rx).await;
@@ -65,10 +66,12 @@ where
         let server = http_server.clone();
         let e3_client_for_connection = e3_client.clone();
         let cage_context_for_connection = cage_context.clone();
+        let feature_context_for_connection = feature_context.clone();
         let tx_for_connection = tx.clone();
         tokio::spawn(async move {
             let e3_client_for_tcp = e3_client_for_connection.clone();
             let cage_context_for_tcp = cage_context_for_connection.clone();
+            let feature_context_for_tcp = feature_context_for_connection.clone();
             let tx_for_tcp = tx_for_connection.clone();
             let remote_ip = stream.get_remote_addr();
             let sent_response = server
@@ -77,6 +80,7 @@ where
                     service_fn(|mut req: Request<Body>| {
                         let e3_client_for_req = e3_client_for_tcp.clone();
                         let cage_context_for_req = cage_context_for_tcp.clone();
+                        let feature_context_for_req = feature_context_for_tcp.clone();
                         let tx_for_req = tx_for_tcp.clone();
                         let remote_ip = remote_ip.clone();
                         async move {
@@ -87,7 +91,7 @@ where
                               add_remote_ip_to_forwarded_for_header(&mut req, remote_ip.as_deref().unwrap());
                             }
 
-                            let trx_logging_enabled = cage_context_for_req.trx_logging_enabled;
+                            let trx_logging_enabled = feature_context_for_req.trx_logging_enabled;
 
                             if  trx_logging_enabled {
                                 add_ev_ctx_header_to_request(&mut req, &trx_id);
@@ -98,6 +102,7 @@ where
                                 port,
                                 e3_client_for_req,
                                 cage_context_for_req,
+                                feature_context_for_req,
                                 &mut trx_context,
                             )
                             .await;
@@ -141,13 +146,14 @@ async fn handle_incoming_request(
     customer_port: u16,
     e3_client: Arc<E3Client>,
     cage_context: CageContext,
+    feature_context: FeatureContext,
     trx_context: &mut TrxContextBuilder,
 ) -> Response<Body> {
     // Extract API Key header and authenticate request
     // Run parser over payload
     // Serialize request onto socket
 
-    if cage_context.api_key_auth {
+    if feature_context.api_key_auth {
         println!("Authenticating request");
         let api_key = match req
             .headers()
