@@ -74,7 +74,7 @@ where
                     stream,
                     service_fn(|mut req: Request<Body>| {
                         let e3_client_for_req = e3_client_for_tcp.clone();
-                        let feature_context = FEATURE_CONTEXT.get().expect("Couldn't get cage context");
+                        let feature_context = FeatureContext::get();
                         let cage_context = CAGE_CONTEXT.get().expect("Couldn't get cage context");
                         let tx_for_req = tx_for_tcp.clone();
                         let remote_ip = remote_ip.clone();

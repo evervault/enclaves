@@ -42,7 +42,7 @@ docker compose build
 
 echo "Running cage container"
 # run the container
-docker compose up -d
+EV_API_KEY_AUTH=true docker compose up -d
 echo "SLEEPING 15 SECONDS to let cage initialize..."
 sleep 15
 

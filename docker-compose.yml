@@ -14,6 +14,7 @@ services:
     networks:
       mynetwork:
         ipv4_address: 172.20.0.6  
+    platform: linux/amd64    
   cages:
     build: .
     dns: 127.0.0.1

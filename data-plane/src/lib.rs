@@ -55,7 +55,7 @@ impl CageContext {
         CAGE_CONTEXT.get_or_init(|| ctx);
     }
 
-    pub fn new(app_uuid: String, team_uuid: String, cage_uuid: String, cage_name: String) -> Self {
+    pub fn new(team_uuid: String, app_uuid: String, cage_uuid: String, cage_name: String) -> Self {
         Self {
             cage_uuid,
             app_uuid,
