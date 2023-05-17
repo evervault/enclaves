@@ -25,7 +25,7 @@ impl EgressProxy {
     pub async fn listen() -> Result<()> {
         println!("Egress proxy started");
         let mut server = get_vsock_server(EGRESS_PROXY_VSOCK_PORT, Parent).await?;
-        let allowed_domains = shared::server::egress::get_egress_allow_list();
+        let allowed_domains = shared::server::egress::get_egress_allow_list_from_env();
 
         loop {
             let domains = allowed_domains.clone();

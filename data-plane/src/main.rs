@@ -3,19 +3,19 @@ use shared::server::Listener;
 use shared::server::CID::Enclave;
 use shared::{print_version, server::get_vsock_server_with_proxy_protocol};
 
-#[cfg(any(feature = "network_egress", not(feature = "tls_termination")))]
+#[cfg(not(feature = "tls_termination"))]
 use data_plane::configuration;
 #[cfg(feature = "network_egress")]
 use data_plane::dns::egressproxy::EgressProxy;
 #[cfg(feature = "network_egress")]
 use data_plane::dns::enclavedns::EnclaveDns;
-#[cfg(feature = "network_egress")]
-use futures::future::join_all;
-
 #[cfg(not(feature = "tls_termination"))]
 use data_plane::env::Environment;
 use data_plane::health::start_health_check_server;
 use data_plane::stats_client::StatsClient;
+use data_plane::FeatureContext;
+#[cfg(feature = "network_egress")]
+use futures::future::join_all;
 use shared::ENCLAVE_CONNECT_PORT;
 
 #[tokio::main]
@@ -38,6 +38,7 @@ async fn start(data_plane_port: u16) {
     use data_plane::{crypto::api::CryptoApi, stats::StatsProxy};
 
     StatsClient::init();
+    FeatureContext::set();
     println!("Running data plane with egress disabled");
     let (_, e3_api_result, stats_result) = tokio::join!(
         start_data_plane(data_plane_port),
@@ -59,13 +60,9 @@ async fn start(data_plane_port: u16) {
     use data_plane::{crypto::api::CryptoApi, stats::StatsProxy};
 
     StatsClient::init();
-    let ports = configuration::get_egress_ports();
-    let allowed_domains = shared::server::egress::get_egress_allow_list();
-    let egress_proxies = join_all(
-        ports
-            .into_iter()
-            .map(|port| EgressProxy::listen(port, allowed_domains.clone())),
-    );
+    FeatureContext::set();
+    let ports = FeatureContext::get().egress.ports;
+    let egress_proxies = join_all(ports.into_iter().map(EgressProxy::listen));
 
     let (_, dns_result, e3_api_result, egress_results, stats_result) = tokio::join!(
         start_data_plane(data_plane_port),
