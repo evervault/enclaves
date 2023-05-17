@@ -276,7 +276,7 @@ pub async fn handle_standard_request(
             Ok(decrypted) => decrypted,
             Err(e) => {
                 eprintln!("Failed to decrypt — {e}");
-                return build_error_response(Some(String::from("Failed to decrypt ciphertexts")));
+                return build_error_response(Some(format!("Failed to decrypt ciphertexts {e}")));
             }
         };
 
