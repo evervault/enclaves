@@ -8,6 +8,7 @@ use hyper::{
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use shared::server::config_server::routes::ConfigServerPath;
+use shared::{CLIENT_MAJOR_VERSION, CLIENT_VERSION};
 use tokio::net::TcpStream;
 use tokio_rustls::{
     client::TlsStream,
@@ -126,6 +127,14 @@ impl CertProvisionerClient {
         let request = hyper::Request::builder()
             .uri(self.construct_uri(CERT_PROVISIONER_MTLS_PORT, path))
             .header("Content-Type", "application/json")
+            .header(
+                "User-Agent",
+                format!("Cage-Control-Plane/{}", &*CLIENT_VERSION),
+            )
+            .header(
+                "Accept",
+                format!("application/json;version={}", &*CLIENT_MAJOR_VERSION),
+            )
             .method(method)
             .body(body)
             .expect("Failed to build request");
