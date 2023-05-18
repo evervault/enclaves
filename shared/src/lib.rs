@@ -22,5 +22,5 @@ pub mod utils;
 
 lazy_static::lazy_static! {
   pub static ref CLIENT_VERSION: String = option_env!("CARGO_PKG_VERSION").map(|version| version.to_string()).unwrap_or_else(|| "unknown".to_string());
-  pub static ref CLIENT_MAJOR_VERSION: String = option_env!("CARGO_PKG_VERSION").and_then(|version| version.split(".").next().map(|major| major.to_string())).unwrap_or_else(|| "unknown".to_string());
+  pub static ref CLIENT_MAJOR_VERSION: String = option_env!("CARGO_PKG_VERSION").and_then(|version| version.split('.').next().map(|major| major.to_string())).unwrap_or_else(|| "unknown".to_string());
 }
