@@ -1,5 +1,6 @@
 use std::fs;
 
+use configuration::should_forward_proxy_protocol;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 
@@ -126,21 +127,16 @@ impl FeatureContext {
             .unwrap_or_else(|_| "true".to_string())
             .parse()
             .unwrap_or(true);
-        #[cfg(feature = "network_egress")]
-        let dataplane_context = FeatureContext {
+        FeatureContext {
             api_key_auth,
             trx_logging_enabled,
+            forward_proxy_protocol: should_forward_proxy_protocol(),
+            #[cfg(feature = "network_egress")]
             egress: EgressConfig {
                 ports: get_egress_ports_from_env(),
                 allow_list: shared::server::egress::get_egress_allow_list_from_env(),
             },
-        };
-        #[cfg(not(feature = "network_egress"))]
-        let dataplane_context = FeatureContext {
-            api_key_auth,
-            trx_logging_enabled,
-        };
-        dataplane_context
+        }
     }
 
     fn read_dataplane_context() -> Option<FeatureContext> {
@@ -150,17 +146,12 @@ impl FeatureContext {
     }
 }
 
-#[cfg(feature = "network_egress")]
 #[derive(Clone, Deserialize)]
 pub struct FeatureContext {
     pub api_key_auth: bool,
     pub trx_logging_enabled: bool,
+    #[serde(default)]
+    pub forward_proxy_protocol: bool,
+    #[cfg(feature = "network_egress")]
     pub egress: EgressConfig,
-}
-
-#[cfg(not(feature = "network_egress"))]
-#[derive(Clone, Deserialize)]
-pub struct FeatureContext {
-    pub api_key_auth: bool,
-    pub trx_logging_enabled: bool,
 }
