@@ -91,7 +91,10 @@ impl E3Client {
             .take(retries);
 
         Retry::spawn(retry_strategy, || async {
-            self.decrypt(payload.clone()).await
+            self.decrypt(payload.clone()).await.map_err(|e| {
+                println!("Error attempting decryption {e:?}");
+                e
+            })
         })
         .await
     }
