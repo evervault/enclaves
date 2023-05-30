@@ -118,7 +118,7 @@ where
     use shared::utils::pipe_streams;
     use tokio::io::AsyncWriteExt;
     println!("Piping TCP streams directly to user process");
-    let should_forward_proxy_protocol = configuration::should_forward_proxy_protocol();
+    let should_forward_proxy_protocol = FeatureContext::get().forward_proxy_protocol;
 
     let env_result = Environment::new().init_without_certs().await;
     if let Err(e) = env_result {
