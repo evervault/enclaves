@@ -10,6 +10,7 @@ use tokio_rustls::{client::TlsStream, TlsConnector};
 
 use crate::connection::{self, Connection};
 use crate::crypto::token::AttestationAuth;
+use shared::{CLIENT_MAJOR_VERSION, CLIENT_VERSION};
 
 #[derive(Clone)]
 pub struct BaseClient {
@@ -65,6 +66,14 @@ impl BaseClient {
         let mut request = hyper::Request::builder()
             .uri(uri)
             .header("Content-Type", "application/json")
+            .header(
+                "User-Agent",
+                format!("Cage-Data-Plane/{}", &*CLIENT_VERSION),
+            )
+            .header(
+                "Accept",
+                format!("application/json;version={}", &*CLIENT_MAJOR_VERSION),
+            )
             .method(method)
             .body(payload)
             .expect("Failed to create request");

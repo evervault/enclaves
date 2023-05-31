@@ -2,11 +2,10 @@ use crate::error::{Error, Result};
 
 #[cfg(feature = "enclave")]
 pub fn rand_bytes(buffer: &mut [u8]) -> Result<()> {
+    use crate::utils::nsm::NsmConnection;
     use aws_nitro_enclaves_nsm_api as nitro;
-    match nitro::driver::nsm_process_request(
-        nitro::driver::nsm_init(),
-        nitro::api::Request::GetRandom,
-    ) {
+    let nsm_conn = NsmConnection::try_new()?;
+    match nitro::driver::nsm_process_request(nsm_conn.fd(), nitro::api::Request::GetRandom) {
         nitro::api::Response::GetRandom { random } => {
             buffer.copy_from_slice(&random);
             Ok(())

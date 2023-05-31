@@ -68,19 +68,19 @@ impl E3Proxy {
                     continue;
                 }
             }; // TODO: cache
-            println!("IP for E3 obtained");
+            println!("IP for E3 obtained: {e3_ip}");
             tokio::spawn(async move {
                 let e3_stream = match tokio::net::TcpStream::connect(e3_ip).await {
                     Ok(e3_stream) => e3_stream,
                     Err(e) => {
-                        eprintln!("Failed to connect to E3 — {e:?}");
+                        eprintln!("Failed to connect to E3 ({e3_ip}) — {e:?}");
                         Self::shutdown_conn(connection).await;
                         return;
                     }
                 };
 
                 if let Err(e) = shared::utils::pipe_streams(connection, e3_stream).await {
-                    eprintln!("Error streaming from Data Plane to e3 — {e:?}");
+                    eprintln!("Error streaming from Data Plane to e3 ({e3_ip})— {e:?}");
                 }
             });
         }

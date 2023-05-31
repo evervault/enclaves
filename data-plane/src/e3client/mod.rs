@@ -91,7 +91,10 @@ impl E3Client {
             .take(retries);
 
         Retry::spawn(retry_strategy, || async {
-            self.decrypt(payload.clone()).await
+            self.decrypt(payload.clone()).await.map_err(|e| {
+                println!("Error attempting decryption {e:?}");
+                e
+            })
         })
         .await
     }
@@ -203,8 +206,6 @@ impl EncryptedDataEntry {
 
 #[derive(Serialize, Deserialize)]
 pub struct DecryptRequest {
-    team_uuid: String,
-    app_uuid: String,
     data: Vec<EncryptedDataEntry>,
 }
 
@@ -216,21 +217,15 @@ impl DecryptRequest {
     }
 }
 
-impl std::convert::From<(Vec<EncryptedDataEntry>, &crate::CageContext)> for DecryptRequest {
-    fn from((val, context): (Vec<EncryptedDataEntry>, &crate::CageContext)) -> Self {
-        Self {
-            data: val,
-            team_uuid: context.team_uuid().to_string(),
-            app_uuid: context.app_uuid().to_string(),
-        }
-    }
-}
-
 #[derive(Serialize, Deserialize, Clone)]
 pub struct CryptoRequest {
-    pub team_uuid: String,
-    pub app_uuid: String,
     pub data: Value,
+}
+
+impl CryptoRequest {
+    pub fn new(data: Value) -> CryptoRequest {
+        CryptoRequest { data }
+    }
 }
 
 impl E3Payload for CryptoRequest {}
@@ -243,15 +238,6 @@ impl CryptoRequest {
     }
 }
 
-impl std::convert::From<(Value, &crate::CageContext)> for CryptoRequest {
-    fn from((val, context): (Value, &crate::CageContext)) -> Self {
-        Self {
-            data: val,
-            team_uuid: context.team_uuid().to_string(),
-            app_uuid: context.app_uuid().to_string(),
-        }
-    }
-}
 pub trait E3Payload: Sized + Serialize {
     fn try_into_body(self) -> Result<hyper::Body, E3Error> {
         Ok(hyper::Body::from(serde_json::to_vec(&self)?))

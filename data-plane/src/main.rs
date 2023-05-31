@@ -1,22 +1,22 @@
 #[cfg(not(feature = "tls_termination"))]
 use shared::server::Listener;
 use shared::server::CID::Enclave;
-use shared::{print_version, server::get_vsock_server};
+use shared::{print_version, server::get_vsock_server_with_proxy_protocol};
 
-#[cfg(feature = "network_egress")]
+#[cfg(not(feature = "tls_termination"))]
 use data_plane::configuration;
 #[cfg(feature = "network_egress")]
 use data_plane::dns::egressproxy::EgressProxy;
 #[cfg(feature = "network_egress")]
 use data_plane::dns::enclavedns::EnclaveDns;
-#[cfg(feature = "network_egress")]
-use futures::future::join_all;
-
 #[cfg(not(feature = "tls_termination"))]
 use data_plane::env::Environment;
 use data_plane::health::start_health_check_server;
 use data_plane::stats_client::StatsClient;
-use shared::{env_var_present_and_true, ENCLAVE_CONNECT_PORT};
+use data_plane::FeatureContext;
+#[cfg(feature = "network_egress")]
+use futures::future::join_all;
+use shared::ENCLAVE_CONNECT_PORT;
 
 #[tokio::main]
 async fn main() {
@@ -30,11 +30,7 @@ async fn main() {
         .and_then(|port_str| port_str.as_str().parse::<u16>().ok())
         .unwrap_or(8008);
 
-    if env_var_present_and_true!("DATA_PLANE_HEALTH_CHECKS") {
-        tokio::join!(start(data_plane_port), start_health_check_server(),);
-    } else {
-        start(data_plane_port).await;
-    }
+    tokio::join!(start(data_plane_port), start_health_check_server());
 }
 
 #[cfg(not(feature = "network_egress"))]
@@ -42,6 +38,7 @@ async fn start(data_plane_port: u16) {
     use data_plane::{crypto::api::CryptoApi, stats::StatsProxy};
 
     StatsClient::init();
+    FeatureContext::set();
     println!("Running data plane with egress disabled");
     let (_, e3_api_result, stats_result) = tokio::join!(
         start_data_plane(data_plane_port),
@@ -63,13 +60,9 @@ async fn start(data_plane_port: u16) {
     use data_plane::{crypto::api::CryptoApi, stats::StatsProxy};
 
     StatsClient::init();
-    let ports = configuration::get_egress_ports();
-    let allowed_domains = configuration::get_egress_allow_list();
-    let egress_proxies = join_all(
-        ports
-            .into_iter()
-            .map(|port| EgressProxy::listen(port, allowed_domains.clone())),
-    );
+    FeatureContext::set();
+    let ports = FeatureContext::get().egress.ports;
+    let egress_proxies = join_all(ports.into_iter().map(EgressProxy::listen));
 
     let (_, dns_result, e3_api_result, egress_results, stats_result) = tokio::join!(
         start_data_plane(data_plane_port),
@@ -100,7 +93,7 @@ async fn start(data_plane_port: u16) {
 
 async fn start_data_plane(data_plane_port: u16) {
     println!("Data plane starting up. Forwarding traffic to {data_plane_port}");
-    let server = match get_vsock_server(ENCLAVE_CONNECT_PORT, Enclave).await {
+    let server = match get_vsock_server_with_proxy_protocol(ENCLAVE_CONNECT_PORT, Enclave).await {
         Ok(server) => server,
         Err(error) => return eprintln!("Error creating server: {error}"),
     };
@@ -116,9 +109,16 @@ async fn start_data_plane(data_plane_port: u16) {
 }
 
 #[cfg(not(feature = "tls_termination"))]
-async fn run_tcp_passthrough<L: Listener>(mut server: L, port: u16) {
+use shared::server::proxy_protocol::ProxiedConnection;
+#[cfg(not(feature = "tls_termination"))]
+async fn run_tcp_passthrough<L: Listener>(mut server: L, port: u16)
+where
+    <L as Listener>::Connection: ProxiedConnection + 'static,
+{
     use shared::utils::pipe_streams;
+    use tokio::io::AsyncWriteExt;
     println!("Piping TCP streams directly to user process");
+    let should_forward_proxy_protocol = FeatureContext::get().forward_proxy_protocol;
 
     let env_result = Environment::new().init_without_certs().await;
     if let Err(e) = env_result {
@@ -140,7 +140,7 @@ async fn run_tcp_passthrough<L: Listener>(mut server: L, port: u16) {
             }
         };
 
-        let customer_stream = match tokio::net::TcpStream::connect(("0.0.0.0", port)).await {
+        let mut customer_stream = match tokio::net::TcpStream::connect(("0.0.0.0", port)).await {
             Ok(customer_stream) => customer_stream,
             Err(e) => {
                 eprintln!(
@@ -150,6 +150,18 @@ async fn run_tcp_passthrough<L: Listener>(mut server: L, port: u16) {
                 continue;
             }
         };
+
+        if incoming_conn.has_proxy_protocol() && should_forward_proxy_protocol {
+            // flush proxy protocol bytes to customer process
+            let proxy_protocol = incoming_conn.proxy_protocol().unwrap();
+            if let Err(e) = customer_stream.write_all(proxy_protocol.as_bytes()).await {
+                eprintln!(
+                    "An error occurred while forwarding the proxy protocol to the customer process — {}",
+                    e
+                );
+                continue;
+            }
+        }
 
         if let Err(e) = pipe_streams(incoming_conn, customer_stream).await {
             eprintln!("An error occurred piping between the incoming connection and the customer process — {}", e);

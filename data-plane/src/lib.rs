@@ -1,3 +1,6 @@
+use std::fs;
+
+use configuration::should_forward_proxy_protocol;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 
@@ -16,7 +19,8 @@ pub mod health;
 pub mod stats;
 pub mod stats_client;
 pub mod utils;
-
+#[cfg(feature = "network_egress")]
+use shared::server::egress::{get_egress_ports_from_env, EgressConfig};
 #[cfg(feature = "tls_termination")]
 pub mod server;
 
@@ -24,6 +28,7 @@ use shared::server::config_server::requests::ProvisionerContext;
 use thiserror::Error;
 
 static CAGE_CONTEXT: OnceCell<CageContext> = OnceCell::new();
+static FEATURE_CONTEXT: OnceCell<FeatureContext> = OnceCell::new();
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CageContext {
@@ -31,8 +36,6 @@ pub struct CageContext {
     app_uuid: String,
     cage_uuid: String,
     cage_name: String,
-    api_key_auth: bool,
-    trx_logging_enabled: bool,
 }
 
 #[derive(Error, Debug)]
@@ -53,46 +56,12 @@ impl CageContext {
         CAGE_CONTEXT.get_or_init(|| ctx);
     }
 
-    pub fn try_from_env(
-        team_uuid: String,
-        app_uuid: String,
-        cage_uuid: String,
-        cage_name: String,
-    ) -> std::result::Result<Self, std::env::VarError> {
-        let api_key_auth = std::env::var("EV_API_KEY_AUTH")
-            .unwrap_or_else(|_| "true".to_string())
-            .parse()
-            .unwrap_or(true);
-        let trx_logging_enabled = std::env::var("EV_TRX_LOGGING_ENABLED")
-            .unwrap_or_else(|_| "true".to_string())
-            .parse()
-            .unwrap_or(true);
-
-        Ok(Self {
-            app_uuid,
-            team_uuid,
-            cage_uuid,
-            cage_name,
-            api_key_auth,
-            trx_logging_enabled,
-        })
-    }
-
-    pub fn new(
-        app_uuid: String,
-        team_uuid: String,
-        cage_uuid: String,
-        cage_name: String,
-        api_key_auth: bool,
-        trx_logging_enabled: bool,
-    ) -> Self {
+    pub fn new(team_uuid: String, app_uuid: String, cage_uuid: String, cage_name: String) -> Self {
         Self {
             cage_uuid,
             app_uuid,
             team_uuid,
             cage_name,
-            api_key_auth,
-            trx_logging_enabled,
         }
     }
 
@@ -125,12 +94,97 @@ impl CageContext {
 
 impl From<ProvisionerContext> for CageContext {
     fn from(context: ProvisionerContext) -> Self {
-        CageContext::try_from_env(
+        CageContext::new(
             context.team_uuid,
             context.app_uuid,
             context.cage_uuid,
             context.cage_name,
         )
-        .expect("Couldn't instantiate cage context")
+    }
+}
+
+impl FeatureContext {
+    pub fn set() {
+        match Self::read_dataplane_context() {
+            Some(context) => FEATURE_CONTEXT.get_or_init(|| context),
+            None => FEATURE_CONTEXT.get_or_init(Self::from_env),
+        };
+    }
+    pub fn get() -> FeatureContext {
+        FEATURE_CONTEXT
+            .get()
+            .expect("Couldn't get feature context")
+            .clone()
+    }
+
+    // Need to support from env for older versions of CLI - Remove after beta
+    fn from_env() -> FeatureContext {
+        let api_key_auth = std::env::var("EV_API_KEY_AUTH")
+            .unwrap_or_else(|_| "true".to_string())
+            .parse()
+            .unwrap_or(true);
+        let trx_logging_enabled = std::env::var("EV_TRX_LOGGING_ENABLED")
+            .unwrap_or_else(|_| "true".to_string())
+            .parse()
+            .unwrap_or(true);
+        FeatureContext {
+            api_key_auth,
+            trx_logging_enabled,
+            forward_proxy_protocol: should_forward_proxy_protocol(),
+            #[cfg(feature = "network_egress")]
+            egress: EgressConfig {
+                ports: get_egress_ports_from_env(),
+                allow_list: shared::server::egress::get_egress_allow_list_from_env(),
+            },
+        }
+    }
+
+    fn read_dataplane_context() -> Option<FeatureContext> {
+        fs::read_to_string("/etc/dataplane-config.json")
+            .ok()
+            .and_then(|contents| serde_json::from_str(&contents).ok())
+    }
+}
+
+#[derive(Clone, Deserialize)]
+pub struct FeatureContext {
+    pub api_key_auth: bool,
+    pub trx_logging_enabled: bool,
+    #[serde(default)]
+    pub forward_proxy_protocol: bool,
+    #[cfg(feature = "network_egress")]
+    pub egress: EgressConfig,
+}
+
+#[cfg(test)]
+mod test {
+    use super::FeatureContext;
+    #[cfg(not(feature = "network_egress"))]
+    #[test]
+    fn test_config_deserialization_without_proxy_protocol() {
+        let raw_feature_context = r#"{ "api_key_auth": true, "trx_logging_enabled": false }"#;
+        let parsed = serde_json::from_str(raw_feature_context);
+        assert!(parsed.is_ok());
+        let feature_context: FeatureContext = parsed.unwrap();
+        assert_eq!(feature_context.api_key_auth, true);
+        assert_eq!(feature_context.trx_logging_enabled, false);
+        assert_eq!(feature_context.forward_proxy_protocol, false);
+    }
+
+    #[cfg(feature = "network_egress")]
+    #[test]
+    fn test_config_deserialization_with_egress() {
+        let raw_feature_context = r#"{ "api_key_auth": true, "trx_logging_enabled": false, "forward_proxy_protocol": true, "egress": { "ports": "443,8080", "allow_list": "*.stripe.com" } }"#;
+        let parsed = serde_json::from_str(raw_feature_context);
+        assert!(parsed.is_ok());
+        let feature_context: FeatureContext = parsed.unwrap();
+        assert_eq!(feature_context.api_key_auth, true);
+        assert_eq!(feature_context.trx_logging_enabled, false);
+        assert_eq!(feature_context.forward_proxy_protocol, true);
+        assert_eq!(feature_context.egress.ports, vec![443, 8080]);
+        assert_eq!(
+            feature_context.egress.allow_list.wildcard,
+            vec![".stripe.com".to_string()]
+        );
     }
 }

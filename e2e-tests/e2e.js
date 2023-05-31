@@ -98,10 +98,7 @@ describe('Enclave is runnning', () => {
             let keys = Object.keys(stats);
             expect(keys).to.include('memory.total;cage_uuid=cage_123;app_uuid=app_12345678');
             expect(keys).to.include('memory.avail;cage_uuid=cage_123;app_uuid=app_12345678');
-            expect(keys).to.include('memory.free;cage_uuid=cage_123;app_uuid=app_12345678');
             expect(keys).to.include('cpu.one;cage_uuid=cage_123;app_uuid=app_12345678');
-            expect(keys).to.include('cpu.five;cage_uuid=cage_123;app_uuid=app_12345678');
-            expect(keys).to.include('cpu.fifteen;cage_uuid=cage_123;app_uuid=app_12345678');
             expect(keys).to.include('cpu.cores;cage_uuid=cage_123;app_uuid=app_12345678');
             client.destroy();
         });

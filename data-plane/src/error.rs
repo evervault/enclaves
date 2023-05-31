@@ -54,6 +54,9 @@ pub enum Error {
     EnvError(#[from] EnvError),
     #[error("Couldn't get cage context")]
     CageContextError(#[from] CageContextError),
+    #[cfg(feature = "enclave")]
+    #[error("Failed to get connection to nsm")]
+    NsmConnectionError(#[from] crate::utils::nsm::NsmConnectionError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

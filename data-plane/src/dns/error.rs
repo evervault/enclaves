@@ -1,3 +1,4 @@
+use shared::server::egress::EgressError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -18,6 +19,6 @@ pub enum DNSError {
     TlsParseError(String),
     #[error("Could not find a hostname in the TLS hello message. Perhaps SNI is not being used.")]
     NoHostnameFound,
-    #[error("Attempt to make request against domain that isn't allowed for egress {0}")]
-    EgressDomainNotAllowed(String),
+    #[error("Egress error {0}")]
+    EgressError(#[from] EgressError),
 }

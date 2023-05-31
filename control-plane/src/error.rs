@@ -27,6 +27,9 @@ pub enum ServerError {
     CertProvisionerMtls(String),
     #[error(transparent)]
     EnvError(#[from] std::env::VarError),
+    #[cfg(feature = "network_egress")]
+    #[error("Egress error: {0}")]
+    EgressError(#[from] shared::server::egress::EgressError),
 }
 
 pub type Result<T> = std::result::Result<T, ServerError>;

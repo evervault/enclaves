@@ -4,18 +4,13 @@ use hyper::{Body, Request, Response};
 use serde::{Deserialize, Serialize};
 use shared::server::health::{HealthCheckLog, HealthCheckStatus};
 use shared::server::{error::ServerResult, tcp::TcpServer, Listener};
-use shared::{env_var_present_and_true, ENCLAVE_HEALTH_CHECK_PORT};
+use shared::ENCLAVE_HEALTH_CHECK_PORT;
 use std::net::SocketAddr;
 
 pub const CONTROL_PLANE_HEALTH_CHECK_PORT: u16 = 3032;
-#[derive(Clone)]
-pub struct HealthCheckServerConfig {
-    data_plane_checks_enabled: bool,
-}
 
 pub struct HealthCheckServer {
     tcp_server: TcpServer,
-    config: HealthCheckServerConfig,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -25,20 +20,13 @@ struct CombinedHealthCheckLog {
     data_plane: HealthCheckLog,
 }
 
-async fn run_ecs_health_check_service(
-    config: HealthCheckServerConfig,
-) -> std::result::Result<Response<Body>, ServerError> {
+async fn run_ecs_health_check_service() -> std::result::Result<Response<Body>, ServerError> {
     let control_plane = HealthCheckLog::new(
         HealthCheckStatus::Ok,
         Some("Control plane is running".into()),
     );
 
-    let data_plane = if config.data_plane_checks_enabled {
-        health_check_data_plane().await
-    } else {
-        HealthCheckLog::new(HealthCheckStatus::Ignored, None)
-    };
-
+    let data_plane = health_check_data_plane().await;
     let status_to_return = [control_plane.status.clone(), data_plane.status.clone()]
         .iter()
         .max()
@@ -88,42 +76,32 @@ async fn health_check_data_plane() -> HealthCheckLog {
 
 impl HealthCheckServer {
     pub async fn new() -> ServerResult<Self> {
-        let data_plane_checks_enabled = env_var_present_and_true!("DATA_PLANE_HEALTH_CHECKS");
         let tcp_server = TcpServer::bind(SocketAddr::from((
             [0, 0, 0, 0],
             CONTROL_PLANE_HEALTH_CHECK_PORT,
         )))
         .await?;
-        Ok(HealthCheckServer {
-            tcp_server,
-            config: HealthCheckServerConfig {
-                data_plane_checks_enabled,
-            },
-        })
+        Ok(HealthCheckServer { tcp_server })
     }
 
     pub async fn start(&mut self) -> ServerResult<()> {
         println!(
-            "Control plane health-check server running on port {CONTROL_PLANE_HEALTH_CHECK_PORT}. Also checking data-plane: {}", self.config.data_plane_checks_enabled
+            "Control plane health-check server running on port {CONTROL_PLANE_HEALTH_CHECK_PORT}"
         );
 
         loop {
             let stream = self.tcp_server.accept().await?;
-            let config = self.config.clone();
-            let service = hyper::service::service_fn(move |request: Request<Body>| {
-                let config = config.clone();
-                async move {
-                    match request
-                        .headers()
-                        .get("User-Agent")
-                        .map(|value| value.as_bytes())
-                    {
-                        Some(b"ECS-HealthCheck") => run_ecs_health_check_service(config).await,
-                        _ => Response::builder()
-                            .status(500)
-                            .body(Body::from("Unsupported health check type!"))
-                            .map_err(ServerError::from),
-                    }
+            let service = hyper::service::service_fn(move |request: Request<Body>| async move {
+                match request
+                    .headers()
+                    .get("User-Agent")
+                    .map(|value| value.as_bytes())
+                {
+                    Some(b"ECS-HealthCheck") => run_ecs_health_check_service().await,
+                    _ => Response::builder()
+                        .status(400)
+                        .body(Body::from("Unsupported health check type!"))
+                        .map_err(ServerError::from),
                 }
             });
             if let Err(error) = hyper::server::conn::Http::new()
@@ -148,12 +126,9 @@ mod health_check_tests {
     }
 
     #[tokio::test]
-    async fn test_cage_health_check_service_deep() {
+    async fn test_cage_health_check_service() {
         // the data-plane status should error, as its not running
-        let config = HealthCheckServerConfig {
-            data_plane_checks_enabled: true,
-        };
-        let response = run_ecs_health_check_service(config).await.unwrap();
+        let response = run_ecs_health_check_service().await.unwrap();
         assert_eq!(response.status(), 500);
         println!("deep response: {response:?}");
         let health_check_log = response_to_health_check_log(response).await;
@@ -161,34 +136,6 @@ mod health_check_tests {
             health_check_log.data_plane.status,
             HealthCheckStatus::Err
         ));
-    }
-
-    #[tokio::test]
-    async fn test_cage_health_check_service_shallow() {
-        // the health check should succeed, as the data-plane isn't checked
-        let config = HealthCheckServerConfig {
-            data_plane_checks_enabled: false,
-        };
-        let response = run_ecs_health_check_service(config).await.unwrap();
-        assert_eq!(response.status(), 200);
-        println!("shallow response: {response:?}");
-        let health_check_log = response_to_health_check_log(response).await;
-        assert!(matches!(
-            health_check_log.data_plane.status,
-            HealthCheckStatus::Ignored
-        ));
-    }
-
-    #[tokio::test]
-    async fn test_consecutive_ecs_health_check_service_calls() {
-        // state should not change, so the health checks should keep passing
-        let config = HealthCheckServerConfig {
-            data_plane_checks_enabled: false,
-        };
-        let response = run_ecs_health_check_service(config.clone()).await.unwrap();
-        assert_eq!(response.status(), 200);
-        let response = run_ecs_health_check_service(config).await.unwrap();
-        assert_eq!(response.status(), 200);
     }
 
     #[tokio::test]

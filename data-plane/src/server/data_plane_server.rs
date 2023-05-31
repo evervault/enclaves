@@ -3,9 +3,10 @@ use super::http::ContentEncoding;
 use super::tls::TlsServerBuilder;
 
 use crate::base_tls_client::ClientError;
-use crate::e3client::{self, AuthRequest, DecryptRequest, E3Client};
+use crate::e3client::DecryptRequest;
+use crate::e3client::{self, AuthRequest, E3Client};
 use crate::error::{AuthError, Result};
-use crate::{CageContext, CAGE_CONTEXT};
+use crate::{CageContext, FeatureContext, CAGE_CONTEXT, FEATURE_CONTEXT};
 
 use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
 
@@ -18,7 +19,9 @@ use hyper::service::service_fn;
 use hyper::{Body, Request, Response};
 use sha2::Digest;
 use shared::logging::TrxContextBuilder;
+use shared::server::proxy_protocol::ProxiedConnection;
 use shared::server::Listener;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::SystemTime;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -26,7 +29,7 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 pub async fn run<L: Listener + Send + Sync>(tcp_server: L, port: u16)
 where
     TlsError: From<<L as Listener>::Error>,
-    <L as Listener>::Connection: 'static,
+    <L as Listener>::Connection: ProxiedConnection + 'static,
 {
     let mut server = TlsServerBuilder::new()
         .with_server(tcp_server)
@@ -41,8 +44,8 @@ where
         UnboundedReceiver<LogHandlerMessage>,
     ) = unbounded_channel();
 
-    let cage_context = CAGE_CONTEXT.get().expect("Couldn't get cage context");
-    if cage_context.trx_logging_enabled {
+    let feature_context = FEATURE_CONTEXT.get().expect("Couldn't get cage context");
+    if feature_context.trx_logging_enabled {
         let tx_for_handler = tx.clone();
         tokio::spawn(async move {
             start_log_handler(tx_for_handler, rx).await;
@@ -58,36 +61,43 @@ where
                 continue;
             }
         };
+
         let server = http_server.clone();
         let e3_client_for_connection = e3_client.clone();
-        let cage_context_for_connection = cage_context.clone();
         let tx_for_connection = tx.clone();
         tokio::spawn(async move {
             let e3_client_for_tcp = e3_client_for_connection.clone();
-            let cage_context_for_tcp = cage_context_for_connection.clone();
             let tx_for_tcp = tx_for_connection.clone();
+            let remote_ip = stream.get_remote_addr();
             let sent_response = server
                 .serve_connection(
                     stream,
                     service_fn(|mut req: Request<Body>| {
                         let e3_client_for_req = e3_client_for_tcp.clone();
-                        let cage_context_for_req = cage_context_for_tcp.clone();
+                        let feature_context = FeatureContext::get();
+                        let cage_context = CAGE_CONTEXT.get().expect("Couldn't get cage context");
                         let tx_for_req = tx_for_tcp.clone();
+                        let remote_ip = remote_ip.clone();
                         async move {
-                            let (mut trx_context, request_timer) = init_trx(&cage_context_for_req, &req);
+                            let (mut trx_context, request_timer) = init_trx(cage_context, &req);
                             let trx_id = trx_context.get_trx_id();
-                            trx_context.add_req_to_trx_context(&req);
-                            let trx_logging_enabled = cage_context_for_req.trx_logging_enabled;
+                            if remote_ip.is_some() {
+                              trx_context.remote_ip(remote_ip.clone());
+                              add_remote_ip_to_forwarded_for_header(&mut req, remote_ip.as_deref().unwrap());
+                            }
+
+                            let trx_logging_enabled = feature_context.trx_logging_enabled;
 
                             if  trx_logging_enabled {
-                                add_ev_ctx_header_to_request(&mut req, trx_id.clone());
+                                add_ev_ctx_header_to_request(&mut req, &trx_id);
                             }
 
                             let mut response = handle_incoming_request(
                                 req,
                                 port,
                                 e3_client_for_req,
-                                cage_context_for_req,
+                                cage_context.clone(),
+                                feature_context.clone(),
                                 &mut trx_context,
                             )
                             .await;
@@ -99,7 +109,7 @@ where
                                 Ok(ctx) => {
                                     if trx_logging_enabled {
                                         //Add trx ID to response of request
-                                        add_ev_ctx_header_to_response(&mut response, trx_id);
+                                        add_ev_ctx_header_to_response(&mut response, &trx_id);
 
                                         //Send trx to config server in data plane
                                         if let Err(e) = tx_for_req.send(LogHandlerMessage::new_log_message(ctx)) {
@@ -131,13 +141,14 @@ async fn handle_incoming_request(
     customer_port: u16,
     e3_client: Arc<E3Client>,
     cage_context: CageContext,
+    feature_context: FeatureContext,
     trx_context: &mut TrxContextBuilder,
 ) -> Response<Body> {
     // Extract API Key header and authenticate request
     // Run parser over payload
     // Serialize request onto socket
 
-    if cage_context.api_key_auth {
+    if feature_context.api_key_auth {
         println!("Authenticating request");
         let api_key = match req
             .headers()
@@ -221,7 +232,6 @@ async fn handle_incoming_request(
             compression,
             customer_port,
             e3_client,
-            &cage_context,
             trx_context,
         )
         .await
@@ -233,7 +243,6 @@ pub async fn handle_standard_request(
     _compression: Option<super::http::ContentEncoding>,
     customer_port: u16,
     e3_client: Arc<E3Client>,
-    cage_context: &CageContext,
     trx_context: &mut TrxContextBuilder,
 ) -> Response<Body> {
     let (mut req_info, req_body) = req_parts;
@@ -259,10 +268,8 @@ pub async fn handle_standard_request(
 
     let mut bytes_vec = request_bytes.to_vec();
     if !decryption_payload.is_empty() {
-        let request_payload = e3client::CryptoRequest::from((
-            serde_json::Value::Array(decryption_payload),
-            cage_context,
-        ));
+        let request_payload =
+            e3client::CryptoRequest::new(serde_json::Value::Array(decryption_payload));
         let decrypted: DecryptRequest = match e3_client
             .decrypt_with_retries(2, request_payload)
             .await
@@ -270,7 +277,7 @@ pub async fn handle_standard_request(
             Ok(decrypted) => decrypted,
             Err(e) => {
                 eprintln!("Failed to decrypt — {e}");
-                return build_error_response(Some(String::from("Failed to decrypt ciphertexts")));
+                return build_error_response(Some(format!("Failed to decrypt ciphertexts {e}")));
             }
         };
 
@@ -350,19 +357,47 @@ fn init_trx(cage_context: &CageContext, req: &Request<Body>) -> (TrxContextBuild
     (trx_ctx, req_timer)
 }
 
-fn build_trx_id_header_value(trx_id: String) -> HeaderValue {
-    HeaderValue::from_str(trx_id.as_str()).expect("Unable to create headerValue from ID")
+fn build_header_value_from_str(header_val: &str) -> HeaderValue {
+    HeaderValue::from_str(header_val).expect("Unable to create headerValue from str")
 }
 
-fn add_ev_ctx_header_to_request(req: &mut Request<Body>, trx_id: String) {
+fn add_ev_ctx_header_to_request(req: &mut Request<Body>, trx_id: &str) {
     req.headers_mut()
-        .insert("x-evervault-cage-ctx", build_trx_id_header_value(trx_id));
+        .insert("x-evervault-cage-ctx", build_header_value_from_str(trx_id));
 }
 
-fn add_ev_ctx_header_to_response(response: &mut Response<Body>, trx_id: String) {
+fn append_or_insert_header(
+    header: &str,
+    req: &mut Request<Body>,
+    value: &str,
+) -> std::result::Result<(), http::header::InvalidHeaderName> {
+    let header_name = http::header::HeaderName::from_str(header)?;
+    if let Some(header_val) = req
+        .headers_mut()
+        .get(&header_name)
+        .and_then(|header_val| header_val.to_str().ok())
+    {
+        let updated_header = format!("{header_val}, {value}");
+        req.headers_mut()
+            .insert(header_name, build_header_value_from_str(&updated_header));
+    } else {
+        req.headers_mut()
+            .insert(header_name, build_header_value_from_str(value));
+    }
+    Ok(())
+}
+
+fn add_remote_ip_to_forwarded_for_header(req: &mut Request<Body>, remote_ip: &str) {
+    let _ = append_or_insert_header("X-Forwarded-For", req, remote_ip);
+    let _ = append_or_insert_header("X-Forwarded-Proto", req, "https");
+    let forwarded_header = format!("for={remote_ip};proto=https");
+    let _ = append_or_insert_header("Forwarded", req, &forwarded_header);
+}
+
+fn add_ev_ctx_header_to_response(response: &mut Response<Body>, trx_id: &str) {
     response
         .headers_mut()
-        .insert("x-evervault-cage-ctx", build_trx_id_header_value(trx_id));
+        .insert("x-evervault-cage-ctx", build_header_value_from_str(trx_id));
 }
 
 fn build_error_response(body_msg: Option<String>) -> Response<Body> {
@@ -421,7 +456,7 @@ mod test {
 
         let trx_id = format!("{:X}", u128::MAX);
 
-        add_ev_ctx_header_to_request(&mut request, trx_id.clone());
+        add_ev_ctx_header_to_request(&mut request, &trx_id);
 
         let ctx_header = request.headers().get("x-evervault-cage-ctx");
         let expected_header_val = HeaderValue::from_str(trx_id.as_str())
@@ -440,7 +475,7 @@ mod test {
 
         let trx_id = format!("{:X}", u128::MAX);
 
-        add_ev_ctx_header_to_response(&mut response, trx_id.clone());
+        add_ev_ctx_header_to_response(&mut response, &trx_id);
 
         let ctx_header = response.headers().get("x-evervault-cage-ctx");
         let expected_header_val = HeaderValue::from_str(trx_id.as_str())

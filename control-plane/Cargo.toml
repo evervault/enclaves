@@ -28,6 +28,6 @@ aws-sdk-sns = "0.25.0"
 
 [features]
 default = []
-network_egress = []
+network_egress = ["shared/network_egress"]
 enclave = ["dep:tokio-vsock", "shared/enclave"]
 not_enclave = ["network_egress"]

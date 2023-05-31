@@ -23,6 +23,8 @@ pub struct TrxContext {
     r#type: String,
     request_method: String,
     #[builder(default)]
+    remote_ip: Option<String>,
+    #[builder(default)]
     request_headers: Option<String>,
     #[builder(default)]
     user_agent: Option<String>,
@@ -109,6 +111,7 @@ impl TrxContextBuilder {
             content_type: None,
             response_content_type: None,
             elapsed: None,
+            remote_ip: None,
         }
     }
 
