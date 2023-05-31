@@ -1,8 +1,6 @@
-use rusoto_core::{credential::ProfileProvider, HttpClient, Region};
-use rusoto_sns::*;
-
 use crate::configuration;
-
+use aws_config::{load_from_env, meta::region::RegionProviderChain};
+use aws_sdk_sns::Client as SnsClient;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -59,36 +57,40 @@ pub struct ControlPlaneSnsClient {
 }
 
 impl ControlPlaneSnsClient {
-    pub fn new_local_client(topic_arn: String) -> Self {
+    pub async fn new_local_client(topic_arn: String) -> Self {
         // Use local profile for local development
-        let aws_profile = configuration::get_aws_profile();
-        let credentials_provider = ProfileProvider::with_default_credentials(aws_profile)
-            .expect("Could not create credentials provider for local S3 client");
-        let request_dispatcher =
-            HttpClient::new().expect("Couldn't initialise request dispatcher for local S3 client");
-        let client = SnsClient::new_with(request_dispatcher, credentials_provider, Region::UsEast1);
+        let region_provider =
+            RegionProviderChain::default_provider().or_else(configuration::get_aws_region());
+        let config = aws_config::from_env()
+            .profile_name(configuration::get_aws_profile())
+            .region(region_provider)
+            .load()
+            .await;
+        let sns_client = SnsClient::new(&config);
 
         Self {
-            sns_client: client,
+            sns_client,
             topic_arn,
         }
     }
 
-    pub fn new(topic_arn: String) -> Self {
+    pub async fn new(topic_arn: String) -> Self {
+        let config = load_from_env().await;
         Self {
-            sns_client: SnsClient::new(configuration::get_aws_region()),
+            sns_client: SnsClient::new(&config),
             topic_arn,
         }
     }
 
     pub async fn publish_message(&self, message: String) {
-        let publish_input = PublishInput {
-            message,
-            topic_arn: Some(self.topic_arn.clone()),
-            ..Default::default()
-        };
-
-        match self.sns_client.publish(publish_input).await {
+        match self
+            .sns_client
+            .publish()
+            .topic_arn(&self.topic_arn)
+            .message(message)
+            .send()
+            .await
+        {
             Ok(_) => println!("Successfully published message to SNS"),
             Err(err) => eprintln!("Failed to publish message to SNS. {err}"),
         }

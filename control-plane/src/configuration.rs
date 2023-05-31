@@ -1,7 +1,5 @@
 use std::str::FromStr;
 
-use rusoto_core::Region;
-
 #[derive(PartialEq, Eq)]
 pub enum Environment {
     Development,
@@ -32,11 +30,11 @@ pub fn get_aws_profile() -> String {
     std::env::var("AWS_PROFILE").unwrap_or_else(|_| "ev-local-customers".to_string())
 }
 
-pub fn get_aws_region() -> Region {
-    std::env::var("AWS_REGION")
-        .map(|region| Region::from_str(&region))
-        .unwrap_or(Ok(Region::UsEast1))
-        .expect("Expected AWS Region to be set under AWS_PROFILE")
+pub fn get_aws_region() -> aws_types::region::Region {
+    let region = std::env::var("AWS_REGION")
+        .ok()
+        .unwrap_or_else(|| "us-east-1".to_string());
+    aws_types::region::Region::new(region)
 }
 #[derive(Clone)]
 pub struct CageContext {
