@@ -33,7 +33,7 @@ pub fn get_aws_profile() -> String {
 pub fn get_aws_region() -> aws_types::region::Region {
     let region = std::env::var("AWS_REGION")
         .ok()
-        .unwrap_or("us-east-1".to_string());
+        .unwrap_or_else(||"us-east-1".to_string());
     aws_types::region::Region::new(region)
 }
 #[derive(Clone)]
