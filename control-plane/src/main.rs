@@ -179,29 +179,29 @@ async fn tcp_server() -> Result<()> {
                         }
                     };
 
-                match data_plane_version {
-                    // data plane version doesn't support proxy protocol. Strip bytes.
-                    Some(version)
-                        if version.cmp(&PROXY_PROTOCOL_MIN_VERSION) == std::cmp::Ordering::Less =>
+                if should_remove_proxy_protocol(data_plane_version.as_ref()) {
+                    if let Err(e) = strip_proxy_protocol_and_pipe(connection, enclave_stream).await
                     {
-                        if let Err(e) =
-                            strip_proxy_protocol_and_pipe(connection, enclave_stream).await
-                        {
-                            eprintln!(
-                                "An error occurred while piping the connection over vsock - {e:?}"
-                            );
-                        }
+                        eprintln!(
+                            "An error occurred while piping the connection over vsock - {e:?}"
+                        );
                     }
-                    _ => {
-                        if let Err(e) = pipe_streams(connection, enclave_stream).await {
-                            eprintln!(
-                                "An error occurred while piping the connection over vsock - {e:?}"
-                            );
-                        }
+                } else {
+                    if let Err(e) = pipe_streams(connection, enclave_stream).await {
+                        eprintln!(
+                            "An error occurred while piping the connection over vsock - {e:?}"
+                        );
                     }
-                };
+                }
             });
         }
+    }
+}
+
+fn should_remove_proxy_protocol(data_plane_version: Option<&semver::Version>) -> bool {
+    match data_plane_version {
+        Some(version) => version.cmp(&PROXY_PROTOCOL_MIN_VERSION) == std::cmp::Ordering::Less,
+        _ => false,
     }
 }
 
@@ -283,7 +283,9 @@ fn listen_for_shutdown_signal() {
 
 #[cfg(test)]
 mod test {
-    use super::strip_proxy_protocol_and_pipe;
+    use crate::PROXY_PROTOCOL_MIN_VERSION;
+
+    use super::{should_remove_proxy_protocol, strip_proxy_protocol_and_pipe};
     use tokio_test::io::Builder;
 
     fn build_proxy_protocol_header() -> Vec<u8> {
@@ -319,5 +321,26 @@ mod test {
         let pipe_result =
             strip_proxy_protocol_and_pipe(mock_incoming_proxied_conn, mock_target_conn).await;
         assert!(pipe_result.is_ok());
+    }
+
+    #[test]
+    fn test_should_remove_proxy_protocol_for_old_data_plane() {
+        let old_data_plane = Some(semver::Version::new(0, 0, 20));
+        let should_remove_pp = should_remove_proxy_protocol(old_data_plane.as_ref());
+        assert!(should_remove_pp);
+    }
+
+    #[test]
+    fn test_should_not_remove_proxy_protocol_for_new_data_plane() {
+        let new_data_plane = Some(semver::Version::new(0, 0, 35));
+        let should_remove_pp = should_remove_proxy_protocol(new_data_plane.as_ref());
+        assert_eq!(should_remove_pp, false);
+    }
+
+    #[test]
+    fn test_should_not_remove_proxy_protocol_for_exact_match_data_plane() {
+        let min_data_plane = Some(PROXY_PROTOCOL_MIN_VERSION.clone());
+        let should_remove_pp = should_remove_proxy_protocol(min_data_plane.as_ref());
+        assert_eq!(should_remove_pp, false);
     }
 }
