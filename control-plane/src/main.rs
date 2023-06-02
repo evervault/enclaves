@@ -186,12 +186,8 @@ async fn tcp_server() -> Result<()> {
                             "An error occurred while piping the connection over vsock - {e:?}"
                         );
                     }
-                } else {
-                    if let Err(e) = pipe_streams(connection, enclave_stream).await {
-                        eprintln!(
-                            "An error occurred while piping the connection over vsock - {e:?}"
-                        );
-                    }
+                } else if let Err(e) = pipe_streams(connection, enclave_stream).await {
+                    eprintln!("An error occurred while piping the connection over vsock - {e:?}");
                 }
             });
         }
