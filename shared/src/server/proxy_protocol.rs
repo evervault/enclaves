@@ -148,7 +148,6 @@ impl<C: AsyncRead + AsyncWrite + Sync> ProxiedConnection for AcceptedConn<C> {
 #[cfg(test)]
 mod tests {
     use super::ProxiedConnection;
-    use std::net::SocketAddr;
     use tokio::io::AsyncReadExt;
     use tokio_test::io::Builder;
 
@@ -158,10 +157,10 @@ mod tests {
             ppp::v2::Protocol::Stream,
             (
                 "1.2.3.4:80"
-                    .parse::<SocketAddr>()
+                    .parse::<std::net::SocketAddr>()
                     .expect("Infallible - hardcoded"),
                 "5.6.7.8:443"
-                    .parse::<SocketAddr>()
+                    .parse::<std::net::SocketAddr>()
                     .expect("Infallible - hardcoded"),
             ),
         );
