@@ -103,3 +103,7 @@ pub fn get_cert_provisioner_mtls_key_env() -> Result<String, std::env::VarError>
 pub fn get_cert_provisioner_mtls_root_cert_env() -> Result<String, std::env::VarError> {
     std::env::var("CERT_PROVISIONER_MTLS_ROOT_CERT")
 }
+
+pub fn get_data_plane_version() -> Result<String, std::env::VarError> {
+    std::env::var("DATA_PLANE_VERSION")
+}

@@ -25,6 +25,7 @@ rustls-pemfile = "1.0.1"
 aws-config = "0.55.0"
 aws-types = "0.55.0"
 aws-sdk-sns = "0.25.0"
+semver = "1.0.17"
 
 [features]
 default = []

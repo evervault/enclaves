@@ -1,13 +1,15 @@
 use control_plane::clients::{cert_provisioner, mtls_config};
 use control_plane::stats_proxy::StatsProxy;
 use control_plane::{cert_proxy, config_server};
+use shared::server::error::ServerResult;
 use shared::{print_version, utils::pipe_streams, ENCLAVE_CONNECT_PORT};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::process::Command;
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::time::{sleep, Duration};
 
+use tokio::net::TcpListener;
 use tokio::sync::mpsc;
-use tokio::{io::AsyncWriteExt, net::TcpListener};
 
 use control_plane::{
     clients::sns::{ControlPlaneSnsClient, DeregistrationMessage},
@@ -21,6 +23,8 @@ use control_plane::{
 const CONTROL_PLANE_PORT: u16 = 443;
 #[cfg(not(feature = "enclave"))]
 const CONTROL_PLANE_PORT: u16 = 3031;
+
+const PROXY_PROTOCOL_MIN_VERSION: semver::Version = semver::Version::new(0, 0, 30);
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -152,7 +156,12 @@ async fn tcp_server() -> Result<()> {
         }
     };
 
+    let parsed_data_plane_version = configuration::get_data_plane_version()
+        .ok()
+        .and_then(|raw_data_plane_version| semver::Version::parse(&raw_data_plane_version).ok());
+
     loop {
+        let data_plane_version = parsed_data_plane_version.clone();
         if let Ok((mut connection, _client_socket_addr)) = tcp_listener.accept().await {
             tokio::spawn(async move {
                 println!("Accepted incoming TCP stream — {_client_socket_addr:?}");
@@ -170,12 +179,43 @@ async fn tcp_server() -> Result<()> {
                         }
                     };
 
-                if let Err(e) = pipe_streams(connection, enclave_stream).await {
-                    eprintln!("An error occurred while piping the connection over vsock - {e:?}");
-                }
+                match data_plane_version {
+                    // data plane version doesn't support proxy protocol. Strip bytes.
+                    Some(version)
+                        if version.cmp(&PROXY_PROTOCOL_MIN_VERSION) == std::cmp::Ordering::Less =>
+                    {
+                        if let Err(e) =
+                            strip_proxy_protocol_and_pipe(connection, enclave_stream).await
+                        {
+                            eprintln!(
+                                "An error occurred while piping the connection over vsock - {e:?}"
+                            );
+                        }
+                    }
+                    _ => {
+                        if let Err(e) = pipe_streams(connection, enclave_stream).await {
+                            eprintln!(
+                                "An error occurred while piping the connection over vsock - {e:?}"
+                            );
+                        }
+                    }
+                };
             });
         }
     }
+}
+
+async fn strip_proxy_protocol_and_pipe<
+    T1: AsyncRead + AsyncWrite + std::marker::Unpin + std::marker::Sync,
+    T2: AsyncRead + AsyncWrite + std::marker::Unpin + std::marker::Sync,
+>(
+    connection: T1,
+    enclave_stream: T2,
+) -> ServerResult<(u64, u64)> {
+    let parsed_connection =
+        shared::server::proxy_protocol::try_parse_proxy_protocol(connection).await?;
+    let pipe_result = pipe_streams(parsed_connection, enclave_stream).await?;
+    Ok(pipe_result)
 }
 
 // Listen for SIGTERM and deregister task before shutting down

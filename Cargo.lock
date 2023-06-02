@@ -595,6 +595,7 @@ dependencies = [
  "lazy_static",
  "rand",
  "rustls-pemfile",
+ "semver",
  "serde",
  "serde_json",
  "shared",
