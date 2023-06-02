@@ -280,3 +280,44 @@ fn listen_for_shutdown_signal() {
         };
     });
 }
+
+#[cfg(test)]
+mod test {
+    use super::strip_proxy_protocol_and_pipe;
+    use tokio_test::io::Builder;
+
+    fn build_proxy_protocol_header() -> Vec<u8> {
+        let header = ppp::v2::Builder::with_addresses(
+            ppp::v2::Version::Two | ppp::v2::Command::Proxy,
+            ppp::v2::Protocol::Stream,
+            (
+                "1.2.3.4:80"
+                    .parse::<std::net::SocketAddr>()
+                    .expect("Infallible - hardcoded"),
+                "5.6.7.8:443"
+                    .parse::<std::net::SocketAddr>()
+                    .expect("Infallible - hardcoded"),
+            ),
+        );
+        header.build().expect("Infallible - hardcoded")
+    }
+
+    #[tokio::test]
+    async fn test_proxy_protocol_backwards_compatibility() {
+        let buf = build_proxy_protocol_header();
+        let mut incoming_mock_builder = Builder::new();
+        incoming_mock_builder.read(&buf[..]);
+        let dummy_data = b"Hello, world".to_vec();
+        incoming_mock_builder.read(&dummy_data[..]);
+        let mock_incoming_proxied_conn = incoming_mock_builder.build();
+
+        let mut target_mock_builder = Builder::new();
+        // configure target stream to only expect the bytes following proxy protocol
+        target_mock_builder.write(&dummy_data[..]);
+        let mock_target_conn = target_mock_builder.build();
+        // test will fail if the target stream receives unexpected data
+        let pipe_result =
+            strip_proxy_protocol_and_pipe(mock_incoming_proxied_conn, mock_target_conn).await;
+        assert!(pipe_result.is_ok());
+    }
+}

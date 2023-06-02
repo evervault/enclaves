@@ -27,6 +27,10 @@ aws-types = "0.55.0"
 aws-sdk-sns = "0.25.0"
 semver = "1.0.17"
 
+[dev-dependencies]
+tokio-test = "0.4.2"
+ppp = "2.2.0"
+
 [features]
 default = []
 network_egress = ["shared/network_egress"]

@@ -593,6 +593,7 @@ dependencies = [
  "dns-message-parser",
  "hyper",
  "lazy_static",
+ "ppp",
  "rand",
  "rustls-pemfile",
  "semver",
@@ -603,6 +604,7 @@ dependencies = [
  "tls-parser",
  "tokio",
  "tokio-rustls",
+ "tokio-test",
  "tokio-vsock",
  "trust-dns-resolver",
 ]
