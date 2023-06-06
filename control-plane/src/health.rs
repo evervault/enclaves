@@ -4,7 +4,7 @@ use hyper::{Body, Request, Response};
 use serde::{Deserialize, Serialize};
 use shared::server::health::{HealthCheckLog, HealthCheckStatus};
 use shared::server::{error::ServerResult, tcp::TcpServer, Listener};
-use shared::ENCLAVE_HEALTH_CHECK_PORT;
+use shared::{env_var_present_and_true, ENCLAVE_HEALTH_CHECK_PORT};
 use std::net::SocketAddr;
 
 pub const CONTROL_PLANE_HEALTH_CHECK_PORT: u16 = 3032;
@@ -20,13 +20,19 @@ struct CombinedHealthCheckLog {
     data_plane: HealthCheckLog,
 }
 
-async fn run_ecs_health_check_service() -> std::result::Result<Response<Body>, ServerError> {
+async fn run_ecs_health_check_service(
+    skip_deep_healthcheck: bool,
+) -> std::result::Result<Response<Body>, ServerError> {
     let control_plane = HealthCheckLog::new(
         HealthCheckStatus::Ok,
         Some("Control plane is running".into()),
     );
 
-    let data_plane = health_check_data_plane().await;
+    let data_plane = if skip_deep_healthcheck {
+        HealthCheckLog::new(HealthCheckStatus::Ignored, None)
+    } else {
+        health_check_data_plane().await
+    };
     let status_to_return = [control_plane.status.clone(), data_plane.status.clone()]
         .iter()
         .max()
@@ -89,6 +95,9 @@ impl HealthCheckServer {
             "Control plane health-check server running on port {CONTROL_PLANE_HEALTH_CHECK_PORT}"
         );
 
+        // Perform deep healthchecks into the enclave *unless* `DISABLE_DEEP_HEALTH_CHECKS` is set to "true"
+        let skip_deep_healthcheck = env_var_present_and_true!("DISABLE_DEEP_HEALTH_CHECKS");
+
         loop {
             let stream = self.tcp_server.accept().await?;
             let service = hyper::service::service_fn(move |request: Request<Body>| async move {
@@ -97,7 +106,9 @@ impl HealthCheckServer {
                     .get("User-Agent")
                     .map(|value| value.as_bytes())
                 {
-                    Some(b"ECS-HealthCheck") => run_ecs_health_check_service().await,
+                    Some(b"ECS-HealthCheck") => {
+                        run_ecs_health_check_service(skip_deep_healthcheck).await
+                    }
                     _ => Response::builder()
                         .status(400)
                         .body(Body::from("Unsupported health check type!"))
@@ -128,13 +139,26 @@ mod health_check_tests {
     #[tokio::test]
     async fn test_cage_health_check_service() {
         // the data-plane status should error, as its not running
-        let response = run_ecs_health_check_service().await.unwrap();
+        let response = run_ecs_health_check_service(false).await.unwrap();
         assert_eq!(response.status(), 500);
         println!("deep response: {response:?}");
         let health_check_log = response_to_health_check_log(response).await;
         assert!(matches!(
             health_check_log.data_plane.status,
             HealthCheckStatus::Err
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_cage_health_check_service_with_skip_deep_set_to_true() {
+        // the data-plane status should error, as its not running
+        let response = run_ecs_health_check_service(true).await.unwrap();
+        assert_eq!(response.status(), 200);
+        println!("deep response: {response:?}");
+        let health_check_log = response_to_health_check_log(response).await;
+        assert!(matches!(
+            health_check_log.data_plane.status,
+            HealthCheckStatus::Ignored
         ));
     }
 
