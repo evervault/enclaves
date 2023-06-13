@@ -2,7 +2,6 @@ use super::error::DNSError;
 use crate::dns::cache::Cache;
 use bytes::Bytes;
 use dns_message_parser::rr::A;
-use dns_message_parser::rr::RR;
 use dns_message_parser::Dns;
 use shared::server::get_vsock_client;
 use shared::server::CID::Parent;
@@ -50,6 +49,7 @@ impl EnclaveDnsDriver {
         }
     }
 
+    /// Perform a DNS lookup using the proxy running on the Host, storing the resulting IPs in the Data-Plane's cache
     async fn perform_dns_lookup(&self, dns_packet: Bytes) -> Result<Bytes, DNSError> {
         // Attempt DNS lookup wth a 5 second timeout, flatten timeout errors into a DNS Error
         let dns_response = timeout(
@@ -71,22 +71,23 @@ impl EnclaveDnsDriver {
             .domain_name
             .to_string();
 
-        let rr = Self::get_records(&dns.answers);
-        Cache::store_ip(&domain_name, rr);
-
-        Self::create_loopback_dns_response(dns)
-    }
-
-    fn get_records(resource_records: &[RR]) -> Vec<String> {
-        resource_records
+        // Extract returned records from response
+        let rr = dns
+            .answers
             .iter()
             .filter_map(|rr| match rr {
                 dns_message_parser::rr::RR::A(a) => Some(a.ipv4_addr.to_string()),
                 _ => None,
             })
-            .collect()
+            .collect();
+
+        Cache::store_ip(&domain_name, rr);
+
+        Self::create_loopback_dns_response(dns)
     }
 
+    /// Creates a spoofed DNS response which will cause the user process to request loopback
+    /// instead of the IPs returned. The egressproxy will then forward the traffic out to the internet.
     fn create_loopback_dns_response(dns: Dns) -> Result<Bytes, DNSError> {
         let domain_name = dns
             .questions
@@ -113,6 +114,8 @@ impl EnclaveDnsDriver {
         Ok(serialized_dns_query.freeze())
     }
 
+    /// Takes a DNS lookup as `Bytes` and sends forwards it over VSock to the host process to be sent to
+    /// a public DNS Service
     async fn forward_dns_lookup(bytes: Bytes) -> Result<Bytes, DNSError> {
         let mut stream = get_vsock_client(DNS_PROXY_VSOCK_PORT, Parent).await?;
         stream.write_all(&bytes).await?;
@@ -123,6 +126,7 @@ impl EnclaveDnsDriver {
     }
 }
 
+/// Empty struct for the DNS proxy that runs in the data plane
 pub struct EnclaveDnsProxy;
 
 impl EnclaveDnsProxy {
@@ -131,8 +135,9 @@ impl EnclaveDnsProxy {
         let socket = UdpSocket::bind("127.0.0.1:53").await?;
         let shared_socket = std::sync::Arc::new(socket);
 
+        // Create a bounded sync channel to send DNS lookups between the Proxy and Driver
         let (dns_lookup_sender, dns_lookup_receiver) =
-            tokio::sync::mpsc::channel::<(Bytes, SocketAddr)>(200);
+            tokio::sync::mpsc::channel::<(Bytes, SocketAddr)>(1000);
 
         let dns_driver_socket = shared_socket.clone();
 
@@ -152,7 +157,7 @@ impl EnclaveDnsProxy {
             let mut buffer = [0; 512];
             let (amt, src) = shared_socket.recv_from(&mut buffer).await?;
             let buf = Bytes::copy_from_slice(&buffer[..amt]);
-            if let Err(e) = dns_lookup_sender.send((buf, src)).await {
+            if let Err(e) = dns_lookup_sender.try_send((buf, src)) {
                 eprintln!("Error dispatching DNS request in data plane: {e:?}");
             }
         }
