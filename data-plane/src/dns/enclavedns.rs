@@ -1,6 +1,6 @@
 use super::error::DNSError;
 use crate::dns::cache::Cache;
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use dns_message_parser::rr::A;
 use dns_message_parser::rr::RR;
 use dns_message_parser::Dns;
@@ -8,58 +8,78 @@ use shared::server::get_vsock_client;
 use shared::server::CID::Parent;
 use shared::DNS_PROXY_VSOCK_PORT;
 use std::net::Ipv4Addr;
+use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UdpSocket;
+use tokio::sync::mpsc::Receiver;
+use tokio::time::timeout;
 
-pub struct EnclaveDns;
+struct EnclaveDnsDriver {
+    inner: Arc<UdpSocket>,
+    dns_lookup_receiver: Receiver<(Bytes, SocketAddr)>,
+    dns_request_upper_bound: std::time::Duration,
+}
 
-impl EnclaveDns {
-    pub async fn bind_server() -> Result<(), DNSError> {
-        println!("DNS proxy started");
-        let socket = UdpSocket::bind("127.0.0.1:53").await?;
-
-        loop {
-            if let Err(err) = Self::process_dns_request(&socket).await {
-                eprintln!("Error in DNS proxy: {err:?}");
-                continue;
-            };
+impl EnclaveDnsDriver {
+    fn new(
+        socket: Arc<UdpSocket>,
+        dns_lookup_receiver: Receiver<(Bytes, SocketAddr)>,
+        dns_request_upper_bound: std::time::Duration,
+    ) -> Self {
+        Self {
+            inner: socket,
+            dns_lookup_receiver,
+            dns_request_upper_bound,
         }
     }
 
-    async fn process_dns_request(socket: &UdpSocket) -> Result<usize, DNSError> {
-        let mut buffer = [0; 512];
-        let (amt, src) = socket.recv_from(&mut buffer).await?;
-        let buf = Bytes::copy_from_slice(&buffer[..amt]);
+    async fn start_driver(mut self) {
+        while let Some((dns_packet, src_addr)) = self.dns_lookup_receiver.recv().await {
+            let dns_response = match self.perform_dns_lookup(dns_packet).await {
+                Ok(dns_response) => dns_response,
+                Err(e) => {
+                    eprintln!("Failed to perform DNS Lookup: {e}");
+                    continue;
+                }
+            };
 
-        let dns_response = Self::forward_dns_lookup(buf.clone()).await?;
+            if let Err(e) = self.inner.send_to(&dns_response, &src_addr).await {
+                eprintln!("Failed to send DNS Response: {e}");
+            }
+        }
+    }
+
+    async fn perform_dns_lookup(&self, dns_packet: Bytes) -> Result<Bytes, DNSError> {
+        // Attempt DNS lookup wth a 5 second timeout, flatten timeout errors into a DNS Error
+        let dns_response = timeout(
+            self.dns_request_upper_bound,
+            Self::forward_dns_lookup(dns_packet),
+        )
+        .await??;
+
         let dns = Dns::decode(dns_response.clone())?;
+        // No need to cache responses with no IPs, exit early
+        if dns.answers.is_empty() {
+            return Ok(dns_response);
+        }
+
         let domain_name = dns
             .questions
             .get(0)
             .ok_or(DNSError::DNSNoQuestionsFound)?
             .domain_name
             .to_string();
-        let resource_records = dns.answers.clone();
-        if resource_records.is_empty() {
-            socket
-                .send_to(&dns_response, &src)
-                .await
-                .map_err(|e| e.into())
-        } else {
-            let rr = Self::get_records(resource_records);
-            Cache::store_ip(&domain_name, rr);
 
-            let local_response = Self::local_packet(dns.clone())?;
-            socket
-                .send_to(&local_response, &src)
-                .await
-                .map_err(|e| e.into())
-        }
+        let rr = Self::get_records(&dns.answers);
+        Cache::store_ip(&domain_name, rr);
+
+        Self::create_loopback_dns_response(dns)
     }
 
-    fn get_records(resource_records: Vec<RR>) -> Vec<String> {
+    fn get_records(resource_records: &[RR]) -> Vec<String> {
         resource_records
-            .into_iter()
+            .iter()
             .filter_map(|rr| match rr {
                 dns_message_parser::rr::RR::A(a) => Some(a.ipv4_addr.to_string()),
                 _ => None,
@@ -67,7 +87,7 @@ impl EnclaveDns {
             .collect()
     }
 
-    fn local_packet(dns: Dns) -> Result<BytesMut, DNSError> {
+    fn create_loopback_dns_response(dns: Dns) -> Result<Bytes, DNSError> {
         let domain_name = dns
             .questions
             .get(0)
@@ -90,7 +110,7 @@ impl EnclaveDns {
             additionals: Vec::new(),
         }
         .encode()?;
-        Ok(serialized_dns_query)
+        Ok(serialized_dns_query.freeze())
     }
 
     async fn forward_dns_lookup(bytes: Bytes) -> Result<Bytes, DNSError> {
@@ -100,5 +120,41 @@ impl EnclaveDns {
         let packet_size = stream.read(&mut buffer).await?;
 
         Ok(Bytes::copy_from_slice(&buffer[..packet_size]))
+    }
+}
+
+pub struct EnclaveDnsProxy;
+
+impl EnclaveDnsProxy {
+    pub async fn bind_server() -> Result<(), DNSError> {
+        println!("Starting DNS proxy");
+        let socket = UdpSocket::bind("127.0.0.1:53").await?;
+        let shared_socket = std::sync::Arc::new(socket);
+
+        let (dns_lookup_sender, dns_lookup_receiver) =
+            tokio::sync::mpsc::channel::<(Bytes, SocketAddr)>(200);
+
+        let dns_driver_socket = shared_socket.clone();
+
+        let dns_request_upper_bound = std::time::Duration::from_secs(5);
+        let dns_driver = EnclaveDnsDriver::new(
+            dns_driver_socket,
+            dns_lookup_receiver,
+            dns_request_upper_bound,
+        );
+        tokio::spawn(async move {
+            println!("Starting DNS request driver");
+            dns_driver.start_driver().await;
+            eprintln!("Enclave DNS Driver exiting");
+        });
+
+        loop {
+            let mut buffer = [0; 512];
+            let (amt, src) = shared_socket.recv_from(&mut buffer).await?;
+            let buf = Bytes::copy_from_slice(&buffer[..amt]);
+            if let Err(e) = dns_lookup_sender.send((buf, src)).await {
+                eprintln!("Error dispatching DNS request in data plane: {e:?}");
+            }
+        }
     }
 }
