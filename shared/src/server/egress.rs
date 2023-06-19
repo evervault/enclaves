@@ -143,6 +143,7 @@ pub fn get_egress_ports(port_str: String) -> Vec<u16> {
 #[cfg(test)]
 mod tests {
     use crate::server::egress::get_egress_allow_list;
+    use crate::server::egress::get_egress_allow_list_from_env;
     use crate::server::egress::EgressDomains;
 
     #[test]
@@ -154,7 +155,7 @@ mod tests {
 
     fn test_valid_all_domains() {
         std::env::set_var("EV_EGRESS_ALLOW_LIST", "*");
-        let egress = get_egress_allow_list();
+        let egress = get_egress_allow_list_from_env();
         assert_eq!(
             egress,
             EgressDomains {
@@ -168,7 +169,7 @@ mod tests {
 
     fn test_wildcard_and_exact() {
         std::env::set_var("EV_EGRESS_ALLOW_LIST", "*.evervault.com,google.com");
-        let egress = get_egress_allow_list();
+        let egress = get_egress_allow_list_from_env();
         assert_eq!(
             egress,
             EgressDomains {
@@ -182,7 +183,7 @@ mod tests {
 
     fn test_backwards_compat() {
         std::env::set_var("EV_EGRESS_ALLOW_LIST", "");
-        let egress = get_egress_allow_list();
+        let egress = get_egress_allow_list_from_env();
         assert_eq!(
             egress,
             EgressDomains {
