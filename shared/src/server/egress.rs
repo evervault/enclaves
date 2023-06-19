@@ -142,7 +142,6 @@ pub fn get_egress_ports(port_str: String) -> Vec<u16> {
 
 #[cfg(test)]
 mod tests {
-    use crate::server::egress::get_egress_allow_list;
     use crate::server::egress::get_egress_allow_list_from_env;
     use crate::server::egress::EgressDomains;
 

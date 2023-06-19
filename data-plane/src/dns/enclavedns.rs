@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UdpSocket;
-use tokio::sync::mpsc::Receiver;
+use tokio::sync::{mpsc::Receiver, Semaphore};
 use tokio::time::timeout;
 
 /// Empty struct for the DNS proxy that runs in the data plane
@@ -25,9 +25,10 @@ impl EnclaveDnsProxy {
         let shared_socket = std::sync::Arc::new(socket);
         let dns_dispatch_timeout = std::time::Duration::from_secs(1);
 
+        let max_concurrent_requests = 250;
         // Create a bounded sync channel to send DNS lookups between the Proxy and Driver
         let (dns_lookup_sender, dns_lookup_receiver) =
-            tokio::sync::mpsc::channel::<(Bytes, SocketAddr)>(250);
+            tokio::sync::mpsc::channel::<(Bytes, SocketAddr)>(500);
 
         let dns_driver_socket = shared_socket.clone();
 
@@ -36,6 +37,7 @@ impl EnclaveDnsProxy {
             dns_driver_socket,
             dns_lookup_receiver,
             dns_request_upper_bound,
+            max_concurrent_requests,
         );
         tokio::spawn(async move {
             println!("Starting DNS request driver");
@@ -63,6 +65,7 @@ struct EnclaveDnsDriver {
     inner: Arc<UdpSocket>,
     dns_lookup_receiver: Receiver<(Bytes, SocketAddr)>,
     dns_request_upper_bound: Duration,
+    concurrency_gate: Arc<Semaphore>,
 }
 
 impl EnclaveDnsDriver {
@@ -70,11 +73,14 @@ impl EnclaveDnsDriver {
         socket: Arc<UdpSocket>,
         dns_lookup_receiver: Receiver<(Bytes, SocketAddr)>,
         dns_request_upper_bound: Duration,
+        concurrency_limit: usize,
     ) -> Self {
+        let concurrency_gate = Arc::new(Semaphore::new(concurrency_limit));
         Self {
             inner: socket,
             dns_lookup_receiver,
             dns_request_upper_bound,
+            concurrency_gate,
         }
     }
 
@@ -83,8 +89,18 @@ impl EnclaveDnsDriver {
             let request_upper_bound = self.dns_request_upper_bound.clone();
             let udp_socket = self.inner.clone();
 
+            let permit = match self.concurrency_gate.clone().acquire_owned().await {
+                Ok(permit) => permit,
+                Err(e) => {
+                    eprintln!("Failed to acquire permit from Semaphore, dropping lookup. {e:?}");
+                    continue;
+                }
+            };
+
             // Create task per DNS lookup
             tokio::spawn(async move {
+                // move permit into task to drop when lookup is complete
+                let _lookup_permit = permit;
                 let dns_response =
                     match Self::perform_dns_lookup(dns_packet, request_upper_bound).await {
                         Ok(dns_response) => dns_response,
