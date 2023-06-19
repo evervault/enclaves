@@ -21,4 +21,6 @@ pub enum DNSError {
     NoHostnameFound,
     #[error("Egress error {0}")]
     EgressError(#[from] EgressError),
+    #[error("DNS lookup failed due to a timeout after: {0}")]
+    DNSTimeout(#[from] tokio::time::error::Elapsed),
 }

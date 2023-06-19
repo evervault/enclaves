@@ -8,7 +8,7 @@ use data_plane::configuration;
 #[cfg(feature = "network_egress")]
 use data_plane::dns::egressproxy::EgressProxy;
 #[cfg(feature = "network_egress")]
-use data_plane::dns::enclavedns::EnclaveDns;
+use data_plane::dns::enclavedns::EnclaveDnsProxy;
 #[cfg(not(feature = "tls_termination"))]
 use data_plane::env::Environment;
 use data_plane::health::start_health_check_server;
@@ -66,7 +66,7 @@ async fn start(data_plane_port: u16) {
 
     let (_, dns_result, e3_api_result, egress_results, stats_result) = tokio::join!(
         start_data_plane(data_plane_port),
-        EnclaveDns::bind_server(),
+        EnclaveDnsProxy::bind_server(),
         CryptoApi::listen(),
         egress_proxies,
         StatsProxy::listen()
