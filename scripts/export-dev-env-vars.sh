@@ -1,0 +1,9 @@
+export MOCK_CRYPTO_CERT=`cat certs/ca.crt`
+export MOCK_CRYPTO_KEY=`cat certs/ca.key`
+export MOCK_CERT_PROVISIONER_CLIENT_CERT=`cat certs/client_0.crt`
+export MOCK_CERT_PROVISIONER_CLIENT_KEY=`cat certs/client_0.key`
+export MOCK_CERT_PROVISIONER_ROOT_CERT=`cat certs/ca.crt`
+export MOCK_CERT_PROVISIONER_SERVER_KEY=`cat certs/localhost.key`
+export MOCK_CERT_PROVISIONER_ROOT_CERT=`cat certs/ca.crt`
+export MOCK_CERT_PROVISIONER_SERVER_CERT=`cat certs/localhost.crt`
+export EV_API_KEY_AUTH=true
