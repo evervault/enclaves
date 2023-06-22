@@ -49,17 +49,9 @@ mkdir e2e-tests/testing-certs && mkcd e2e-tests/testing-certs
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout ./testing.key -out testing.crt
 ```
 
-Set certs as environment variables:
+Source `export-dev-env-vars.sh` to set certs as environment variables:
 ```sh
-MOCK_CRYPTO_CERT=`cat certs/ca.crt` && export MOCK_CRYPTO_CERT
-MOCK_CRYPTO_KEY=`cat certs/ca.key` && export MOCK_CRYPTO_KEY
-MOCK_CERT_PROVISIONER_CLIENT_CERT=`cat certs/client_0.crt` && export MOCK_CERT_PROVISIONER_CLIENT_CERT
-MOCK_CERT_PROVISIONER_CLIENT_KEY=`cat certs/client_0.key` && export MOCK_CERT_PROVISIONER_CLIENT_KEY
-MOCK_CERT_PROVISIONER_ROOT_CERT=`cat certs/ca.crt` && export MOCK_CERT_PROVISIONER_ROOT_CERT
-MOCK_CERT_PROVISIONER_SERVER_KEY=`cat certs/localhost.key` && export MOCK_CERT_PROVISIONER_SERVER_KEY
-MOCK_CERT_PROVISIONER_ROOT_CERT=`cat certs/ca.crt` && export MOCK_CERT_PROVISIONER_ROOT_CERT
-MOCK_CERT_PROVISIONER_SERVER_CERT=`cat certs/localhost.crt` && export MOCK_CERT_PROVISIONER_SERVER_CERT
-export EV_API_KEY_AUTH=true
+source ./scripts/export-dev-env-vars.sh
 ```
 
 Compile:
