@@ -26,10 +26,6 @@ const CONTROL_PLANE_PORT: u16 = 443;
 const CONTROL_PLANE_PORT: u16 = 3031;
 
 const PROXY_PROTOCOL_MIN_VERSION: semver::Version = semver::Version::new(0, 0, 30);
-
-#[cfg(feature = "enable_rate_limits")]
-const MAX_REQS_MINUTE: usize = 500;
-#[cfg(not(feature = "enable_rate_limits"))]
 const MAX_REQS_MINUTE: usize = Semaphore::MAX_PERMITS;
 
 #[tokio::main]
@@ -173,7 +169,6 @@ async fn tcp_server() -> Result<()> {
         loop {
             let to_add = MAX_REQS_MINUTE.checked_sub(permit_creator.available_permits());
 
-            #[cfg(not(feature = "enable_rate_limits"))]
             println!("{:?} requests made in last 60 seconds", to_add.unwrap_or(0));
 
             if let Some(to_add) = to_add {
