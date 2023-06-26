@@ -9,7 +9,7 @@ use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::time::{sleep, Duration};
 
-use tokio::net::{TcpListener};
+use tokio::net::TcpListener;
 use tokio::sync::{mpsc, Semaphore};
 
 use control_plane::{
@@ -173,14 +173,13 @@ async fn tcp_server() -> Result<()> {
         loop {
             let to_add = MAX_REQS_MINUTE.checked_sub(permit_creator.available_permits());
 
-            #[cfg(feature = "enable_rate_limits")]
+            #[cfg(not(feature = "enable_rate_limits"))]
+            println!("{:?} requests made in last 60 seconds", to_add.unwrap_or(0));
+
             if let Some(to_add) = to_add  {
                 println!("Adding {to_add} permits");
                 permit_creator.add_permits(to_add);
             }
-
-            #[cfg(not(feature = "enable_rate_limits"))]
-            println!("{:?} requests made in last 60 seconds", to_add.unwrap_or(0));
 
             sleep(Duration::from_secs(60)).await;
         }
