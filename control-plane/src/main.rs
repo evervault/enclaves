@@ -5,11 +5,12 @@ use shared::server::error::ServerResult;
 use shared::{print_version, utils::pipe_streams, ENCLAVE_CONNECT_PORT};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::process::Command;
+use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::time::{sleep, Duration};
 
-use tokio::net::TcpListener;
-use tokio::sync::mpsc;
+use tokio::net::{TcpListener};
+use tokio::sync::{mpsc, Semaphore};
 
 use control_plane::{
     clients::sns::{ControlPlaneSnsClient, DeregistrationMessage},
@@ -25,6 +26,7 @@ const CONTROL_PLANE_PORT: u16 = 443;
 const CONTROL_PLANE_PORT: u16 = 3031;
 
 const PROXY_PROTOCOL_MIN_VERSION: semver::Version = semver::Version::new(0, 0, 30);
+const MAX_REQS_MINUTE: usize = 500;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -160,36 +162,57 @@ async fn tcp_server() -> Result<()> {
         .ok()
         .and_then(|raw_data_plane_version| semver::Version::parse(&raw_data_plane_version).ok());
 
+    let sem = Arc::new(Semaphore::new(MAX_REQS_MINUTE));
+    let permit_creator = sem.clone();
+
+    tokio::spawn(async move {
+        loop {
+            let to_add = MAX_REQS_MINUTE.checked_sub(permit_creator.available_permits());
+
+            if let Some(to_add) = to_add  {
+                println!("Adding {to_add} permits");
+                permit_creator.add_permits(to_add);
+            }
+
+            sleep(Duration::from_secs(60)).await;
+        }
+    });
+
     loop {
         let data_plane_version = parsed_data_plane_version.clone();
-        if let Ok((mut connection, _client_socket_addr)) = tcp_listener.accept().await {
-            tokio::spawn(async move {
-                println!("Accepted incoming TCP stream — {_client_socket_addr:?}");
-                let enclave_stream =
-                    match enclave_connection::get_connection_to_enclave(ENCLAVE_CONNECT_PORT).await
-                    {
-                        Ok(enclave_stream) => enclave_stream,
-                        Err(e) => {
-                            eprintln!("An error occurred while connecting to the enclave — {e:?}");
-                            connection
-                                .shutdown()
-                                .await
-                                .expect("Failed to close connection to client");
-                            return;
-                        }
-                    };
+        if let Ok(permit) = sem.clone().acquire_owned().await {
+            if let Ok((mut connection, _client_socket_addr)) = tcp_listener.accept().await {
+                tokio::spawn(async move {
+                    println!("Accepted incoming TCP stream — {_client_socket_addr:?}");
+                    let enclave_stream =
+                        match enclave_connection::get_connection_to_enclave(ENCLAVE_CONNECT_PORT).await
+                        {
+                            Ok(enclave_stream) => enclave_stream,
+                            Err(e) => {
+                                eprintln!("An error occurred while connecting to the enclave — {e:?}");
+                                connection
+                                    .shutdown()
+                                    .await
+                                    .expect("Failed to close connection to client");
+                                return;
+                            }
+                        };
 
-                if should_remove_proxy_protocol(data_plane_version.as_ref()) {
-                    if let Err(e) = strip_proxy_protocol_and_pipe(connection, enclave_stream).await
-                    {
-                        eprintln!(
-                            "An error occurred while piping the connection over vsock - {e:?}"
-                        );
+                    sleep(Duration::from_secs(2)).await;
+
+                    if should_remove_proxy_protocol(data_plane_version.as_ref()) {
+                        if let Err(e) = strip_proxy_protocol_and_pipe(connection, enclave_stream).await
+                        {
+                            eprintln!(
+                                "An error occurred while piping the connection over vsock - {e:?}"
+                            );
+                        }
+                    } else if let Err(e) = pipe_streams(connection, enclave_stream).await {
+                        eprintln!("An error occurred while piping the connection over vsock - {e:?}");
                     }
-                } else if let Err(e) = pipe_streams(connection, enclave_stream).await {
-                    eprintln!("An error occurred while piping the connection over vsock - {e:?}");
-                }
-            });
+                    permit.forget();
+                });
+            }
         }
     }
 }
