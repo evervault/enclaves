@@ -176,7 +176,7 @@ async fn tcp_server() -> Result<()> {
             #[cfg(not(feature = "enable_rate_limits"))]
             println!("{:?} requests made in last 60 seconds", to_add.unwrap_or(0));
 
-            if let Some(to_add) = to_add  {
+            if let Some(to_add) = to_add {
                 println!("Adding {to_add} permits");
                 permit_creator.add_permits(to_add);
             }
@@ -192,11 +192,14 @@ async fn tcp_server() -> Result<()> {
                 tokio::spawn(async move {
                     println!("Accepted incoming TCP stream — {_client_socket_addr:?}");
                     let enclave_stream =
-                        match enclave_connection::get_connection_to_enclave(ENCLAVE_CONNECT_PORT).await
+                        match enclave_connection::get_connection_to_enclave(ENCLAVE_CONNECT_PORT)
+                            .await
                         {
                             Ok(enclave_stream) => enclave_stream,
                             Err(e) => {
-                                eprintln!("An error occurred while connecting to the enclave — {e:?}");
+                                eprintln!(
+                                    "An error occurred while connecting to the enclave — {e:?}"
+                                );
                                 connection
                                     .shutdown()
                                     .await
@@ -206,14 +209,17 @@ async fn tcp_server() -> Result<()> {
                         };
 
                     if should_remove_proxy_protocol(data_plane_version.as_ref()) {
-                        if let Err(e) = strip_proxy_protocol_and_pipe(connection, enclave_stream).await
+                        if let Err(e) =
+                            strip_proxy_protocol_and_pipe(connection, enclave_stream).await
                         {
                             eprintln!(
                                 "An error occurred while piping the connection over vsock - {e:?}"
                             );
                         }
                     } else if let Err(e) = pipe_streams(connection, enclave_stream).await {
-                        eprintln!("An error occurred while piping the connection over vsock - {e:?}");
+                        eprintln!(
+                            "An error occurred while piping the connection over vsock - {e:?}"
+                        );
                     }
                     permit.forget();
                 });
