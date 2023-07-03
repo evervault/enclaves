@@ -197,7 +197,7 @@ async fn tcp_server() -> Result<()> {
 fn should_remove_proxy_protocol(data_plane_version: Option<&semver::Version>) -> bool {
     match data_plane_version {
         Some(version) => version.cmp(&PROXY_PROTOCOL_MIN_VERSION) == std::cmp::Ordering::Less,
-        _ => false,
+        _ => true,
     }
 }
 

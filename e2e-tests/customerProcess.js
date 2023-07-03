@@ -6,6 +6,7 @@ app.use(express.json())
 
 
 app.all('/hello', async (req, res) => {
+  console.log("Recieved req in ", req.body)
   res.send({response: "Hello from enclave", ...req.body})
 })
 

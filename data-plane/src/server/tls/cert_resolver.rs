@@ -114,10 +114,11 @@ impl AttestableCertResolver {
 
     fn extract_nonce_from_servername(received_servername: &str) -> Option<Vec<u8>> {
         let tokens: Vec<&str> = received_servername.split('.').collect();
-        match (tokens[0], tokens[1]) {
-            (nonce, "attest") => base64::decode(nonce).ok(),
-            _ => None,
-        }
+        // match (tokens[0], tokens[1]) {
+        //     (nonce, "attest") => base64::decode(nonce).ok(),
+        //     _ => None,
+        // }
+        None
     }
 
     /// Make a X509 request with the given private key
