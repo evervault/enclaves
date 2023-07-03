@@ -10,20 +10,22 @@ use crate::{CageContext, FeatureContext, CAGE_CONTEXT, FEATURE_CONTEXT};
 
 use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
 
+use bytes::Bytes;
 use futures::StreamExt;
 
-use hyper::http::HeaderValue;
-use hyper::http::{self, request::Parts};
-use hyper::server::conn;
-use hyper::service::service_fn;
-use hyper::{Body, Request, Response};
+use httparse::Status;
+use hyper::http::{self, request, HeaderName, HeaderValue};
+use hyper::{Body, HeaderMap, Request, Response};
 use sha2::Digest;
 use shared::logging::TrxContextBuilder;
 use shared::server::proxy_protocol::ProxiedConnection;
 use shared::server::Listener;
+use shared::utils::pipe_streams;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::SystemTime;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpStream;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 pub async fn run<L: Listener + Send + Sync>(tcp_server: L, port: u16)
@@ -36,7 +38,6 @@ where
         .with_attestable_cert()
         .await
         .expect("Failed to create tls server");
-    let http_server = conn::Http::new();
     let e3_client = Arc::new(E3Client::new());
 
     let (tx, rx): (
@@ -54,7 +55,7 @@ where
 
     println!("TLS Server Created - Listening for new connections.");
     loop {
-        let stream = match server.accept().await {
+        let mut stream = match server.accept().await {
             Ok(stream) => stream,
             Err(tls_err) => {
                 eprintln!("An error occurred while accepting the incoming connection — {tls_err}");
@@ -62,77 +63,262 @@ where
             }
         };
 
-        let server = http_server.clone();
         let e3_client_for_connection = e3_client.clone();
         let tx_for_connection = tx.clone();
         tokio::spawn(async move {
             let e3_client_for_tcp = e3_client_for_connection.clone();
             let tx_for_tcp = tx_for_connection.clone();
             let remote_ip = stream.get_remote_addr();
-            let sent_response = server
-                .serve_connection(
-                    stream,
-                    service_fn(|mut req: Request<Body>| {
-                        let e3_client_for_req = e3_client_for_tcp.clone();
-                        let feature_context = FeatureContext::get();
-                        let cage_context = CAGE_CONTEXT.get().expect("Couldn't get cage context");
-                        let tx_for_req = tx_for_tcp.clone();
-                        let remote_ip = remote_ip.clone();
-                        async move {
-                            let (mut trx_context, request_timer) = init_trx(cage_context, &req);
-                            let trx_id = trx_context.get_trx_id();
-                            if remote_ip.is_some() {
-                              trx_context.remote_ip(remote_ip.clone());
-                              add_remote_ip_to_forwarded_for_header(&mut req, remote_ip.as_deref().unwrap());
-                            }
 
-                            let trx_logging_enabled = feature_context.trx_logging_enabled;
+            let mut buffer = Vec::new();
 
-                            if  trx_logging_enabled {
-                                add_ev_ctx_header_to_request(&mut req, &trx_id);
-                            }
-
-                            let mut response = handle_incoming_request(
-                                req,
-                                port,
-                                e3_client_for_req,
-                                cage_context.clone(),
-                                feature_context.clone(),
-                                &mut trx_context,
-                            )
-                            .await;
-
-                            trx_context.add_res_to_trx_context(&response);
-                            let built_context = trx_context.stop_timer_and_build(request_timer);
-
-                            match built_context {
-                                Ok(ctx) => {
-                                    if trx_logging_enabled {
-                                        //Add trx ID to response of request
-                                        add_ev_ctx_header_to_response(&mut response, &trx_id);
-
-                                        //Send trx to config server in data plane
-                                        if let Err(e) = tx_for_req.send(LogHandlerMessage::new_log_message(ctx)) {
-                                            println!("Failed to send transaction context to log handler. err: {e}")
-                                        }
-                                    }
-                                },
-                                Err(e) => {
-                                    println!("Failed to build transaction context. err: {e:?}")
-                                }
-                            };
-
-                            let res: Result<Response<Body>> = Ok(response);
-                            res
+            loop {
+                let mut temp_buffer = [0; 1024];
+                match stream.read(&mut temp_buffer).await {
+                    Ok(read_bytes) => {
+                        if read_bytes == 0 {
+                            break;
                         }
-                    }),
-                )
-                .await;
 
-            if let Err(processing_err) = sent_response {
-                eprintln!("An error occurred while processing your request — {processing_err}");
+                        buffer.extend_from_slice(&temp_buffer[..read_bytes]);
+
+                        if read_bytes < temp_buffer.len() {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Error reading from stream: {}", e);
+                        return;
+                    }
+                }
+            }
+
+            let mut headers = [httparse::EMPTY_HEADER; 64];
+            let mut req = httparse::Request::new(&mut headers);
+            match req.parse(&buffer) {
+                Ok(Status::Complete(remaining)) => {
+                    let headers = &req.headers;
+                    let body_buffer = &buffer[remaining..];
+                    let is_websocket = headers.iter().any(|header| {
+                        header.name.to_ascii_lowercase() == "upgrade"
+                            && header.value.to_ascii_lowercase() == "websocket".as_bytes()
+                    });
+                    if is_websocket {
+                        let mut customer_stream =
+                            TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+                        customer_stream.write_all(&buffer).await.unwrap();
+                        pipe_streams(stream, customer_stream).await.unwrap();
+                    } else {
+                        let request: Request<Body> =
+                            build_http_request(req, body_buffer, port).unwrap();
+                        let res = handle_http_request(
+                            request,
+                            e3_client_for_tcp,
+                            tx_for_tcp,
+                            remote_ip,
+                            port,
+                        )
+                        .await
+                        .unwrap();
+                        let response_bytes = response_to_bytes(res).await;
+                        stream.write_all(&response_bytes).await.unwrap();
+                    }
+                }
+                _ => {
+                    let mut customer_stream =
+                        TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+                    customer_stream.write_all(&buffer).await.unwrap();
+                    pipe_streams(stream, customer_stream).await.unwrap();
+                }
             }
         });
+    }
+}
+
+fn build_http_request(
+    request: httparse::Request<'_, '_>,
+    body_buffer: &[u8],
+    port: u16,
+) -> Result<Request<Body>> {
+    let uri = format!("http://127.0.0.1:{}{}", port, request.path.unwrap());
+    let mut header_map = HeaderMap::new();
+    for header in request.headers {
+        header_map.insert(
+            HeaderName::from_str(header.name)?,
+            HeaderValue::from_bytes(header.value)?,
+        );
+    }
+
+    let mut req = Request::builder()
+        .uri(uri)
+        .method(request.method.unwrap())
+        .body(Body::from(
+            String::from_utf8(body_buffer.to_vec()).expect("Found invalid UTF-8"),
+        ))?;
+    *req.headers_mut() = header_map;
+    Ok(req)
+}
+
+async fn response_to_bytes(response: Response<Body>) -> Vec<u8> {
+    let mut bytes = Vec::new();
+
+    // TODO: handle other versions
+    let status_line = format!(
+        "HTTP/{} {} {}\r\n",
+        "1.1",
+        response.status().as_u16(),
+        response.status().canonical_reason().unwrap_or("")
+    );
+    bytes.extend_from_slice(status_line.as_bytes());
+
+    for (header_name, header_value) in response.headers() {
+        let header_str = format!(
+            "{}: {}\r\n",
+            header_name.as_str(),
+            header_value.to_str().unwrap_or("")
+        );
+        bytes.extend_from_slice(header_str.as_bytes());
+    }
+
+    bytes.extend_from_slice(b"\r\n");
+
+    let body_bytes: Bytes = hyper::body::to_bytes(response.into_body())
+        .await
+        .unwrap_or_else(|_| Bytes::new());
+
+    bytes.extend_from_slice(&body_bytes);
+
+    bytes
+}
+
+async fn handle_http_request(
+    mut req: Request<Body>,
+    e3_client_for_tcp: Arc<E3Client>,
+    tx_for_tcp: UnboundedSender<LogHandlerMessage>,
+    remote_ip: Option<String>,
+    port: u16,
+) -> Result<Response<Body>> {
+    let e3_client_for_req = e3_client_for_tcp.clone();
+    let feature_context = FeatureContext::get();
+    let cage_context = CAGE_CONTEXT.get().expect("Couldn't get cage context");
+    let tx_for_req = tx_for_tcp.clone();
+    let remote_ip = remote_ip.clone();
+    async move {
+        let (mut trx_context, request_timer) = init_trx(cage_context, &req);
+        let trx_id = trx_context.get_trx_id();
+        if remote_ip.is_some() {
+            trx_context.remote_ip(remote_ip.clone());
+            add_remote_ip_to_forwarded_for_header(&mut req, remote_ip.as_deref().unwrap());
+        }
+
+        let trx_logging_enabled = feature_context.trx_logging_enabled;
+
+        if trx_logging_enabled {
+            add_ev_ctx_header_to_request(&mut req, &trx_id);
+        }
+
+        let mut response = handle_incoming_request(
+            req,
+            port,
+            e3_client_for_req,
+            cage_context.clone(),
+            feature_context.clone(),
+            &mut trx_context,
+        )
+        .await;
+
+        trx_context.add_res_to_trx_context(&response);
+        let built_context = trx_context.stop_timer_and_build(request_timer);
+
+        match built_context {
+            Ok(ctx) => {
+                if trx_logging_enabled {
+                    //Add trx ID to response of request
+                    add_ev_ctx_header_to_response(&mut response, &trx_id);
+
+                    //Send trx to config server in data plane
+                    if let Err(e) = tx_for_req.send(LogHandlerMessage::new_log_message(ctx)) {
+                        println!("Failed to send transaction context to log handler. err: {e}")
+                    }
+                }
+            }
+            Err(e) => {
+                println!("Failed to build transaction context. err: {e:?}")
+            }
+        };
+
+        Ok(response)
+    }
+    .await
+}
+
+async fn auth_request(
+    api_key: HeaderValue,
+    cage_context: CageContext,
+    e3_client: Arc<E3Client>,
+) -> Option<Response<Body>> {
+    println!("Authenticating request");
+
+    let hashed_api_key = match HeaderValue::from_bytes(&compute_base64_sha512(api_key.as_bytes())) {
+        Ok(hashed_api_key_header) => hashed_api_key_header,
+        Err(_) => return Some(build_error_response(Some("Invalid API Key.".to_string()))),
+    };
+
+    let auth_payload_for_hashed_api_key = AuthRequest::from(&cage_context);
+
+    let auth_payload_for_app_api_key = AuthRequest {
+        team_uuid: cage_context.team_uuid().to_string(),
+        app_uuid: cage_context.app_uuid().to_string(),
+        cage_uuid: None,
+    };
+
+    match e3_client
+        .authenticate(&hashed_api_key, auth_payload_for_hashed_api_key)
+        .await
+    {
+        Ok(auth_status) => {
+            if !auth_status {
+                println!("Failed to authenticate request using provided API Key");
+                let response: Response<Body> = AuthError::FailedToAuthenticateApiKey.into();
+                Some(response)
+            } else {
+                None
+            }
+        }
+        Err(ClientError::FailedRequest(status)) if status.as_u16() == 401 => {
+            //Temporary fallback to authenticate with APP api key -- remove this match when moving to just scoped api keys
+            println!("Failed to auth with scoped api key hash, attempting with app api key");
+            match e3_client
+                .authenticate(&api_key, auth_payload_for_app_api_key)
+                .await
+            {
+                Ok(auth_status) => {
+                    if !auth_status {
+                        println!("Failed to authenticate request using provided API Key");
+                        let response: Response<Body> = AuthError::FailedToAuthenticateApiKey.into();
+                        Some(response)
+                    } else {
+                        None
+                    }
+                }
+                Err(ClientError::FailedRequest(status)) if status.as_u16() == 401 => {
+                    let response: Response<Body> = AuthError::FailedToAuthenticateApiKey.into();
+                    Some(response)
+                }
+                Err(e) => {
+                    eprintln!("Failed to authenticate against e3 — {e:?}");
+                    Some(build_error_response(Some(
+                        "Connection to E3 failed.".to_string(),
+                    )))
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("Failed to authenticate against e3 — {e:?}");
+            Some(build_error_response(Some(
+                "Connection to E3 failed.".to_string(),
+            )))
+        }
     }
 }
 
@@ -160,59 +346,8 @@ async fn handle_incoming_request(
             Err(e) => return e.into(),
         };
 
-        let hashed_api_key =
-            match HeaderValue::from_bytes(&compute_base64_sha512(api_key.as_bytes())) {
-                Ok(hashed_api_key_header) => hashed_api_key_header,
-                Err(_) => return build_error_response(Some("Invalid API Key.".to_string())),
-            };
-
-        let auth_payload_for_hashed_api_key = AuthRequest::from(&cage_context);
-
-        let auth_payload_for_app_api_key = AuthRequest {
-            team_uuid: cage_context.team_uuid().to_string(),
-            app_uuid: cage_context.app_uuid().to_string(),
-            cage_uuid: None,
-        };
-
-        match e3_client
-            .authenticate(&hashed_api_key, auth_payload_for_hashed_api_key)
-            .await
-        {
-            Ok(auth_status) => {
-                if !auth_status {
-                    println!("Failed to authenticate request using provided API Key");
-                    let response = AuthError::FailedToAuthenticateApiKey.into();
-                    return response;
-                }
-            }
-            Err(ClientError::FailedRequest(status)) if status.as_u16() == 401 => {
-                //Temporary fallback to authenticate with APP api key -- remove this match when moving to just scoped api keys
-                println!("Failed to auth with scoped api key hash, attempting with app api key");
-                match e3_client
-                    .authenticate(&api_key, auth_payload_for_app_api_key)
-                    .await
-                {
-                    Ok(auth_status) => {
-                        if !auth_status {
-                            println!("Failed to authenticate request using provided API Key");
-                            let response = AuthError::FailedToAuthenticateApiKey.into();
-                            return response;
-                        }
-                    }
-                    Err(ClientError::FailedRequest(status)) if status.as_u16() == 401 => {
-                        let response: Response<Body> = AuthError::FailedToAuthenticateApiKey.into();
-                        return response;
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to authenticate against e3 — {e:?}");
-                        return build_error_response(Some("Connection to E3 failed.".to_string()));
-                    }
-                }
-            }
-            Err(e) => {
-                eprintln!("Failed to authenticate against e3 — {e:?}");
-                return build_error_response(Some("Connection to E3 failed.".to_string()));
-            }
+        if let Some(response) = auth_request(api_key, cage_context, e3_client.clone()).await {
+            return response;
         }
     };
 
@@ -239,7 +374,7 @@ async fn handle_incoming_request(
 }
 
 pub async fn handle_standard_request(
-    req_parts: (Parts, Body),
+    req_parts: (request::Parts, Body),
     _compression: Option<super::http::ContentEncoding>,
     customer_port: u16,
     e3_client: Arc<E3Client>,
