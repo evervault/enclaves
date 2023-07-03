@@ -72,59 +72,14 @@ where
             let sent_response = server
                 .serve_connection(
                     stream,
-                    service_fn(|mut req: Request<Body>| {
-                        let e3_client_for_req = e3_client_for_tcp.clone();
-                        let feature_context = FeatureContext::get();
-                        let cage_context = CAGE_CONTEXT.get().expect("Couldn't get cage context");
-                        let tx_for_req = tx_for_tcp.clone();
-                        let remote_ip = remote_ip.clone();
-                        async move {
-                            let (mut trx_context, request_timer) = init_trx(cage_context, &req);
-                            let trx_id = trx_context.get_trx_id();
-                            if remote_ip.is_some() {
-                              trx_context.remote_ip(remote_ip.clone());
-                              add_remote_ip_to_forwarded_for_header(&mut req, remote_ip.as_deref().unwrap());
-                            }
-
-                            let trx_logging_enabled = feature_context.trx_logging_enabled;
-
-                            if  trx_logging_enabled {
-                                add_ev_ctx_header_to_request(&mut req, &trx_id);
-                            }
-
-                            let mut response = handle_incoming_request(
-                                req,
-                                port,
-                                e3_client_for_req,
-                                cage_context.clone(),
-                                feature_context.clone(),
-                                &mut trx_context,
-                            )
-                            .await;
-
-                            trx_context.add_res_to_trx_context(&response);
-                            let built_context = trx_context.stop_timer_and_build(request_timer);
-
-                            match built_context {
-                                Ok(ctx) => {
-                                    if trx_logging_enabled {
-                                        //Add trx ID to response of request
-                                        add_ev_ctx_header_to_response(&mut response, &trx_id);
-
-                                        //Send trx to config server in data plane
-                                        if let Err(e) = tx_for_req.send(LogHandlerMessage::new_log_message(ctx)) {
-                                            println!("Failed to send transaction context to log handler. err: {e}")
-                                        }
-                                    }
-                                },
-                                Err(e) => {
-                                    println!("Failed to build transaction context. err: {e:?}")
-                                }
-                            };
-
-                            let res: Result<Response<Body>> = Ok(response);
-                            res
-                        }
+                    service_fn(|req: Request<Body>| {
+                        test(
+                            req,
+                            e3_client_for_tcp.clone(),
+                            tx_for_tcp.clone(),
+                            remote_ip.clone(),
+                            port,
+                        )
                     }),
                 )
                 .await;
@@ -134,6 +89,69 @@ where
             }
         });
     }
+}
+
+async fn test(
+    mut req: Request<Body>,
+    e3_client_for_tcp: Arc<E3Client>,
+    tx_for_tcp: UnboundedSender<LogHandlerMessage>,
+    remote_ip: Option<String>,
+    port: u16,
+) -> Result<Response<Body>> {
+    let e3_client_for_req = e3_client_for_tcp.clone();
+    let feature_context = FeatureContext::get();
+    let cage_context = CAGE_CONTEXT.get().expect("Couldn't get cage context");
+    let tx_for_req = tx_for_tcp.clone();
+    let remote_ip = remote_ip.clone();
+    let t = async move {
+        let (mut trx_context, request_timer) = init_trx(cage_context, &req);
+        let trx_id = trx_context.get_trx_id();
+        if remote_ip.is_some() {
+            trx_context.remote_ip(remote_ip.clone());
+            add_remote_ip_to_forwarded_for_header(&mut req, remote_ip.as_deref().unwrap());
+        }
+
+        let trx_logging_enabled = feature_context.trx_logging_enabled;
+
+        if trx_logging_enabled {
+            add_ev_ctx_header_to_request(&mut req, &trx_id);
+        }
+
+        let mut response = handle_incoming_request(
+            req,
+            port,
+            e3_client_for_req,
+            cage_context.clone(),
+            feature_context.clone(),
+            &mut trx_context,
+        )
+        .await;
+
+        trx_context.add_res_to_trx_context(&response);
+        let built_context = trx_context.stop_timer_and_build(request_timer);
+
+        match built_context {
+            Ok(ctx) => {
+                if trx_logging_enabled {
+                    //Add trx ID to response of request
+                    add_ev_ctx_header_to_response(&mut response, &trx_id);
+
+                    //Send trx to config server in data plane
+                    if let Err(e) = tx_for_req.send(LogHandlerMessage::new_log_message(ctx)) {
+                        println!("Failed to send transaction context to log handler. err: {e}")
+                    }
+                }
+            }
+            Err(e) => {
+                println!("Failed to build transaction context. err: {e:?}")
+            }
+        };
+
+        let res: Result<Response<Body>> = Ok(response);
+        res
+    }
+    .await;
+    t
 }
 
 async fn handle_incoming_request(
