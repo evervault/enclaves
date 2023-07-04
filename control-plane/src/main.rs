@@ -1,4 +1,5 @@
 use control_plane::clients::{cert_provisioner, mtls_config};
+use control_plane::stats_client::StatsClient;
 use control_plane::stats_proxy::StatsProxy;
 use control_plane::{cert_proxy, config_server};
 use shared::server::error::ServerResult;
@@ -34,6 +35,7 @@ async fn main() -> Result<()> {
     println!("Starting control plane on {CONTROL_PLANE_PORT}");
     let e3_proxy = e3proxy::E3Proxy::new();
     let cert_proxy = cert_proxy::CertProxy::new();
+    StatsClient::init();
 
     let mtls_config = mtls_config::CertProvisionerMtlsCerts::from_env_vars()
         .expect("Couldn't read in env vars for mtls certs");
@@ -169,10 +171,9 @@ async fn tcp_server() -> Result<()> {
         loop {
             let to_add = MAX_REQS_MINUTE.checked_sub(permit_creator.available_permits());
 
-            println!("{:?} requests made in last 60 seconds", to_add.unwrap_or(0));
+           StatsClient::record_requests_minute(to_add.unwrap_or(0) as f64);
 
             if let Some(to_add) = to_add {
-                println!("Adding {to_add} permits");
                 permit_creator.add_permits(to_add);
             }
 

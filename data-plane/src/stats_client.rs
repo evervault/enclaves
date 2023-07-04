@@ -1,43 +1,11 @@
 use cadence::{BufferedUdpMetricSink, QueuingMetricSink};
-use cadence::{MetricError, StatsdClient};
+use cadence::StatsdClient;
 use cadence_macros::{set_global_default, statsd_count, statsd_gauge};
-use shared::ENCLAVE_STATSD_PORT;
-use std::{io::Error, net::UdpSocket};
-use thiserror::Error;
+use shared::{ENCLAVE_STATSD_PORT, publish_count, publish_gauge};
+use shared::stats::StatsError;
+use std::net::UdpSocket;
 
 use crate::CageContext;
-
-#[derive(Debug, Error)]
-pub enum StatsError {
-    #[error("Sys info error {0}")]
-    SysInfoError(#[from] sys_info::Error),
-    #[error("Metric error {0}")]
-    MetricError(#[from] MetricError),
-    #[error("IO error {0}")]
-    IOError(#[from] Error),
-}
-
-macro_rules! publish_gauge {
-    ($label:literal, $val:expr, $context:expr) => {
-        statsd_gauge!(
-          $label,
-          $val,
-          "cage_uuid" => &$context.cage_uuid,
-          "app_uuid" => &$context.app_uuid
-        );
-    };
-}
-
-macro_rules! publish_count {
-    ($label:literal, $val:expr, $context:expr) => {
-        statsd_count!(
-          $label,
-          $val,
-          "cage_uuid" => &$context.cage_uuid,
-          "app_uuid" => &$context.app_uuid
-        );
-    };
-}
 
 pub struct StatsClient;
 
