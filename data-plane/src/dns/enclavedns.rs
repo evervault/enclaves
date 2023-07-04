@@ -244,7 +244,7 @@ mod test {
         let decoded_dns = Dns::decode(loopback_dns_response).unwrap();
         let loopback_dns_answer = decoded_dns.answers.first().unwrap();
         let dns_message_parser::rr::RR::A(a_record) = loopback_dns_answer else {
-          panic!("create_loopback_dns_response changed DNS record type");
+            panic!("create_loopback_dns_response changed DNS record type");
         };
         assert_ne!(a_record.ipv4_addr, dummy_ip_answer);
         assert_eq!(a_record.ipv4_addr, std::net::Ipv4Addr::new(127, 0, 0, 1));

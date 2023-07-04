@@ -18,8 +18,8 @@ pub const PARENT_CID: u32 = 3;
 pub mod logging;
 pub mod rpc;
 pub mod server;
-pub mod utils;
 pub mod stats;
+pub mod utils;
 
 lazy_static::lazy_static! {
   pub static ref CLIENT_VERSION: String = option_env!("CARGO_PKG_VERSION").map(|version| version.to_string()).unwrap_or_else(|| "unknown".to_string());

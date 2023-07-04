@@ -1,7 +1,7 @@
 use std::io::Error;
 
-use thiserror::Error;
 use cadence::MetricError;
+use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum StatsError {
