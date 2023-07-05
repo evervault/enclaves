@@ -61,6 +61,10 @@ pub enum Error {
     InvalidHeaderName(#[from] InvalidHeaderName),
     #[error("Hyper error")]
     HyperError(#[from] hyper::http::Error),
+    #[error("Api key is missing from request")]
+    MissingApiKey,
+    #[error("Api key is invalid")]
+    ApiKeyInvalid,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -5,6 +5,7 @@ use super::tls::TlsServerBuilder;
 use crate::base_tls_client::ClientError;
 use crate::e3client::DecryptRequest;
 use crate::e3client::{self, AuthRequest, E3Client};
+use crate::error::Error::{ApiKeyInvalid, MissingApiKey};
 use crate::error::{AuthError, Result};
 use crate::{CageContext, FeatureContext, FEATURE_CONTEXT};
 
@@ -23,9 +24,10 @@ use shared::server::Listener;
 use shared::utils::pipe_streams;
 use std::str::FromStr;
 use std::sync::Arc;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio_rustls::server::TlsStream;
 
 pub async fn run<L: Listener + Send + Sync>(tcp_server: L, port: u16)
 where
@@ -44,7 +46,7 @@ where
         UnboundedReceiver<LogHandlerMessage>,
     ) = unbounded_channel();
 
-    let feature_context = FEATURE_CONTEXT.get().expect("Couldn't get cage context");
+    let feature_context = FEATURE_CONTEXT.get().expect("Couldn't get feature context");
     if feature_context.trx_logging_enabled {
         let tx_for_handler = tx.clone();
         tokio::spawn(async move {
@@ -69,28 +71,14 @@ where
             let tx_for_tcp = tx_for_connection.clone();
             let remote_ip = stream.get_remote_addr();
 
-            let mut buffer = Vec::new();
-
-            loop {
-                let mut request_chunk = [0; 1024];
-                match stream.read(&mut request_chunk).await {
-                    Ok(read_bytes) => {
-                        if read_bytes == 0 {
-                            break;
-                        }
-
-                        buffer.extend_from_slice(&request_chunk[..read_bytes]);
-
-                        if read_bytes < request_chunk.len() {
-                            break;
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Error reading from stream: {}", e);
-                        return;
-                    }
+            let buffer = match process_stream(&mut stream).await {
+                Ok(stream) => stream,
+                Err(e) => {
+                    eprintln!("Failed to read the request stream — {e:?}");
+                    shutdown_conn(&mut stream).await;
+                    return;
                 }
-            }
+            };
 
             let mut headers = [httparse::EMPTY_HEADER; 64];
             let mut req = httparse::Request::new(&mut headers);
@@ -104,14 +92,22 @@ where
                     });
                     let not_http = req.method.is_none();
                     if is_websocket || not_http {
-                        let mut customer_stream =
-                            TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-                        customer_stream.write_all(&buffer).await.unwrap();
-                        pipe_streams(stream, customer_stream).await.unwrap();
+                        //TODO: send 401 response
+                        if let Err(err) =
+                            auth_request_non_http(headers, e3_client_for_connection).await
+                        {
+                            eprintln!("Failed to authenticate request — {err:?}");
+                            shutdown_conn(&mut stream).await;
+                        }
+                        if let Err(err) = pipe_to_customer_process(&mut stream, &buffer, port).await
+                        {
+                            eprintln!("Failed piping WS stream to customer process — {err:?}");
+                            shutdown_conn(&mut stream).await;
+                        }
                     } else {
                         let request: Request<Body> =
                             build_http_request(req, body_buffer, port).unwrap();
-                        let res = handle_http_request(
+                        match handle_http_request(
                             request,
                             e3_client_for_tcp,
                             tx_for_tcp,
@@ -119,20 +115,104 @@ where
                             port,
                         )
                         .await
-                        .unwrap();
-                        let response_bytes = response_to_bytes(res).await;
-                        stream.write_all(&response_bytes).await.unwrap();
+                        {
+                            Ok(res) => {
+                                let response_bytes = response_to_bytes(res).await;
+                                stream.write_all(&response_bytes).await.unwrap();
+                            }
+                            Err(err) => {
+                                eprintln!(
+                                    "Failed sending HTTP request to customer process — {err:?}"
+                                );
+                                shutdown_conn(&mut stream).await;
+                            }
+                        }
                     }
                 }
                 _ => {
-                    let mut customer_stream =
-                        TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-                    customer_stream.write_all(&buffer).await.unwrap();
-                    pipe_streams(stream, customer_stream).await.unwrap();
+                    // We need to figure out a better auth mechanism for other protocols
+                    if feature_context.api_key_auth {
+                        eprintln!("API key auth needs to be turned off for non HTTPS/WS streams");
+                        shutdown_conn(&mut stream).await;
+                    }
+                    if let Err(err) = pipe_to_customer_process(&mut stream, &buffer, port).await {
+                        eprintln!("Failed piping non HTTP/WS stream to customer process — {err:?}");
+                        shutdown_conn(&mut stream).await;
+                    }
                 }
             }
         });
     }
+}
+
+async fn auth_request_non_http(
+    headers: &[httparse::Header<'_>],
+    e3_client: Arc<E3Client>,
+) -> Result<()> {
+    let api_key = headers
+        .iter()
+        .find(|header| header.name.to_ascii_lowercase() == "api-key")
+        .ok_or(MissingApiKey)?;
+    let header_value = HeaderValue::from_bytes(api_key.value)?;
+    if FeatureContext::get().api_key_auth
+        && auth_request(header_value, CageContext::get()?, e3_client)
+            .await
+            .is_some()
+    {
+        return Err(ApiKeyInvalid);
+    }
+    Ok(())
+}
+
+async fn shutdown_conn<L>(stream: &mut TlsStream<L>)
+where
+    TlsStream<L>: AsyncWriteExt + Unpin,
+{
+    if let Err(e) = stream.shutdown().await {
+        eprintln!("Failed to shutdown data plane connection — {e:?}");
+    }
+}
+
+async fn process_stream<L>(stream: &mut TlsStream<L>) -> Result<Vec<u8>>
+where
+    TlsStream<L>: AsyncReadExt + Unpin,
+{
+    let mut buffer = Vec::new();
+    loop {
+        let mut request_chunk = [0; 1024];
+        match stream.read(&mut request_chunk).await {
+            Ok(read_bytes) => {
+                if read_bytes == 0 {
+                    break;
+                }
+
+                buffer.extend_from_slice(&request_chunk[..read_bytes]);
+
+                if read_bytes < request_chunk.len() {
+                    break;
+                }
+            }
+            Err(e) => {
+                eprintln!("Error reading from stream: {}", e);
+                return Err(crate::error::Error::Io(e));
+            }
+        }
+    }
+    Ok(buffer)
+}
+
+async fn pipe_to_customer_process<L>(
+    stream: &mut TlsStream<L>,
+    buffer: &[u8],
+    port: u16,
+) -> Result<()>
+where
+    TlsStream<L>: AsyncReadExt + Unpin + AsyncWrite,
+{
+    let mut customer_stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+    customer_stream.write_all(buffer).await.unwrap();
+    pipe_streams(stream, customer_stream).await?;
+    Ok(())
 }
 
 fn build_http_request(
@@ -323,7 +403,6 @@ async fn auth_request(
     }
 }
 
-// TODO: handle api key auth for WS
 async fn handle_incoming_request(
     req: Request<Body>,
     customer_port: u16,
