@@ -46,7 +46,7 @@ impl E3Connection {
     }
 
     #[cfg(feature = "enclave")]
-    async fn get_ip_for_e3() -> Result<Option<SocketAddr>> {
+    async fn get_ip_for_e3(&self) -> Result<Option<SocketAddr>> {
         internal_dns::get_ip_for_host_with_dns_resolver(
             &self.dns_resolver,
             "e3.cages-e3.internal.",
@@ -83,6 +83,8 @@ impl deadpool::managed::Manager for E3ConnectionManager {
 pub fn create_connection_pool(pool_size: usize) -> Result<ConnectionPool> {
     let mgr = E3ConnectionManager;
 
-    ConnectionPool::builder(mgr).max_size(pool_size).build()
+    ConnectionPool::builder(mgr)
+        .max_size(pool_size)
+        .build()
         .map_err(|e| ServerError::PoolError(e.to_string()))
 }

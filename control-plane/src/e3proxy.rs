@@ -24,8 +24,8 @@ impl E3Proxy {
         let mut enclave_conn = get_vsock_server(shared::ENCLAVE_CRYPTO_PORT, Parent).await?;
         let e3_pool = match create_connection_pool(3) {
             Ok(pool) => pool,
-            Err(e) => return Err(e)
-        }; 
+            Err(e) => return Err(e),
+        };
 
         println!("Running e3 proxy on {}", shared::ENCLAVE_CRYPTO_PORT);
 
