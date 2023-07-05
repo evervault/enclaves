@@ -65,7 +65,7 @@ COPY ./e2e-tests/package-lock.json /services/package-lock.json
 RUN cd services && npm i
 
 RUN mkdir /etc/service/customer_process \
-    && /bin/sh -c "echo -e '"'#!/bin/sh\nexec /customer_process/customer_process\n'"' > /etc/service/customer_process/run" \
+    && /bin/sh -c "echo -e '"'#!/bin/sh\nexec /customer_process/customer_process ${CUSTOMER_PROCESS}\n'"' > /etc/service/customer_process/run" \
     && chmod +x /etc/service/customer_process/run
 
 RUN mkdir /customer_process

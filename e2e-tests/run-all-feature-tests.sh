@@ -77,6 +77,7 @@ export CUSTOMER_PROCESS=wsCustomerProcess.js
 docker compose down
 docker compose build --build-arg CUSTOMER_PROCESS=wsCustomerProcess.js
 docker compose up -d
+docker compose logs --tail cages-cages
 sleep 10
 npm run websocket-tests
 
