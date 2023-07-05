@@ -5,13 +5,11 @@ use tokio::{io::AsyncWriteExt, net::TcpStream};
 
 use crate::{
     error::{Result, ServerError},
-    internal_dns::{self, AsyncDnsResolver},
+    internal_dns
 };
 
 pub struct E3Connection {
     pub inner: TcpStream,
-    #[allow(unused)]
-    dns_resolver: AsyncDnsResolver,
 }
 
 impl E3Connection {
@@ -30,12 +28,8 @@ impl E3Connection {
             }
         };
 
-        let dns_resolver = internal_dns::get_internal_dns_resolver()
-            .expect("Failed to create internal dns resolver");
-
         Ok(Self {
             inner: e3_stream,
-            dns_resolver,
         })
     }
 
@@ -46,9 +40,12 @@ impl E3Connection {
     }
 
     #[cfg(feature = "enclave")]
-    async fn get_ip_for_e3(&self) -> Result<Option<SocketAddr>> {
+    async fn get_ip_for_e3() -> Result<Option<SocketAddr>> {
+        let dns_resolver = internal_dns::get_internal_dns_resolver()
+            .expect("Failed to create internal dns resolver");
+
         internal_dns::get_ip_for_host_with_dns_resolver(
-            &self.dns_resolver,
+            &dns_resolver,
             "e3.cages-e3.internal.",
             443,
         )
