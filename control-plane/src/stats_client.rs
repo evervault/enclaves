@@ -1,6 +1,6 @@
 use cadence::{BufferedUdpMetricSink, QueuingMetricSink, StatsdClient};
-use cadence_macros::{set_global_default, statsd_gauge};
-use shared::{publish_gauge, stats::StatsError};
+use cadence_macros::{set_global_default, statsd_count};
+use shared::{publish_count, stats::StatsError};
 use std::net::{Ipv4Addr, UdpSocket};
 
 use crate::configuration::CageContext;
@@ -28,8 +28,8 @@ impl StatsClient {
         Ok(())
     }
 
-    pub fn record_requests_minute(rpm: f64) {
+    pub fn record_requests_minute(rpm: i64) {
         let context = CageContext::from_env_vars();
-        publish_gauge!("requests.minute", rpm, context);
+        publish_count!("requests.minute", rpm, context);
     }
 }

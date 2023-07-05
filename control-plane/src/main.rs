@@ -171,7 +171,7 @@ async fn tcp_server() -> Result<()> {
         loop {
             let to_add = MAX_REQS_MINUTE.checked_sub(permit_creator.available_permits());
 
-            StatsClient::record_requests_minute(to_add.unwrap_or(0) as f64);
+            StatsClient::record_requests_minute(to_add.unwrap_or(0) as i64);
 
             if let Some(to_add) = to_add {
                 permit_creator.add_permits(to_add);
