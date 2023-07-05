@@ -12,3 +12,4 @@ pub mod error;
 pub mod health;
 pub mod internal_dns;
 pub mod stats_proxy;
+pub mod e3_client;
