@@ -35,7 +35,7 @@ impl E3Proxy {
             let connection = match enclave_conn.accept().await {
                 Ok(conn) => conn,
                 Err(e) => {
-                    println!("Error accepting crypto request — {e:?}");
+                    eprintln!("Error accepting crypto request — {e:?}");
                     continue;
                 }
             };
