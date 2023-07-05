@@ -6,7 +6,7 @@ use crate::base_tls_client::ClientError;
 use crate::e3client::DecryptRequest;
 use crate::e3client::{self, AuthRequest, E3Client};
 use crate::error::{AuthError, Result};
-use crate::{CageContext, FeatureContext, CAGE_CONTEXT, FEATURE_CONTEXT};
+use crate::{CageContext, FeatureContext, FEATURE_CONTEXT};
 
 use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
 
@@ -23,7 +23,6 @@ use shared::server::Listener;
 use shared::utils::pipe_streams;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::SystemTime;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -73,16 +72,16 @@ where
             let mut buffer = Vec::new();
 
             loop {
-                let mut temp_buffer = [0; 1024];
-                match stream.read(&mut temp_buffer).await {
+                let mut request_chunk = [0; 1024];
+                match stream.read(&mut request_chunk).await {
                     Ok(read_bytes) => {
                         if read_bytes == 0 {
                             break;
                         }
 
-                        buffer.extend_from_slice(&temp_buffer[..read_bytes]);
+                        buffer.extend_from_slice(&request_chunk[..read_bytes]);
 
-                        if read_bytes < temp_buffer.len() {
+                        if read_bytes < request_chunk.len() {
                             break;
                         }
                     }
@@ -103,7 +102,8 @@ where
                         header.name.to_ascii_lowercase() == "upgrade"
                             && header.value.to_ascii_lowercase() == "websocket".as_bytes()
                     });
-                    if is_websocket {
+                    let not_http = req.method.is_none();
+                    if is_websocket || not_http {
                         let mut customer_stream =
                             TcpStream::connect(("127.0.0.1", port)).await.unwrap();
                         customer_stream.write_all(&buffer).await.unwrap();
@@ -200,11 +200,12 @@ async fn handle_http_request(
 ) -> Result<Response<Body>> {
     let e3_client_for_req = e3_client_for_tcp.clone();
     let feature_context = FeatureContext::get();
-    let cage_context = CAGE_CONTEXT.get().expect("Couldn't get cage context");
+    let cage_context = CageContext::get()?;
     let tx_for_req = tx_for_tcp.clone();
     let remote_ip = remote_ip.clone();
     async move {
-        let (mut trx_context, request_timer) = init_trx(cage_context, &req);
+        let request_timer = TrxContextBuilder::get_timer();
+        let mut trx_context = init_trx(&cage_context, &req);
         let trx_id = trx_context.get_trx_id();
         if remote_ip.is_some() {
             trx_context.remote_ip(remote_ip.clone());
@@ -322,6 +323,7 @@ async fn auth_request(
     }
 }
 
+// TODO: handle api key auth for WS
 async fn handle_incoming_request(
     req: Request<Body>,
     customer_port: u16,
@@ -480,8 +482,7 @@ async fn extract_ciphertexts_from_payload(
     Ok(decryption_payload)
 }
 
-fn init_trx(cage_context: &CageContext, req: &Request<Body>) -> (TrxContextBuilder, SystemTime) {
-    let req_timer = TrxContextBuilder::get_timer();
+fn init_trx(cage_context: &CageContext, req: &Request<Body>) -> TrxContextBuilder {
     let mut trx_ctx = TrxContextBuilder::init_trx_context_with_cage_details(
         &cage_context.cage_uuid,
         &cage_context.cage_name,
@@ -489,7 +490,7 @@ fn init_trx(cage_context: &CageContext, req: &Request<Body>) -> (TrxContextBuild
         &cage_context.team_uuid,
     );
     trx_ctx.add_req_to_trx_context(req);
-    (trx_ctx, req_timer)
+    trx_ctx
 }
 
 fn build_header_value_from_str(header_val: &str) -> HeaderValue {

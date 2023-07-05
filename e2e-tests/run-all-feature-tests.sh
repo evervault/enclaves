@@ -72,6 +72,13 @@ EV_API_KEY_AUTH=false docker compose up -d
 sleep 10
 npm run no-auth-tests
 
+echo "Websocket Tests"
+docker compose down
+docker compose build --build-arg CUSTOMER_PROCESS=wsCustomerProcess.js
+docker compose up -d
+sleep 10
+npm run websocket-tests
+
 echo "Testing that Cage is serving trustable cert chain"
 echo "Q" | openssl s_client -verifyCAfile sample-ca/sample-root-ca-cert.pem -showcerts -connect 0.0.0.0:443 | grep "Verification: OK"
 
