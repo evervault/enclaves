@@ -15,6 +15,8 @@ pub enum ServerError {
     HyperHttp(#[from] hyper::http::Error),
     #[error(transparent)]
     DNSError(#[from] ResolveError),
+    #[error("DNS lookup returned none")]
+    DNSNotFoundError,
     #[error("Request to internal IP ({0}) blocked")]
     IllegalInternalIp(std::net::Ipv4Addr),
     #[error("Invalid IP included in egress request — {0}")]
@@ -30,6 +32,8 @@ pub enum ServerError {
     #[cfg(feature = "network_egress")]
     #[error("Egress error: {0}")]
     EgressError(#[from] shared::server::egress::EgressError),
+    #[error("Failed to instanstiate new Connection Pool")]
+    PoolError(String),
 }
 
 pub type Result<T> = std::result::Result<T, ServerError>;
