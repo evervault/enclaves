@@ -242,10 +242,9 @@ fn build_http_request(
 async fn response_to_bytes(response: Response<Body>) -> Vec<u8> {
     let mut bytes = Vec::new();
 
-    // TODO: handle other versions
     let status_line = format!(
-        "HTTP/{} {} {}\r\n",
-        "1.1",
+        "{:?} {} {}\r\n",
+        response.version(),
         response.status().as_u16(),
         response.status().canonical_reason().unwrap_or("")
     );
