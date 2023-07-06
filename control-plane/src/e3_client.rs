@@ -11,6 +11,12 @@ pub struct E3Client {
     addr: Option<SocketAddr>,
 }
 
+impl Default for E3Client {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl E3Client {
     pub fn new() -> Self {
         Self { addr: None }
