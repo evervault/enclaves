@@ -22,6 +22,15 @@ Add a `.cargo` directory to the project root, and create a `.cargo/config.toml` 
 linker = "x86_64-linux-musl-gcc"
 ```
 
+If you're using vscode you may want to append a check target to your workspace settings
+
+`.vscode/settings.json`
+```sh
+{
+	"rust-analyzer.check.targets": "x86_64-unknown-linux-musl"
+}
+```
+
 Install the required packages for cross compilation:
 ```sh
 brew tap SergioBenitez/osxct
