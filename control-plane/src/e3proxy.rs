@@ -1,8 +1,7 @@
-use crate::e3_client::create_connection_pool;
+use crate::e3_client::E3Client;
 use crate::error::Result;
 use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
-use std::ops::DerefMut;
 #[allow(unused)]
 #[cfg(not(feature = "enclave"))]
 use tokio::io::AsyncWriteExt;
@@ -22,16 +21,12 @@ impl E3Proxy {
 
     pub async fn listen(self) -> Result<()> {
         let mut enclave_conn = get_vsock_server(shared::ENCLAVE_CRYPTO_PORT, Parent).await?;
-        let e3_pool = match create_connection_pool(3) {
-            Ok(pool) => pool,
-            Err(e) => return Err(e),
-        };
+        let e3_client = E3Client::new();
 
         println!("Running e3 proxy on {}", shared::ENCLAVE_CRYPTO_PORT);
 
         loop {
-            let mut e3_conn = e3_pool.get().await.unwrap();
-
+            let e3_conn = e3_client.new_conn().await?;
             let connection = match enclave_conn.accept().await {
                 Ok(conn) => conn,
                 Err(e) => {
@@ -41,10 +36,10 @@ impl E3Proxy {
             };
             println!("Crypto request received");
 
+            println!("{e3_conn:?}");
+
             tokio::spawn(async move {
-                if let Err(e) =
-                    shared::utils::pipe_streams(connection, &mut e3_conn.deref_mut().inner).await
-                {
+                if let Err(e) = shared::utils::pipe_streams(connection, e3_conn).await {
                     eprintln!("Error streaming from Data Plane to e3 — {e:?}");
                 }
             });
