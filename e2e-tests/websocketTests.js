@@ -5,7 +5,10 @@ describe('Make websocket request', () => {
 
     it('should output success exit code', async () => {
         const options = {
-            rejectUnauthorized: false
+            rejectUnauthorized: false,
+            headers: {
+                'api-key':'placeholder'
+            }
         };
 
         const serverUrl = 'wss://localhost:443/hello';
@@ -14,15 +17,15 @@ describe('Make websocket request', () => {
 
         socket.on('open', () => {
             console.log('Connected to WebSocket server');
-            socket.on('message', (data) => {
-                console.log('Received message from server:', data.toString('utf8'));
-                socket.send('test connection 1');
-                expect(data.toString('utf8')).to.equal("SERVER RECIEVED MESSAGE: test connection 1");
-                socket.send('test connection 2');
-                expect(data.toString('utf8')).to.equal("SERVER RECIEVED MESSAGE: test connection 2");
-            });
+            socket.send('test connection');
+        });
+        
+        socket.on('message', (data) => {
+            console.log('Received message from server:', data.toString('utf8'));
+            expect(data.toString('utf8')).to.equal("SERVER RECIEVED MESSAGE: test connection");
             socket.close()
         });
+        
     })
 
 });

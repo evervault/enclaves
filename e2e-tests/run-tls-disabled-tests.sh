@@ -36,9 +36,10 @@ then
   cd ../..
 fi
 
+export CUSTOMER_PROCESS=httpCustomerProcess.js
 
 echo "Building cage container CI"
-docker compose build 
+docker compose build --build-arg CUSTOMER_PROCESS=httpCustomerProcess.js
 
 echo "Running cage container"
 # run the container
