@@ -30,20 +30,21 @@ impl E3Client {
         }
     }
 
-    pub async fn new_conn(&self) -> Result<TcpStream> {
+    pub async fn new_conn(&mut self) -> Result<TcpStream> {
         let socket_addr = match self.socket_addr {
             Some(addr) => addr,
-            None => self.get_ip_for_e3().await.unwrap(),
+            None => self.get_ip_for_e3().await?,
         };
 
         let conn = Self::try_connect(socket_addr).await;
 
         if conn.is_ok() {
-            return Ok(conn.unwrap());
+            return conn;
         }
 
         // try again with refreshed dns lookup
         let socket_addr = self.get_ip_for_e3().await.expect("failed to get ip for e3");
+        self.socket_addr = Some(socket_addr);
 
         Self::try_connect(socket_addr).await
     }
