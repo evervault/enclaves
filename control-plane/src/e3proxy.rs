@@ -3,8 +3,6 @@ use crate::error::Result;
 use crate::internal_dns;
 use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
-#[cfg(not(feature = "enclave"))]
-use tokio::io::AsyncWriteExt;
 use trust_dns_resolver::name_server::{GenericConnection, GenericConnectionProvider, TokioRuntime};
 use trust_dns_resolver::AsyncResolver;
 
