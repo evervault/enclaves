@@ -43,9 +43,7 @@ impl E3Client {
         }
 
         // try again with refreshed dns lookup
-        let socket_addr = Self::get_ip_for_e3(&self)
-            .await
-            .expect("failed to get ip for e3");
+        let socket_addr = self.get_ip_for_e3().await.expect("failed to get ip for e3");
 
         Self::try_connect(socket_addr).await
     }
