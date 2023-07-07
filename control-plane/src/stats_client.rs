@@ -28,8 +28,8 @@ impl StatsClient {
         Ok(())
     }
 
-    pub fn record_requests_minute(rpm: i64) {
+    pub fn record_request() {
         let context = CageContext::from_env_vars();
-        publish_count!("requests.minute", rpm, context);
+        publish_count!("encrypt.count", 1, context);
     }
 }
