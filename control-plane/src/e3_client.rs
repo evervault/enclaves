@@ -9,6 +9,7 @@ use crate::{
 
 pub struct E3Client {
     socket_addr: Option<SocketAddr>,
+    #[allow(unused)]
     dns_resolver: AsyncDnsResolver,
 }
 
@@ -35,12 +36,22 @@ impl E3Client {
             None => self.get_ip_for_e3().await.unwrap(),
         };
 
-        match tokio::net::TcpStream::connect(socket_addr).await {
-            Ok(e3_stream) => Ok(e3_stream),
-            Err(e) => {
-                panic!("{e}");
-            }
+        let conn = Self::try_connect(socket_addr).await;
+
+        if conn.is_ok() {
+            return Ok(conn.unwrap());
         }
+
+        // try again with refreshed dns lookup
+        let socket_addr = Self::get_ip_for_e3(&self)
+            .await
+            .expect("failed to get ip for e3");
+
+        Self::try_connect(socket_addr).await
+    }
+
+    async fn try_connect(socket_addr: SocketAddr) -> Result<TcpStream> {
+        Ok(TcpStream::connect(socket_addr).await?)
     }
 
     #[cfg(feature = "enclave")]

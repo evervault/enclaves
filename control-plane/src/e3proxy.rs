@@ -28,20 +28,6 @@ impl E3Proxy {
         Self { dns_resolver }
     }
 
-    #[cfg(feature = "enclave")]
-    async fn shutdown_conn(connection: tokio_vsock::VsockStream) {
-        if let Err(e) = connection.shutdown(std::net::Shutdown::Both) {
-            eprintln!("Failed to shutdown data plane connection — {e:?}");
-        }
-    }
-
-    #[cfg(not(feature = "enclave"))]
-    async fn shutdown_conn(mut connection: tokio::net::TcpStream) {
-        if let Err(e) = connection.shutdown().await {
-            eprintln!("Failed to shutdown data plane connection — {e:?}");
-        }
-    }
-
     pub async fn listen(self) -> Result<()> {
         let mut enclave_conn = get_vsock_server(shared::ENCLAVE_CRYPTO_PORT, Parent).await?;
         let e3_client = E3Client::new();
@@ -61,7 +47,7 @@ impl E3Proxy {
 
             tokio::spawn(async move {
                 if let Err(e) = shared::utils::pipe_streams(connection, e3_stream).await {
-                    eprintln!("Error streaming from Data Plane to e3 (idk)— {e:?}");
+                    eprintln!("Error streaming from Data Plane to e3 — {e:?}");
                 }
             });
         }
