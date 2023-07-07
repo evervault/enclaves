@@ -1,6 +1,4 @@
 use crate::error;
-#[cfg(feature = "enclave")]
-use rand::prelude::IteratorRandom;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use trust_dns_resolver::config::ResolverOpts;
 use trust_dns_resolver::config::{NameServerConfigGroup, ResolverConfig};
@@ -30,8 +28,8 @@ pub async fn get_ip_for_host_with_dns_resolver(
     port: u16,
 ) -> error::Result<SocketAddr> {
     use crate::error::ServerError;
+    use rand::prelude::IteratorRandom;
 
-    #[cfg(feature = "enclave")]
     let addr = dns_resolver
         .lookup_ip(host)
         .await?
