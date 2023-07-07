@@ -30,6 +30,6 @@ impl StatsClient {
 
     pub fn record_request() {
         let context = CageContext::from_env_vars();
-        publish_count!("encrypt.count", 1, context);
+        publish_count!("request.count", 1, context);
     }
 }
