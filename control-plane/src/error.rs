@@ -15,6 +15,8 @@ pub enum ServerError {
     HyperHttp(#[from] hyper::http::Error),
     #[error(transparent)]
     DNSError(#[from] ResolveError),
+    #[error("Could not find DNS")]
+    DNSNotFound,
     #[error("Request to internal IP ({0}) blocked")]
     IllegalInternalIp(std::net::Ipv4Addr),
     #[error("Invalid IP included in egress request — {0}")]

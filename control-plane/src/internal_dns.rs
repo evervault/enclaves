@@ -28,7 +28,9 @@ pub async fn get_ip_for_host_with_dns_resolver(
     dns_resolver: &AsyncDnsResolver,
     host: &str,
     port: u16,
-) -> error::Result<Option<SocketAddr>> {
+) -> error::Result<SocketAddr> {
+    use crate::error::ServerError;
+
     #[cfg(feature = "enclave")]
     let addr = dns_resolver
         .lookup_ip(host)
@@ -37,15 +39,15 @@ pub async fn get_ip_for_host_with_dns_resolver(
         .choose(&mut rand::thread_rng())
         .map(|ip| SocketAddr::new(ip, port));
 
-    Ok(addr)
+    match addr {
+        Some(addr) => Ok(addr),
+        None => Err(ServerError::DNSNotFound),
+    }
 }
 
 #[cfg(not(feature = "enclave"))]
-pub fn get_ip_for_localhost(port: u16) -> error::Result<Option<SocketAddr>> {
-    let addr = Some(SocketAddr::new(
-        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-        port,
-    ));
+pub fn get_ip_for_localhost(port: u16) -> error::Result<SocketAddr> {
+    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port);
 
     Ok(addr)
 }

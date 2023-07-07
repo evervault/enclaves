@@ -58,12 +58,7 @@ impl CertProxy {
             };
             println!("Forwarding stream to cert provisioner");
             let cert_provisioner_ip = match self.get_ip_for_cert_provisioner().await {
-                Ok(Some(ip)) => ip,
-                Ok(None) => {
-                    eprintln!("No IP returned for Cert Provisioner");
-                    Self::shutdown_conn(connection).await;
-                    continue;
-                }
+                Ok(ip) => ip,
                 Err(e) => {
                     eprintln!("Error obtaining IP for Cert Provisioner — {e:?}");
                     Self::shutdown_conn(connection).await;
@@ -95,7 +90,7 @@ impl CertProxy {
     }
 
     #[cfg(feature = "enclave")]
-    async fn get_ip_for_cert_provisioner(&self) -> Result<Option<SocketAddr>> {
+    async fn get_ip_for_cert_provisioner(&self) -> Result<SocketAddr> {
         let cert_pro_host = format!("{}.", configuration::get_cert_provisoner_host());
         internal_dns::get_ip_for_host_with_dns_resolver(
             &self.dns_resolver,
@@ -106,7 +101,7 @@ impl CertProxy {
     }
 
     #[cfg(not(feature = "enclave"))]
-    async fn get_ip_for_cert_provisioner(&self) -> Result<Option<SocketAddr>> {
+    async fn get_ip_for_cert_provisioner(&self) -> Result<SocketAddr> {
         internal_dns::get_ip_for_localhost(3000)
     }
 }
