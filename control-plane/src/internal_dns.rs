@@ -37,10 +37,7 @@ pub async fn get_ip_for_host_with_dns_resolver(
         .choose(&mut rand::thread_rng())
         .map(|ip| SocketAddr::new(ip, port));
 
-    match addr {
-        Some(addr) => Ok(addr),
-        None => Err(ServerError::DNSNotFound),
-    }
+    addr.ok_or(ServerError::DNSNotFound)
 }
 
 #[cfg(not(feature = "enclave"))]
