@@ -71,73 +71,82 @@ where
             let tx_for_tcp = tx_for_connection.clone();
             let remote_ip = stream.get_remote_addr();
 
-            let buffer = match process_stream(&mut stream).await {
-                Ok(stream) => stream,
-                Err(e) => {
-                    eprintln!("Failed to read the request stream — {e:?}");
-                    shutdown_conn(&mut stream).await;
-                    return;
-                }
-            };
+            let mut buffer = Vec::new();
+            loop {
+                let mut headers = [httparse::EMPTY_HEADER; 64];
+                let mut temp_chunk = [0; 1024];
+                let mut req = httparse::Request::new(&mut headers);
+                let chunk_size = stream.read(&mut temp_chunk).await.unwrap();
+                buffer.extend_from_slice(&temp_chunk[..chunk_size]);
 
-            let mut headers = [httparse::EMPTY_HEADER; 64];
-            let mut req = httparse::Request::new(&mut headers);
-            match req.parse(&buffer) {
-                Ok(Status::Complete(remaining)) => {
-                    let headers = &req.headers;
-                    let body_buffer = &buffer[remaining..];
-                    let is_websocket = headers.iter().any(|header| {
-                        header.name.to_ascii_lowercase() == "upgrade"
-                            && header.value.to_ascii_lowercase() == "websocket".as_bytes()
-                    });
-                    let not_http = req.method.is_none();
-                    if is_websocket || not_http {
-                        //TODO: send 401 response
-                        if let Err(err) =
-                            auth_request_non_http(headers, e3_client_for_connection).await
-                        {
-                            eprintln!("Failed to authenticate request — {err:?}");
+                match req.parse(&buffer) {
+                    Ok(Status::Complete(body_offset)) => {
+                        let headers = &req.headers;
+                        let is_websocket = headers.iter().any(|header| {
+                            header.name.to_ascii_lowercase() == "upgrade"
+                                && header.value.to_ascii_lowercase() == "websocket".as_bytes()
+                        });
+                        let not_http = req.method.is_none();
+                        if is_websocket || not_http {
+                            //TODO: send 401 response
+                            if let Err(err) =
+                                auth_request_non_http(headers, e3_client_for_tcp.clone()).await
+                            {
+                                eprintln!("Failed to authenticate request — {err:?}");
+                                shutdown_conn(&mut stream).await;
+                            }
+                            if let Err(err) =
+                                pipe_to_customer_process(&mut stream, &buffer, port).await
+                            {
+                                eprintln!("Failed piping WS stream to customer process — {err:?}");
+                                shutdown_conn(&mut stream).await;
+                            }
+                        } else {
+                            let request: Request<Body> =
+                                build_http_request(req, &buffer[body_offset..], port).unwrap();
+                            match handle_http_request(
+                                request,
+                                e3_client_for_tcp.clone(),
+                                tx_for_tcp.clone(),
+                                remote_ip.clone(),
+                                port,
+                            )
+                            .await
+                            {
+                                Ok(res) => {
+                                    let response_bytes = response_to_bytes(res).await;
+                                    stream.write_all(&response_bytes).await.unwrap();
+                                    shutdown_conn(&mut stream).await;
+                                    break;
+                                }
+                                Err(err) => {
+                                    eprintln!(
+                                        "Failed sending HTTP request to customer process — {err:?}"
+                                    );
+                                    shutdown_conn(&mut stream).await;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    Ok(Status::Partial) => continue,
+                    Err(_) => {
+                        // We need to figure out a better auth mechanism for other protocols
+                        if feature_context.api_key_auth {
+                            eprintln!(
+                                "API key auth needs to be turned off for non HTTPS/WS streams"
+                            );
                             shutdown_conn(&mut stream).await;
+                            break;
                         }
                         if let Err(err) = pipe_to_customer_process(&mut stream, &buffer, port).await
                         {
-                            eprintln!("Failed piping WS stream to customer process — {err:?}");
+                            eprintln!(
+                                "Failed piping non HTTP/WS stream to customer process — {err:?}"
+                            );
                             shutdown_conn(&mut stream).await;
+                            break;
                         }
-                    } else {
-                        let request: Request<Body> =
-                            build_http_request(req, body_buffer, port).unwrap();
-                        match handle_http_request(
-                            request,
-                            e3_client_for_tcp,
-                            tx_for_tcp,
-                            remote_ip,
-                            port,
-                        )
-                        .await
-                        {
-                            Ok(res) => {
-                                let response_bytes = response_to_bytes(res).await;
-                                stream.write_all(&response_bytes).await.unwrap();
-                            }
-                            Err(err) => {
-                                eprintln!(
-                                    "Failed sending HTTP request to customer process — {err:?}"
-                                );
-                                shutdown_conn(&mut stream).await;
-                            }
-                        }
-                    }
-                }
-                _ => {
-                    // We need to figure out a better auth mechanism for other protocols
-                    if feature_context.api_key_auth {
-                        eprintln!("API key auth needs to be turned off for non HTTPS/WS streams");
-                        shutdown_conn(&mut stream).await;
-                    }
-                    if let Err(err) = pipe_to_customer_process(&mut stream, &buffer, port).await {
-                        eprintln!("Failed piping non HTTP/WS stream to customer process — {err:?}");
-                        shutdown_conn(&mut stream).await;
                     }
                 }
             }
@@ -155,7 +164,7 @@ async fn auth_request_non_http(
         .ok_or(MissingApiKey)?;
     let header_value = HeaderValue::from_bytes(api_key.value)?;
     if FeatureContext::get().api_key_auth
-        && auth_request(header_value, CageContext::get()?, e3_client)
+        && auth_request(header_value, CageContext::get()?, e3_client.clone())
             .await
             .is_some()
     {
@@ -173,34 +182,6 @@ where
     }
 }
 
-async fn process_stream<L>(stream: &mut TlsStream<L>) -> Result<Vec<u8>>
-where
-    TlsStream<L>: AsyncReadExt + Unpin,
-{
-    let mut buffer = Vec::new();
-    loop {
-        let mut request_chunk = [0; 1024];
-        match stream.read(&mut request_chunk).await {
-            Ok(read_bytes) => {
-                if read_bytes == 0 {
-                    break;
-                }
-
-                buffer.extend_from_slice(&request_chunk[..read_bytes]);
-
-                if read_bytes < request_chunk.len() {
-                    break;
-                }
-            }
-            Err(e) => {
-                eprintln!("Error reading from stream: {}", e);
-                return Err(crate::error::Error::Io(e));
-            }
-        }
-    }
-    Ok(buffer)
-}
-
 async fn pipe_to_customer_process<L>(
     stream: &mut TlsStream<L>,
     buffer: &[u8],
@@ -210,7 +191,7 @@ where
     TlsStream<L>: AsyncReadExt + Unpin + AsyncWrite,
 {
     let mut customer_stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-    customer_stream.write_all(buffer).await.unwrap();
+    customer_stream.write_all(buffer).await?;
     pipe_streams(stream, customer_stream).await?;
     Ok(())
 }
@@ -232,9 +213,7 @@ fn build_http_request(
     let mut req = Request::builder()
         .uri(uri)
         .method(request.method.unwrap())
-        .body(Body::from(
-            String::from_utf8(body_buffer.to_vec()).expect("Found invalid UTF-8"),
-        ))?;
+        .body(Body::from(body_buffer.to_vec()))?;
     *req.headers_mut() = header_map;
     Ok(req)
 }
