@@ -18,6 +18,7 @@ pub const PARENT_CID: u32 = 3;
 pub mod logging;
 pub mod rpc;
 pub mod server;
+pub mod stats;
 pub mod utils;
 
 lazy_static::lazy_static! {

@@ -1,4 +1,5 @@
 use control_plane::clients::{cert_provisioner, mtls_config};
+use control_plane::stats_client::StatsClient;
 use control_plane::stats_proxy::StatsProxy;
 use control_plane::{cert_proxy, config_server};
 use shared::server::error::ServerResult;
@@ -32,6 +33,7 @@ async fn main() -> Result<()> {
     println!("Starting control plane on {CONTROL_PLANE_PORT}");
     let e3_proxy = e3proxy::E3Proxy::new();
     let cert_proxy = cert_proxy::CertProxy::new();
+    StatsClient::init();
 
     let mtls_config = mtls_config::CertProvisionerMtlsCerts::from_env_vars()
         .expect("Couldn't read in env vars for mtls certs");
@@ -163,6 +165,7 @@ async fn tcp_server() -> Result<()> {
     loop {
         let data_plane_version = parsed_data_plane_version.clone();
         if let Ok((mut connection, _client_socket_addr)) = tcp_listener.accept().await {
+            StatsClient::record_request();
             tokio::spawn(async move {
                 println!("Accepted incoming TCP stream — {_client_socket_addr:?}");
                 let enclave_stream =
