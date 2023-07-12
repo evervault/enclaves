@@ -99,7 +99,10 @@ impl CageContext {
     #[cfg(not(staging))]
     pub fn get_hyphenated_cert_name(&self) -> String {
         let hyphenated_app_uuid = self.app_uuid.clone().replace('_', "-");
-        format!("{}.{}.cages.evervault.com", &self.cage_name, hyphenated_app_uuid)
+        format!(
+            "{}.{}.cages.evervault.com",
+            &self.cage_name, hyphenated_app_uuid
+        )
     }
 
     pub fn get_cert_names(&self) -> Vec<String> {
@@ -107,8 +110,6 @@ impl CageContext {
         let hyphenated_name = self.get_hyphenated_cert_name();
         vec![underscored_name, hyphenated_name]
     }
-
-
 }
 
 impl From<ProvisionerContext> for CageContext {

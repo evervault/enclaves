@@ -152,9 +152,8 @@ impl AttestableCertResolver {
         hostnames: Vec<String>,
         nonce: Option<Vec<u8>>,
     ) -> ServerResult<(SystemTime, CertifiedKey)> {
-
         if hostnames.is_empty() {
-            return Err(TlsError::NoHostnameSpecified)
+            return Err(TlsError::NoHostnameSpecified);
         }
 
         let ec_group = EcGroup::from_curve_name(Nid::SECP384R1)?;
@@ -195,9 +194,14 @@ impl AttestableCertResolver {
                 .build()?,
         )?;
 
+        let mut san_ext = SubjectAlternativeName::new();
+        for hostname in hostnames {
+            san_ext.dns(&hostname);
+        }
+
         #[cfg(feature = "enclave")]
         let expiry_time = Self::append_attestation_info(
-            hostname.to_string(),
+            hostnames,
             Some(key_pair.public_key_to_der()?),
             nonce,
             &mut san_ext,
@@ -205,14 +209,9 @@ impl AttestableCertResolver {
         #[cfg(not(feature = "enclave"))]
         let expiry_time = SystemTime::now() + Duration::from_secs(60 * 60 * 24);
 
-        let mut san_ext = SubjectAlternativeName::new();
-        for hostname in hostnames {
-            san_ext.dns(&hostname);
-            let ctx = cert_builder.x509v3_context(Some(signing_cert), None);
-            let san_ext = san_ext.build(&ctx)?;
-            cert_builder.append_extension(san_ext)?;
-        }
-        
+        let ctx = cert_builder.x509v3_context(Some(signing_cert), None);
+        let san_ext = san_ext.build(&ctx)?;
+        cert_builder.append_extension(san_ext)?;
 
         let ctx = cert_builder.x509v3_context(Some(signing_cert), None);
         let spki_ext = SubjectKeyIdentifier::new().build(&ctx)?;
@@ -237,7 +236,7 @@ impl AttestableCertResolver {
 
     #[cfg(feature = "enclave")]
     fn append_attestation_info(
-        hostname: String,
+        hostnames: Vec<String>,
         challenge: Option<Vec<u8>>,
         nonce: Option<Vec<u8>>,
         san_ext: &mut SubjectAlternativeName,
@@ -247,8 +246,10 @@ impl AttestableCertResolver {
         let attestation_doc = attest::get_attestation_doc(challenge, nonce).unwrap();
         let expiry = attest::get_expiry_time(&attestation_doc)?;
         let hex_encoded_ad = shared::utils::HexSlice::from(attestation_doc.as_slice());
-        let attestable_san = format!("{hex_encoded_ad:x}.{hostname}");
-        san_ext.dns(&attestable_san);
+        for hostname in hostnames {
+            let attestable_san = format!("{hex_encoded_ad:x}.{hostname}");
+            san_ext.dns(&hostname);
+        }
         Ok(expiry)
     }
 
