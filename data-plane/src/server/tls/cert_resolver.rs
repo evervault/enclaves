@@ -20,7 +20,7 @@ use tokio_rustls::rustls::server::ResolvesServerCert;
 use tokio_rustls::rustls::sign::{self, CertifiedKey};
 use tokio_rustls::rustls::{Certificate, PrivateKey};
 
-use crate::server::error::ServerResult;
+use crate::server::error::{ServerResult, TlsError};
 use crate::CageContext;
 
 /// Shared struct to implement cert expiry checks and refreshes
@@ -96,11 +96,11 @@ pub struct AttestableCertResolver {
 impl AttestableCertResolver {
     pub fn new(internal_ca: X509, internal_pk: PKey<Private>) -> ServerResult<Self> {
         let cage_context = CageContext::get()?;
-        let hostname = cage_context.get_cert_name();
+        let hostnames = cage_context.get_cert_names();
         let (created_at, cert_and_key) = Self::generate_self_signed_cert(
             internal_ca.as_ref(),
             internal_pk.as_ref(),
-            hostname.as_str(),
+            hostnames,
             None,
         )?;
 
@@ -121,7 +121,7 @@ impl AttestableCertResolver {
     }
 
     /// Make a X509 request with the given private key
-    fn generate_csr(key_pair: &PKey<Private>, hostname: &str) -> Result<X509Req, ErrorStack> {
+    fn generate_csr(key_pair: &PKey<Private>, hostnames: &[String]) -> Result<X509Req, ErrorStack> {
         let mut req_builder = X509ReqBuilder::new()?;
         req_builder.set_pubkey(key_pair)?;
 
@@ -129,9 +129,12 @@ impl AttestableCertResolver {
         x509_name.append_entry_by_text("C", "IE")?;
         x509_name.append_entry_by_text("ST", "DUB")?;
         x509_name.append_entry_by_text("O", "Evervault")?;
+
         // CommonName upper bound is 64 characters
-        if hostname.len() < 65 {
-            x509_name.append_entry_by_text("CN", hostname)?;
+        if let Some(first_hostname) = hostnames.first() {
+            if first_hostname.len() < 65 {
+                x509_name.append_entry_by_text("CN", first_hostname)?;
+            }
         }
 
         let x509_name = x509_name.build();
@@ -146,14 +149,18 @@ impl AttestableCertResolver {
     fn generate_self_signed_cert(
         signing_cert: &X509Ref,
         signing_key: &PKeyRef<Private>,
-        hostname: &str,
+        hostnames: Vec<String>,
         nonce: Option<Vec<u8>>,
     ) -> ServerResult<(SystemTime, CertifiedKey)> {
+        if hostnames.is_empty() {
+            return Err(TlsError::NoHostnameSpecified);
+        }
+
         let ec_group = EcGroup::from_curve_name(Nid::SECP384R1)?;
         let ec_key = EcKey::generate(ec_group.as_ref())?;
         let key_pair = PKey::from_ec_key(ec_key)?;
 
-        let req = Self::generate_csr(&key_pair, hostname)?;
+        let req = Self::generate_csr(&key_pair, &hostnames)?;
 
         let mut cert_builder = X509::builder()?;
         cert_builder.set_version(2)?;
@@ -188,11 +195,13 @@ impl AttestableCertResolver {
         )?;
 
         let mut san_ext = SubjectAlternativeName::new();
-        san_ext.dns(hostname);
+        for hostname in &hostnames {
+            san_ext.dns(hostname);
+        }
 
         #[cfg(feature = "enclave")]
         let expiry_time = Self::append_attestation_info(
-            hostname.to_string(),
+            hostnames,
             Some(key_pair.public_key_to_der()?),
             nonce,
             &mut san_ext,
@@ -227,7 +236,7 @@ impl AttestableCertResolver {
 
     #[cfg(feature = "enclave")]
     fn append_attestation_info(
-        hostname: String,
+        hostnames: Vec<String>,
         challenge: Option<Vec<u8>>,
         nonce: Option<Vec<u8>>,
         san_ext: &mut SubjectAlternativeName,
@@ -237,8 +246,10 @@ impl AttestableCertResolver {
         let attestation_doc = attest::get_attestation_doc(challenge, nonce).unwrap();
         let expiry = attest::get_expiry_time(&attestation_doc)?;
         let hex_encoded_ad = shared::utils::HexSlice::from(attestation_doc.as_slice());
-        let attestable_san = format!("{hex_encoded_ad:x}.{hostname}");
-        san_ext.dns(&attestable_san);
+        for hostname in hostnames {
+            let attestable_san = format!("{hex_encoded_ad:x}.{hostname}");
+            san_ext.dns(&attestable_san);
+        }
         Ok(expiry)
     }
 
@@ -273,7 +284,7 @@ impl AttestableCertResolver {
             let certified_key = Self::generate_self_signed_cert(
                 self.internal_ca.as_ref(),
                 self.internal_pk.as_ref(),
-                sni_header.as_str(),
+                vec![sni_header],
                 Some(nonce),
             )
             .map_err(|err| {
@@ -286,11 +297,11 @@ impl AttestableCertResolver {
         } else {
             // no nonce given - serve base cert
             self.base_cert_container.resolve_cert(|| {
-                let cage_hostname = self.cage_context.get_cert_name();
+                let cage_hostnames = self.cage_context.get_cert_names();
                 Self::generate_self_signed_cert(
                     self.internal_ca.as_ref(),
                     self.internal_pk.as_ref(),
-                    cage_hostname.as_str(),
+                    cage_hostnames,
                     None,
                 )
             })
@@ -328,15 +339,7 @@ mod tests {
         };
     }
 
-    #[test]
-    fn test_base_cert_used_without_nonce() {
-        let app_uuid = "app_123".to_string();
-        let team_uuid = "team_456".to_string();
-        let cage_uuid = "cage_123".to_string();
-        let cage_name = "my-sick-cage".to_string();
-        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name);
-        let server_name = Some(ctx.get_cert_name());
-        CageContext::set(ctx);
+    fn test_cert_with_hostname(server_name: Option<String>) {
         let (cert, key) = generate_ca().unwrap();
         let resolver = AttestableCertResolver::new(cert, key).unwrap();
         let first_cert = resolver
@@ -358,6 +361,28 @@ mod tests {
             .unwrap();
         let diff_sni_cert = parse_x509_from_rustls_certified_key(&cert_with_diff_sni);
         assert_eq!(get_digest!(&first_x509), get_digest!(&diff_sni_cert));
+    }
+
+    #[test]
+    fn test_base_cert_used_without_nonce() {
+        let app_uuid = "app_123".to_string();
+        let team_uuid = "team_456".to_string();
+        let cage_uuid = "cage_123".to_string();
+        let cage_name = "my-sick-cage".to_string();
+        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name);
+        let server_name = Some(ctx.get_cert_name());
+        test_cert_with_hostname(server_name);
+    }
+
+    #[test]
+    fn test_base_cert_using_hyphen_without_nonce() {
+        let app_uuid = "app_123".to_string();
+        let team_uuid = "team_456".to_string();
+        let cage_uuid = "cage_123".to_string();
+        let cage_name = "my-sick-cage".to_string();
+        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name);
+        let server_name = Some(ctx.get_hyphenated_cert_name());
+        test_cert_with_hostname(server_name);
     }
 
     #[test]
