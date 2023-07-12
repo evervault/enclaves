@@ -195,8 +195,8 @@ impl AttestableCertResolver {
         )?;
 
         let mut san_ext = SubjectAlternativeName::new();
-        for hostname in hostnames {
-            san_ext.dns(&hostname);
+        for hostname in &hostnames {
+            san_ext.dns(hostname);
         }
 
         #[cfg(feature = "enclave")]
