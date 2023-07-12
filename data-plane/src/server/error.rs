@@ -9,6 +9,7 @@ use tokio_rustls::rustls::sign::SignError;
 pub enum TlsError {
     IoError(#[from] std::io::Error),
     TlsError(#[from] tokio_rustls::rustls::Error),
+    NoHostnameSpecified,
     NoCertFound,
     NoKeyFound,
     ServerError(#[from] shared::server::error::ServerError),
