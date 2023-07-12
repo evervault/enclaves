@@ -248,7 +248,7 @@ impl AttestableCertResolver {
         let hex_encoded_ad = shared::utils::HexSlice::from(attestation_doc.as_slice());
         for hostname in hostnames {
             let attestable_san = format!("{hex_encoded_ad:x}.{hostname}");
-            san_ext.dns(&hostname);
+            san_ext.dns(&attestable_san);
         }
         Ok(expiry)
     }
