@@ -14,22 +14,22 @@ use super::{StorageClientError, StorageClientInterface};
 #[derive(Error, Debug)]
 pub enum S3ClientError {
     #[error("GetObject Error: {0}")]
-    GetObjectError(#[from] SdkError<GetObjectError>),
+    GetObject(#[from] SdkError<GetObjectError>),
     #[error("PutObject Error: {0}")]
-    PutObjectError(#[from] SdkError<PutObjectError>),
+    PutObject(#[from] SdkError<PutObjectError>),
     #[error("DeleteObject Error: {0}")]
-    DeleteObjectError(#[from] SdkError<DeleteObjectError>),
+    DeleteObject(#[from] SdkError<DeleteObjectError>),
     #[error("S3 Client Error - {0}")]
-    GeneralClientError(String),
+    GeneralClient(String),
 }
 
 impl From<S3ClientError> for StorageClientError {
     fn from(error: S3ClientError) -> Self {
         match error {
-            S3ClientError::GetObjectError(err) => StorageClientError::GetObjectError(err.to_string()),
-            S3ClientError::PutObjectError(err) => StorageClientError::PutObjectError(err.to_string()), 
-            S3ClientError::DeleteObjectError(err) => StorageClientError::DeleteObjectError(err.to_string()),
-            S3ClientError::GeneralClientError(err) => StorageClientError::GeneralClientError(err),
+            S3ClientError::GetObject(err) => StorageClientError::GetObject(err.to_string()),
+            S3ClientError::PutObject(err) => StorageClientError::PutObject(err.to_string()),
+            S3ClientError::DeleteObject(err) => StorageClientError::DeleteObject(err.to_string()),
+            S3ClientError::GeneralClient(err) => StorageClientError::GeneralClient(err),
         }
     }
 }
@@ -49,7 +49,6 @@ impl S3Client {
 
 #[async_trait]
 impl StorageClientInterface for S3Client {
-    
     async fn get_object(&self, key: String) -> Result<Vec<u8>, StorageClientError> {
         let object = self
             .client
@@ -57,7 +56,8 @@ impl StorageClientInterface for S3Client {
             .bucket(&self.bucket)
             .key(key)
             .send()
-            .await.map_err(S3ClientError::GetObjectError)?;
+            .await
+            .map_err(S3ClientError::GetObject)?;
 
         let body = object
             .body
@@ -77,7 +77,8 @@ impl StorageClientInterface for S3Client {
             .key(key)
             .body(ByteStream::from(body))
             .send()
-            .await.map_err(S3ClientError::PutObjectError)?;
+            .await
+            .map_err(S3ClientError::PutObject)?;
 
         Ok(())
     }
@@ -89,10 +90,9 @@ impl StorageClientInterface for S3Client {
             .bucket(&self.bucket)
             .key(key)
             .send()
-            .await.map_err(S3ClientError::DeleteObjectError)?;
+            .await
+            .map_err(S3ClientError::DeleteObject)?;
 
         Ok(())
     }
 }
-
-

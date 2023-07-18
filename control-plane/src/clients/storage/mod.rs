@@ -3,17 +3,16 @@ mod s3;
 use async_trait::async_trait;
 use thiserror::Error;
 
-
 #[derive(Error, Debug)]
 pub enum StorageClientError {
     #[error("GetObject Error: {0}")]
-    GetObjectError(String),
+    GetObject(String),
     #[error("PutObject Error: {0}")]
-    PutObjectError(String),
+    PutObject(String),
     #[error("DeleteObject Error: {0}")]
-    DeleteObjectError(String),
+    DeleteObject(String),
     #[error("Storage Client Error - {0}")]
-    GeneralClientError(String),
+    GeneralClient(String),
 }
 
 // Make generic so other storage backends can be used
@@ -23,4 +22,3 @@ pub trait StorageClientInterface {
     async fn put_object(&self, key: String, body: Vec<u8>) -> Result<(), StorageClientError>;
     async fn delete_object(&self, key: String) -> Result<(), StorageClientError>;
 }
-
