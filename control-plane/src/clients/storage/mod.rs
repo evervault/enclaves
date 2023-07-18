@@ -12,7 +12,7 @@ pub enum StorageClientError {
     #[error("DeleteObject Error: {0}")]
     DeleteObject(String),
     #[error("Storage Client Error - {0}")]
-    GeneralClient(String),
+    General(String),
 }
 
 // Make generic so other storage backends can be used

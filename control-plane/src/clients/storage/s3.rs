@@ -20,7 +20,7 @@ pub enum S3ClientError {
     #[error("DeleteObject Error: {0}")]
     DeleteObject(#[from] SdkError<DeleteObjectError>),
     #[error("S3 Client Error - {0}")]
-    GeneralClient(String),
+    General(String),
 }
 
 impl From<S3ClientError> for StorageClientError {
@@ -29,7 +29,7 @@ impl From<S3ClientError> for StorageClientError {
             S3ClientError::GetObject(err) => StorageClientError::GetObject(err.to_string()),
             S3ClientError::PutObject(err) => StorageClientError::PutObject(err.to_string()),
             S3ClientError::DeleteObject(err) => StorageClientError::DeleteObject(err.to_string()),
-            S3ClientError::GeneralClient(err) => StorageClientError::GeneralClient(err),
+            S3ClientError::General(err) => StorageClientError::General(err),
         }
     }
 }
@@ -40,6 +40,7 @@ pub struct S3Client {
 }
 
 impl S3Client {
+    #[allow(unused)]
     pub async fn new(bucket: String) -> Self {
         let config = aws_config::load_from_env().await;
         let client = s3::Client::new(&config);
@@ -63,7 +64,7 @@ impl StorageClientInterface for S3Client {
             .body
             .collect()
             .await
-            .map_err(|err| StorageClientError::GeneralClientError(err.to_string()))?
+            .map_err(|err| S3ClientError::General(err.to_string()))?
             .to_vec();
 
         Ok(body)
