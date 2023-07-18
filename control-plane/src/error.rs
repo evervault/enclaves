@@ -30,6 +30,8 @@ pub enum ServerError {
     #[cfg(feature = "network_egress")]
     #[error("Egress error: {0}")]
     EgressError(#[from] shared::server::egress::EgressError),
+    #[error("S3 Error - {0}")]
+    S3Error(String),
 }
 
 pub type Result<T> = std::result::Result<T, ServerError>;
