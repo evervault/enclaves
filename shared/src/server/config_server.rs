@@ -34,7 +34,7 @@ pub mod routes {
                 Self::GetCertToken => write!(f, "/cert/token"),
                 Self::GetE3Token => write!(f, "/e3/token"),
                 Self::PostTrxLogs => write!(f, "/trx/logs"),
-                Self::Storage => write!(f, "/storage")
+                Self::Storage => write!(f, "/storage"),
             }
         }
     }
@@ -187,7 +187,7 @@ pub mod requests {
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct GetObjectRequest {
-        key: String
+        key: String,
     }
 
     impl ConfigServerPayload for GetObjectRequest {}
@@ -204,7 +204,7 @@ pub mod requests {
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct GetObjectResponse {
-        body: String
+        body: String,
     }
 
     impl ConfigServerPayload for GetObjectResponse {}
@@ -243,7 +243,7 @@ pub mod requests {
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct DeleteObjectRequest {
-        key: String
+        key: String,
     }
 
     impl ConfigServerPayload for DeleteObjectRequest {}
@@ -257,7 +257,4 @@ pub mod requests {
             self.key.clone()
         }
     }
-
-    
-    
 }

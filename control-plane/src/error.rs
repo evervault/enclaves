@@ -34,7 +34,6 @@ pub enum ServerError {
     EgressError(#[from] shared::server::egress::EgressError),
     #[error("Storage Error - {0}")]
     StorageClientError(#[from] StorageClientError),
-
 }
 
 pub type Result<T> = std::result::Result<T, ServerError>;
