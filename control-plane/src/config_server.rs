@@ -121,14 +121,10 @@ async fn handle_incoming_request<T: StorageClientInterface>(
         Ok(ConfigServerPath::PostTrxLogs) => {
             Ok(handle_post_trx_logs_request(req, cage_context).await)
         }
-        Ok(ConfigServerPath::Storage) => match req.method() {
-            &Method::GET => {
-                handle_acme_storage_get_request(req, storage_client, cage_context).await
-            }
-            &Method::PUT => {
-                handle_acme_storage_put_request(req, storage_client, cage_context).await
-            }
-            &Method::DELETE => {
+        Ok(ConfigServerPath::Storage) => match *req.method() {
+            Method::GET => handle_acme_storage_get_request(req, storage_client, cage_context).await,
+            Method::PUT => handle_acme_storage_put_request(req, storage_client, cage_context).await,
+            Method::DELETE => {
                 handle_acme_storage_delete_request(req, storage_client, cage_context).await
             }
             _ => Ok(build_bad_request_response()),
@@ -222,7 +218,7 @@ async fn handle_acme_storage_get_request<T: StorageClientInterface>(
                 .status(200)
                 .header("Content-Type", "application/json")
                 .body(body)
-                .map_err(|err| ServerError::HyperHttp(err))
+                .map_err(ServerError::HyperHttp)
         }
         Err(_) => Ok(build_error_response(
             "Failed to parse get object request from data plane".to_string(),
@@ -248,9 +244,9 @@ async fn handle_acme_storage_put_request<T: StorageClientInterface>(
                 Ok(_) => Ok(build_success_response()),
                 Err(err) => {
                     println!("Failed to put object in storage client: {}", err);
-                    return Ok(build_error_response(
+                    Ok(build_error_response(
                         "Failed to put object in storage client".to_string(),
-                    ));
+                    ))
                 }
             }
         }
@@ -274,9 +270,9 @@ async fn handle_acme_storage_delete_request<T: StorageClientInterface>(
                 Ok(_) => Ok(build_success_response()),
                 Err(err) => {
                     println!("Failed to delete object in storage client: {}", err);
-                    return Ok(build_error_response(
+                    Ok(build_error_response(
                         "Failed to delete object in storage client".to_string(),
-                    ));
+                    ))
                 }
             }
         }
