@@ -1,4 +1,4 @@
-use control_plane::clients::{cert_provisioner, mtls_config};
+use control_plane::clients::{cert_provisioner, mtls_config, storage};
 use control_plane::stats_client::StatsClient;
 use control_plane::stats_proxy::StatsProxy;
 use control_plane::{cert_proxy, config_server};
@@ -44,7 +44,10 @@ async fn main() -> Result<()> {
         mtls_config.client_key_pair(),
         mtls_config.root_cert(),
     );
-    let config_server = config_server::ConfigServer::new(cert_provisioner_client);
+
+    let acme_s3_client = storage::s3::S3Client::new(configuration::get_acme_s3_bucket()?).await;
+
+    let config_server = config_server::ConfigServer::new(cert_provisioner_client, acme_s3_client);
 
     #[cfg(not(feature = "network_egress"))]
     {

@@ -1,17 +1,20 @@
 use crate::clients::cert_provisioner::{
     CertProvisionerClient, GetCertTokenResponseControlPlane, GetE3TokenResponseControlPlane,
 };
+use crate::clients::storage::StorageClientInterface;
+
+
 use crate::configuration;
 use crate::error::{Result, ServerError};
 
 use hyper::server::conn;
 use hyper::service::service_fn;
-use hyper::{Body, Request, Response};
+use hyper::{Body, Request, Response, Method};
 use serde::de::DeserializeOwned;
 use shared::logging::TrxContext;
 use shared::server::config_server::requests::{
     ConfigServerPayload, GetCertTokenResponseDataPlane, GetE3TokenResponseDataPlane,
-    PostTrxLogsRequest,
+    PostTrxLogsRequest, GetObjectRequest, GetObjectResponse, PutObjectRequest, DeleteObjectRequest,
 };
 use shared::server::config_server::routes::ConfigServerPath;
 use shared::server::CID::Parent;
@@ -19,15 +22,17 @@ use shared::server::{get_vsock_server, Listener};
 use std::str::FromStr;
 
 #[derive(Clone)]
-pub struct ConfigServer {
+pub struct ConfigServer<T: StorageClientInterface>  {
     cert_provisioner_client: CertProvisionerClient,
+    storage_client: T,
     cage_context: configuration::CageContext,
 }
 
-impl ConfigServer {
-    pub fn new(cert_provisioner_client: CertProvisionerClient) -> Self {
+impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> {
+    pub fn new(cert_provisioner_client: CertProvisionerClient, storage_client: T ) -> Self {
         Self {
             cert_provisioner_client,
+            storage_client,
             cage_context: configuration::CageContext::from_env_vars(),
         }
     }
@@ -38,11 +43,13 @@ impl ConfigServer {
         let server = conn::Http::new();
 
         let cert_client = self.cert_provisioner_client.clone();
+        let storage_client = self.storage_client.clone();
         let cage_context = self.cage_context.clone();
 
         println!("Running config server on {}", shared::ENCLAVE_CONFIG_PORT);
         loop {
             let cert_client = cert_client.clone();
+            let storage_client = storage_client.clone();
             let cage_context = cage_context.clone();
             let connection = match enclave_conn.accept().await {
                 Ok(conn) => conn,
@@ -56,6 +63,7 @@ impl ConfigServer {
 
             tokio::spawn(async move {
                 let cert_client = cert_client.clone();
+                let storage_client = storage_client.clone();
                 let cage_context = cage_context.clone();
                 let sent_response =
                     server
@@ -63,9 +71,10 @@ impl ConfigServer {
                             connection,
                             service_fn(|req: Request<Body>| {
                                 let cert_client = cert_client.clone();
+                                let storage_client = storage_client.clone();
                                 let cage_context = cage_context.clone();
                                 async move {
-                                    handle_incoming_request(req, cert_client, cage_context).await
+                                    handle_incoming_request(req, cert_client, storage_client, cage_context).await
                                 }
                             }),
                         )
@@ -87,9 +96,10 @@ pub enum TokenType {
     Cert(ConfigServerPath),
     E3(ConfigServerPath),
 }
-async fn handle_incoming_request(
+async fn handle_incoming_request<T: StorageClientInterface>(
     req: Request<Body>,
     cert_provisioner_client: CertProvisionerClient,
+    storage_client: T,
     cage_context: configuration::CageContext,
 ) -> Result<Response<Body>> {
     match ConfigServerPath::from_str(req.uri().path()) {
@@ -105,7 +115,21 @@ async fn handle_incoming_request(
         .await),
         Ok(ConfigServerPath::PostTrxLogs) => {
             Ok(handle_post_trx_logs_request(req, cage_context).await)
-        }
+        },
+        Ok(ConfigServerPath::Storage) => {
+            match req.method() {
+                &Method::GET => {
+                    handle_acme_storage_get_request(req, storage_client, cage_context).await
+                },
+                &Method::PUT => {
+                    handle_acme_storage_put_request(req, storage_client, cage_context).await
+                },
+                &Method::DELETE => {
+                    handle_acme_storage_delete_request(req, storage_client, cage_context).await
+                },
+                _ => Ok(build_bad_request_response()),
+            }
+        },
         _ => Ok(build_bad_request_response()),
     }
 }
@@ -178,6 +202,73 @@ async fn handle_post_trx_logs_request(
     }
 }
 
+async fn handle_acme_storage_get_request<T: StorageClientInterface>(
+    req: Request<Body>,
+    storage_client: T,
+    cage_context: configuration::CageContext
+) -> Result<Response<Body>> {
+    println!("Recieved get request in config server for acme storage");
+    let parsed_result: Result<GetObjectRequest> = parse_request(req).await;
+    match parsed_result {
+        Ok(request_body) => {
+            let namespaced_key = namespace_key(request_body.key(), &cage_context);
+            let object = storage_client.get_object(namespaced_key).await?;
+            let body = GetObjectResponse::new(object).into_body()?;
+
+            Response::builder()
+                .status(200)
+                .header("Content-Type", "application/json")
+                .body(body).map_err(|err| ServerError::HyperHttp(err))
+        }
+        Err(_) => Ok(build_error_response("Failed to parse get object request from data plane".to_string())),
+    }
+}
+
+async fn handle_acme_storage_put_request<T: StorageClientInterface>(
+    req: Request<Body>,
+    storage_client: T,
+    cage_context: configuration::CageContext
+) -> Result<Response<Body>> {
+    println!("Recieved post request in config server for acme storage");
+    let parsed_result: Result<PutObjectRequest> = parse_request(req).await;
+    match parsed_result {
+        Ok(request_body) => {
+            let namespaced_key = namespace_key(request_body.key(), &cage_context);
+            
+            match storage_client.put_object(namespaced_key, request_body.object()).await {
+                Ok(_) => Ok(build_success_response()),
+                Err(err) => {
+                    println!("Failed to put object in storage client: {}", err);
+                    return Ok(build_error_response("Failed to put object in storage client".to_string()))
+                }
+            }
+        }
+        Err(_) => Ok(build_error_response("Failed to parse put object request from data plane".to_string())),
+    }
+}
+
+async fn handle_acme_storage_delete_request<T: StorageClientInterface>(
+    req: Request<Body>,
+    storage_client: T,
+    cage_context: configuration::CageContext
+) -> Result<Response<Body>> {
+    let parsed_result: Result<DeleteObjectRequest> = parse_request(req).await;
+    match parsed_result {
+        Ok(request_body) => {
+            let namespaced_key = namespace_key(request_body.key(), &cage_context);
+            
+            match storage_client.delete_object(namespaced_key).await {
+                Ok(_) => Ok(build_success_response()),
+                Err(err) => {
+                    println!("Failed to delete object in storage client: {}", err);
+                    return Ok(build_error_response("Failed to delete object in storage client".to_string()))
+                }
+            }
+        }
+        Err(_) => Ok(build_error_response("Failed to parse delete object request from data plane".to_string())),
+    }
+}
+
 fn build_success_response() -> Response<Body> {
     Response::builder()
         .status(200)
@@ -201,6 +292,16 @@ fn build_error_response(body_msg: String) -> Response<Body> {
         .header("Content-Type", "application/json")
         .body(Body::from(body_msg))
         .expect("Infallible")
+}
+
+fn namespace_key(key: String, cage_context: &configuration::CageContext) -> String {
+    format!(
+        "{}/{}/{}/{}",
+        cage_context.team_uuid,
+        cage_context.app_uuid,
+        cage_context.cage_uuid,
+        key
+    )
 }
 
 async fn parse_request<T: DeserializeOwned>(req: Request<Body>) -> Result<T> {

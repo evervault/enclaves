@@ -11,6 +11,7 @@ pub mod routes {
         GetCertToken,
         PostTrxLogs,
         GetE3Token,
+        Storage,
     }
 
     impl FromStr for ConfigServerPath {
@@ -21,6 +22,7 @@ pub mod routes {
                 "/cert/token" => Ok(Self::GetCertToken),
                 "/e3/token" => Ok(Self::GetE3Token),
                 "/trx/logs" => Ok(Self::PostTrxLogs),
+                "/storage" => Ok(Self::Storage),
                 _ => Err(ServerError::InvalidPath(input.to_string())),
             }
         }
@@ -32,6 +34,7 @@ pub mod routes {
                 Self::GetCertToken => write!(f, "/cert/token"),
                 Self::GetE3Token => write!(f, "/e3/token"),
                 Self::PostTrxLogs => write!(f, "/trx/logs"),
+                Self::Storage => write!(f, "/storage")
             }
         }
     }
@@ -181,4 +184,80 @@ pub mod requests {
             self.trx_logs.clone()
         }
     }
+
+    #[derive(Serialize, Deserialize, Debug, Clone)]
+    pub struct GetObjectRequest {
+        key: String
+    }
+
+    impl ConfigServerPayload for GetObjectRequest {}
+
+    impl GetObjectRequest {
+        pub fn new(key: String) -> Self {
+            Self { key }
+        }
+
+        pub fn key(&self) -> String {
+            self.key.clone()
+        }
+    }
+
+    #[derive(Serialize, Deserialize, Debug, Clone)]
+    pub struct GetObjectResponse {
+        body: String
+    }
+
+    impl ConfigServerPayload for GetObjectResponse {}
+
+    impl GetObjectResponse {
+        pub fn new(body: String) -> Self {
+            Self { body }
+        }
+
+        pub fn body(&self) -> String {
+            self.body.clone()
+        }
+    }
+
+    #[derive(Serialize, Deserialize, Debug, Clone)]
+    pub struct PutObjectRequest {
+        key: String,
+        object: String,
+    }
+
+    impl ConfigServerPayload for PutObjectRequest {}
+
+    impl PutObjectRequest {
+        pub fn new(key: String, object: String) -> Self {
+            Self { key, object }
+        }
+
+        pub fn key(&self) -> String {
+            self.key.clone()
+        }
+
+        pub fn object(&self) -> String {
+            self.object.clone()
+        }
+    }
+
+    #[derive(Serialize, Deserialize, Debug, Clone)]
+    pub struct DeleteObjectRequest {
+        key: String
+    }
+
+    impl ConfigServerPayload for DeleteObjectRequest {}
+
+    impl DeleteObjectRequest {
+        pub fn new(key: String) -> Self {
+            Self { key }
+        }
+
+        pub fn key(&self) -> String {
+            self.key.clone()
+        }
+    }
+
+    
+    
 }

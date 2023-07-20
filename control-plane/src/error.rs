@@ -1,6 +1,8 @@
 use thiserror::Error;
 use trust_dns_resolver::error::ResolveError;
 
+use crate::clients::storage::StorageClientError;
+
 #[derive(Error, Debug)]
 pub enum ServerError {
     #[error(transparent)]
@@ -30,8 +32,9 @@ pub enum ServerError {
     #[cfg(feature = "network_egress")]
     #[error("Egress error: {0}")]
     EgressError(#[from] shared::server::egress::EgressError),
-    #[error("S3 Error - {0}")]
-    S3Error(String),
+    #[error("Storage Error - {0}")]
+    StorageClientError(#[from] StorageClientError),
+
 }
 
 pub type Result<T> = std::result::Result<T, ServerError>;

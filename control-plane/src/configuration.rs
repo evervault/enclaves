@@ -107,3 +107,7 @@ pub fn get_cert_provisioner_mtls_root_cert_env() -> Result<String, std::env::Var
 pub fn get_data_plane_version() -> Result<String, std::env::VarError> {
     std::env::var("DATA_PLANE_VERSION")
 }
+
+pub fn get_acme_s3_bucket() -> Result<String, std::env::VarError> {
+    std::env::var("ACME_S3_BUCKET")
+}

@@ -33,7 +33,7 @@ impl From<S3ClientError> for StorageClientError {
         }
     }
 }
-
+#[derive(Clone, Debug)]
 pub struct S3Client {
     bucket: String,
     client: s3::Client,
@@ -50,7 +50,7 @@ impl S3Client {
 
 #[async_trait]
 impl StorageClientInterface for S3Client {
-    async fn get_object(&self, key: String) -> Result<Vec<u8>, StorageClientError> {
+    async fn get_object(&self, key: String) -> Result<String, StorageClientError> {
         let object = self
             .client
             .get_object()
@@ -60,23 +60,29 @@ impl StorageClientInterface for S3Client {
             .await
             .map_err(S3ClientError::GetObject)?;
 
-        let body = object
+        let body_bytes = object
             .body
             .collect()
             .await
             .map_err(|err| S3ClientError::General(err.to_string()))?
             .to_vec();
 
+        let body = String::from_utf8(body_bytes).map_err(|err| {
+            S3ClientError::General(format!("Failed to parse object body: {}", err.to_string()))
+        })?;
+
         Ok(body)
     }
 
-    async fn put_object(&self, key: String, body: Vec<u8>) -> Result<(), StorageClientError> {
+    async fn put_object(&self, key: String, body: String) -> Result<(), StorageClientError> {
+        let body_bytes = body.as_bytes().to_vec();
+
         let _ = self
             .client
             .put_object()
             .bucket(&self.bucket)
             .key(key)
-            .body(ByteStream::from(body))
+            .body(ByteStream::from(body_bytes))
             .send()
             .await
             .map_err(S3ClientError::PutObject)?;
