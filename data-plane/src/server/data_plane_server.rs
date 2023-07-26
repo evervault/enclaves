@@ -217,11 +217,7 @@ fn build_http_request(
     body_buffer: &[u8],
     port: u16,
 ) -> Result<Request<Body>> {
-    let uri = format!(
-        "http://127.0.0.1:{}{}",
-        port,
-        request.path.unwrap_or_else(|| "/")
-    );
+    let uri = format!("http://127.0.0.1:{}{}", port, request.path.unwrap_or("/"));
     let mut header_map = HeaderMap::new();
     for header in request.headers {
         header_map.insert(
