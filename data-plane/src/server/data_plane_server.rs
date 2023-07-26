@@ -76,7 +76,14 @@ where
                 let mut headers = [httparse::EMPTY_HEADER; 64];
                 let mut temp_chunk = [0; 1024];
                 let mut req = httparse::Request::new(&mut headers);
-                let chunk_size = stream.read(&mut temp_chunk).await.unwrap();
+                let chunk_size = match stream.read(&mut temp_chunk).await {
+                    Ok(chunk_size) => chunk_size,
+                    Err(e) => {
+                        eprintln!("Connection read error - {e:?}");
+                        shutdown_conn(&mut stream).await;
+                        break;
+                    }
+                };
                 buffer.extend_from_slice(&temp_chunk[..chunk_size]);
 
                 match req.parse(&buffer) {
@@ -105,7 +112,14 @@ where
                             }
                         } else {
                             let request: Request<Body> =
-                                build_http_request(req, &buffer[body_offset..], port).unwrap();
+                                match build_http_request(req, &buffer[body_offset..], port) {
+                                    Ok(request) => request,
+                                    Err(e) => {
+                                        eprintln!("Connection read error - {e:?}");
+                                        shutdown_conn(&mut stream).await;
+                                        break;
+                                    }
+                                };
                             match handle_http_request(
                                 request,
                                 e3_client_for_tcp.clone(),
@@ -117,7 +131,7 @@ where
                             {
                                 Ok(res) => {
                                     let response_bytes = response_to_bytes(res).await;
-                                    stream.write_all(&response_bytes).await.unwrap();
+                                    let _ = stream.write_all(&response_bytes).await;
                                     shutdown_conn(&mut stream).await;
                                     break;
                                 }
@@ -192,7 +206,7 @@ async fn pipe_to_customer_process<L>(
 where
     TlsStream<L>: AsyncReadExt + Unpin + AsyncWrite,
 {
-    let mut customer_stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+    let mut customer_stream = TcpStream::connect(("127.0.0.1", port)).await?;
     customer_stream.write_all(buffer).await?;
     pipe_streams(stream, customer_stream).await?;
     Ok(())
@@ -203,7 +217,11 @@ fn build_http_request(
     body_buffer: &[u8],
     port: u16,
 ) -> Result<Request<Body>> {
-    let uri = format!("http://127.0.0.1:{}{}", port, request.path.unwrap());
+    let uri = format!(
+        "http://127.0.0.1:{}{}",
+        port,
+        request.path.unwrap_or_else(|| "/")
+    );
     let mut header_map = HeaderMap::new();
     for header in request.headers {
         header_map.insert(
