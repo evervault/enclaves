@@ -68,7 +68,7 @@ impl StorageClientInterface for S3Client {
             .to_vec();
 
         let body = String::from_utf8(body_bytes).map_err(|err| {
-            S3ClientError::General(format!("Failed to parse object body: {}", err.to_string()))
+            S3ClientError::General(format!("Failed to parse object body: {}", err))
         })?;
 
         Ok(body)
