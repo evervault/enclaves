@@ -94,12 +94,14 @@ where
                             {
                                 eprintln!("Failed to authenticate request — {err:?}");
                                 shutdown_conn(&mut stream).await;
+                                break;
                             }
                             if let Err(err) =
                                 pipe_to_customer_process(&mut stream, &buffer, port).await
                             {
                                 eprintln!("Failed piping WS stream to customer process — {err:?}");
                                 shutdown_conn(&mut stream).await;
+                                break;
                             }
                         } else {
                             let request: Request<Body> =
