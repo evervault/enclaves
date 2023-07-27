@@ -50,15 +50,22 @@ impl S3Client {
 
 #[async_trait]
 impl StorageClientInterface for S3Client {
-    async fn get_object(&self, key: String) -> Result<String, StorageClientError> {
-        let object = self
+    async fn get_object(&self, key: String) -> Result<Option<String>, StorageClientError> {
+        let object_res = self
             .client
             .get_object()
             .bucket(&self.bucket)
             .key(key)
             .send()
-            .await
-            .map_err(S3ClientError::GetObject)?;
+            .await;
+
+        let object = match object_res {
+            Ok(object) => object,
+            Err(err) => match err.into_service_error() {
+                GetObjectError::NoSuchKey(_) => return Ok(None),
+                err => return Err(StorageClientError::GetObject(err.to_string())),
+            },
+        };
 
         let body_bytes = object
             .body
@@ -71,7 +78,7 @@ impl StorageClientInterface for S3Client {
             S3ClientError::General(format!("Failed to parse object body: {}", err))
         })?;
 
-        Ok(body)
+        Ok(Some(body))
     }
 
     async fn put_object(&self, key: String, body: String) -> Result<(), StorageClientError> {

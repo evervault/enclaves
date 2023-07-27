@@ -18,7 +18,7 @@ pub enum StorageClientError {
 // Make generic so other storage backends can be used
 #[async_trait]
 pub trait StorageClientInterface {
-    async fn get_object(&self, key: String) -> Result<String, StorageClientError>;
+    async fn get_object(&self, key: String) -> Result<Option<String>, StorageClientError>;
     async fn put_object(&self, key: String, body: String) -> Result<(), StorageClientError>;
     async fn delete_object(&self, key: String) -> Result<(), StorageClientError>;
 }

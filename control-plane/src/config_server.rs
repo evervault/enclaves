@@ -212,7 +212,13 @@ async fn handle_acme_storage_get_request<T: StorageClientInterface>(
         Ok(request_body) => {
             let namespaced_key = namespace_key(request_body.key(), &cage_context);
             let object = match storage_client.get_object(namespaced_key).await {
-                Ok(object) => object,
+                Ok(object) => match object {
+                    Some(object) => object,
+                    None => {
+                        println!("Object not found in storage client");
+                        return Ok(build_bad_request_response());
+                    }
+                },
                 Err(err) => {
                     println!("Failed to get object in storage client: {}", err);
                     return Ok(build_error_response(
@@ -340,7 +346,7 @@ mod tests {
       pub StorageClientInterface {}
       #[async_trait]
       impl StorageClientInterface for StorageClientInterface {
-          async fn get_object(&self, key: String) -> Result<String, StorageClientError>;
+          async fn get_object(&self, key: String) -> Result<Option<String>, StorageClientError>;
           async fn put_object(&self, key: String, body: String) -> Result<(), StorageClientError>;
           async fn delete_object(&self, key: String) -> Result<(), StorageClientError>;
       }
@@ -381,7 +387,7 @@ mod tests {
         mock_storage_client
             .expect_get_object()
             .with(eq(expected_key))
-            .returning(move |_| Ok("super_secret".to_string()));
+            .returning(move |_| Ok(Some("super_secret".to_string())));
 
         let result = handle_acme_storage_get_request(req, mock_storage_client, cage_context).await;
 
