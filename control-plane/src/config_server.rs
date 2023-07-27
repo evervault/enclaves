@@ -333,18 +333,18 @@ mod tests {
 
     use super::*;
     use async_trait::async_trait;
-    use mockall::{predicate::eq, mock};
+    use mockall::{mock, predicate::eq};
 
     mock! {
-        #[derive(Debug)]
-        pub StorageClientInterface {}
-        #[async_trait]
-        impl StorageClientInterface for StorageClientInterface {
-            async fn get_object(&self, key: String) -> Result<String, StorageClientError>;
-            async fn put_object(&self, key: String, body: String) -> Result<(), StorageClientError>;
-            async fn delete_object(&self, key: String) -> Result<(), StorageClientError>;
-        }
+      #[derive(Debug)]
+      pub StorageClientInterface {}
+      #[async_trait]
+      impl StorageClientInterface for StorageClientInterface {
+          async fn get_object(&self, key: String) -> Result<String, StorageClientError>;
+          async fn put_object(&self, key: String, body: String) -> Result<(), StorageClientError>;
+          async fn delete_object(&self, key: String) -> Result<(), StorageClientError>;
       }
+    }
 
     fn get_cage_context() -> configuration::CageContext {
         configuration::CageContext::new(
@@ -363,14 +363,20 @@ mod tests {
         let key = "some_key".to_string();
 
         let req_body = GetObjectRequest::new(key.clone()).into_body().unwrap();
-        let req= hyper::Request::builder()
+        let req = hyper::Request::builder()
             .method(Method::GET)
             .body(req_body)
             .unwrap();
 
         let cage_context = get_cage_context();
 
-        let expected_key = format!("{}/{}/{}/{}", cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, key.clone());
+        let expected_key = format!(
+            "{}/{}/{}/{}",
+            cage_context.team_uuid,
+            cage_context.app_uuid,
+            cage_context.cage_uuid,
+            key.clone()
+        );
 
         mock_storage_client
             .expect_get_object()
@@ -390,19 +396,29 @@ mod tests {
         let key = "some_key".to_string();
 
         let req_body = GetObjectRequest::new(key.clone()).into_body().unwrap();
-        let req= hyper::Request::builder()
+        let req = hyper::Request::builder()
             .method(Method::GET)
             .body(req_body)
             .unwrap();
 
         let cage_context = get_cage_context();
 
-        let expected_key = format!("{}/{}/{}/{}", cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, key.clone());
+        let expected_key = format!(
+            "{}/{}/{}/{}",
+            cage_context.team_uuid,
+            cage_context.app_uuid,
+            cage_context.cage_uuid,
+            key.clone()
+        );
 
         mock_storage_client
             .expect_get_object()
             .with(eq(expected_key))
-            .returning(move |_| Err(StorageClientError::General("some_get_object_error".to_string())));
+            .returning(move |_| {
+                Err(StorageClientError::General(
+                    "some_get_object_error".to_string(),
+                ))
+            });
 
         let result = handle_acme_storage_get_request(req, mock_storage_client, cage_context).await;
 
@@ -417,15 +433,20 @@ mod tests {
         let key = "some_key".to_string();
         let object = "super_secret".to_string();
 
-        let req_body = PutObjectRequest::new(key.clone(), object.clone()).into_body().unwrap();
-        let req= hyper::Request::builder()
+        let req_body = PutObjectRequest::new(key.clone(), object.clone())
+            .into_body()
+            .unwrap();
+        let req = hyper::Request::builder()
             .method(Method::GET)
             .body(req_body)
             .unwrap();
 
         let cage_context = get_cage_context();
 
-        let expected_key = format!("{}/{}/{}/{}", cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, key);
+        let expected_key = format!(
+            "{}/{}/{}/{}",
+            cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, key
+        );
 
         mock_storage_client
             .expect_put_object()
@@ -445,20 +466,29 @@ mod tests {
         let key = "some_key".to_string();
         let object = "super_secret".to_string();
 
-        let req_body = PutObjectRequest::new(key.clone(), object.clone()).into_body().unwrap();
-        let req= hyper::Request::builder()
+        let req_body = PutObjectRequest::new(key.clone(), object.clone())
+            .into_body()
+            .unwrap();
+        let req = hyper::Request::builder()
             .method(Method::GET)
             .body(req_body)
             .unwrap();
 
         let cage_context = get_cage_context();
 
-        let expected_key = format!("{}/{}/{}/{}", cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, key);
+        let expected_key = format!(
+            "{}/{}/{}/{}",
+            cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, key
+        );
 
         mock_storage_client
             .expect_put_object()
             .with(eq(expected_key), eq(object))
-            .returning(move |_, _| Err(StorageClientError::General("some_put_object_error".to_string())));
+            .returning(move |_, _| {
+                Err(StorageClientError::General(
+                    "some_put_object_error".to_string(),
+                ))
+            });
 
         let result = handle_acme_storage_put_request(req, mock_storage_client, cage_context).await;
 
@@ -473,21 +503,28 @@ mod tests {
         let key = "some_key".to_string();
 
         let req_body = DeleteObjectRequest::new(key.clone()).into_body().unwrap();
-        let req= hyper::Request::builder()
+        let req = hyper::Request::builder()
             .method(Method::DELETE)
             .body(req_body)
             .unwrap();
 
         let cage_context = get_cage_context();
 
-        let expected_key = format!("{}/{}/{}/{}", cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, key.clone());
+        let expected_key = format!(
+            "{}/{}/{}/{}",
+            cage_context.team_uuid,
+            cage_context.app_uuid,
+            cage_context.cage_uuid,
+            key.clone()
+        );
 
         mock_storage_client
             .expect_delete_object()
             .with(eq(expected_key))
             .returning(move |_| Ok(()));
 
-        let result = handle_acme_storage_delete_request(req, mock_storage_client, cage_context).await;
+        let result =
+            handle_acme_storage_delete_request(req, mock_storage_client, cage_context).await;
 
         assert!(result.is_ok());
         assert!(result.unwrap().status().is_success());
@@ -500,24 +537,34 @@ mod tests {
         let key = "some_key".to_string();
 
         let req_body = GetObjectRequest::new(key.clone()).into_body().unwrap();
-        let req= hyper::Request::builder()
+        let req = hyper::Request::builder()
             .method(Method::DELETE)
             .body(req_body)
             .unwrap();
 
         let cage_context = get_cage_context();
 
-        let expected_key = format!("{}/{}/{}/{}", cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, key.clone());
+        let expected_key = format!(
+            "{}/{}/{}/{}",
+            cage_context.team_uuid,
+            cage_context.app_uuid,
+            cage_context.cage_uuid,
+            key.clone()
+        );
 
         mock_storage_client
             .expect_delete_object()
             .with(eq(expected_key))
-            .returning(move |_| Err(StorageClientError::General("some_delete_object_error".to_string())));
+            .returning(move |_| {
+                Err(StorageClientError::General(
+                    "some_delete_object_error".to_string(),
+                ))
+            });
 
-        let result = handle_acme_storage_delete_request(req, mock_storage_client, cage_context).await;
+        let result =
+            handle_acme_storage_delete_request(req, mock_storage_client, cage_context).await;
 
         assert!(result.is_ok());
         assert!(result.unwrap().status().is_server_error());
     }
-
 }
