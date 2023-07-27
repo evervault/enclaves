@@ -45,7 +45,7 @@ async fn main() -> Result<()> {
         mtls_config.root_cert(),
     );
 
-    let acme_s3_client = storage::s3::S3Client::new(configuration::get_acme_s3_bucket()?).await;
+    let acme_s3_client = storage::s3::S3Client::new(configuration::get_acme_s3_bucket()).await;
 
     let config_server = config_server::ConfigServer::new(cert_provisioner_client, acme_s3_client);
 
