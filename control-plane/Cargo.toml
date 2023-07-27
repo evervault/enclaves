@@ -30,6 +30,7 @@ semver = "1.0.17"
 cadence = "0.29.0"
 cadence-macros = "0.29.0"
 async-trait = "0.1.56"
+mockall = "0.11.4"
 
 [dev-dependencies]
 tokio-test = "0.4.2"

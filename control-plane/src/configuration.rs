@@ -46,6 +46,11 @@ pub struct CageContext {
 }
 
 impl CageContext {
+
+    pub fn new(cage_uuid: String, cage_version: String, cage_name: String, app_uuid: String, team_uuid: String) -> CageContext {
+        CageContext { cage_uuid, cage_version, cage_name, app_uuid, team_uuid }
+    }
+
     pub fn from_env_vars() -> CageContext {
         CageContext {
             cage_uuid: get_cage_uuid(),

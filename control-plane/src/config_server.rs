@@ -4,7 +4,7 @@ use crate::clients::cert_provisioner::{
 use crate::clients::storage::StorageClientInterface;
 
 use crate::configuration;
-use crate::error::{Result, ServerError};
+use crate::error::{Result as ServerResult, ServerError};
 
 use hyper::server::conn;
 use hyper::service::service_fn;
@@ -37,7 +37,7 @@ impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> 
         }
     }
 
-    pub async fn listen(&self) -> Result<()> {
+    pub async fn listen(&self) -> ServerResult<()> {
         let mut enclave_conn = get_vsock_server(shared::ENCLAVE_CONFIG_PORT, Parent).await?;
 
         let server = conn::Http::new();
@@ -106,7 +106,7 @@ async fn handle_incoming_request<T: StorageClientInterface>(
     cert_provisioner_client: CertProvisionerClient,
     storage_client: T,
     cage_context: configuration::CageContext,
-) -> Result<Response<Body>> {
+) -> ServerResult<Response<Body>> {
     match ConfigServerPath::from_str(req.uri().path()) {
         Ok(ConfigServerPath::GetCertToken) => Ok(handle_token_request(
             cert_provisioner_client,
@@ -148,7 +148,7 @@ async fn handle_token_request(
 async fn get_token(
     cert_provisioner_client: CertProvisionerClient,
     token_type: TokenType,
-) -> Result<Response<Body>> {
+) -> ServerResult<Response<Body>> {
     let body = match token_type {
         TokenType::Cert(path) => {
             let token_response = cert_provisioner_client
@@ -187,7 +187,7 @@ async fn handle_post_trx_logs_request(
     cage_context: configuration::CageContext,
 ) -> Response<Body> {
     println!("Recieved request in config server to log transactions");
-    let parsed_result: Result<PostTrxLogsRequest> = parse_request(req).await;
+    let parsed_result: ServerResult<PostTrxLogsRequest> = parse_request(req).await;
     match parsed_result {
         Ok(log_body) => {
             log_body.trx_logs().into_iter().for_each(|trx| {
@@ -205,13 +205,21 @@ async fn handle_acme_storage_get_request<T: StorageClientInterface>(
     req: Request<Body>,
     storage_client: T,
     cage_context: configuration::CageContext,
-) -> Result<Response<Body>> {
+) -> ServerResult<Response<Body>> {
     println!("Recieved get request in config server for acme storage");
-    let parsed_result: Result<GetObjectRequest> = parse_request(req).await;
+    let parsed_result: ServerResult<GetObjectRequest> = parse_request(req).await;
     match parsed_result {
         Ok(request_body) => {
             let namespaced_key = namespace_key(request_body.key(), &cage_context);
-            let object = storage_client.get_object(namespaced_key).await?;
+            let object = match storage_client.get_object(namespaced_key).await {
+                Ok(object) => object,
+                Err(err) => {
+                    println!("Failed to get object in storage client: {}", err);
+                    return Ok(build_error_response(
+                        "Failed to get object in storage client".to_string(),
+                    ));
+                }
+            };
             let body = GetObjectResponse::new(object).into_body()?;
 
             Response::builder()
@@ -230,9 +238,9 @@ async fn handle_acme_storage_put_request<T: StorageClientInterface>(
     req: Request<Body>,
     storage_client: T,
     cage_context: configuration::CageContext,
-) -> Result<Response<Body>> {
+) -> ServerResult<Response<Body>> {
     println!("Recieved post request in config server for acme storage");
-    let parsed_result: Result<PutObjectRequest> = parse_request(req).await;
+    let parsed_result: ServerResult<PutObjectRequest> = parse_request(req).await;
     match parsed_result {
         Ok(request_body) => {
             let namespaced_key = namespace_key(request_body.key(), &cage_context);
@@ -260,8 +268,8 @@ async fn handle_acme_storage_delete_request<T: StorageClientInterface>(
     req: Request<Body>,
     storage_client: T,
     cage_context: configuration::CageContext,
-) -> Result<Response<Body>> {
-    let parsed_result: Result<DeleteObjectRequest> = parse_request(req).await;
+) -> ServerResult<Response<Body>> {
+    let parsed_result: ServerResult<DeleteObjectRequest> = parse_request(req).await;
     match parsed_result {
         Ok(request_body) => {
             let namespaced_key = namespace_key(request_body.key(), &cage_context);
@@ -314,7 +322,202 @@ fn namespace_key(key: String, cage_context: &configuration::CageContext) -> Stri
     )
 }
 
-async fn parse_request<T: DeserializeOwned>(req: Request<Body>) -> Result<T> {
+async fn parse_request<T: DeserializeOwned>(req: Request<Body>) -> ServerResult<T> {
     let req_body = hyper::body::to_bytes(req.into_body()).await?;
     serde_json::from_slice(&req_body).map_err(ServerError::JsonError)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::clients::storage::StorageClientError;
+
+    use super::*;
+    use async_trait::async_trait;
+    use mockall::{predicate::eq, mock};
+
+    mock! {
+        #[derive(Debug)]
+        pub StorageClientInterface {}
+        #[async_trait]
+        impl StorageClientInterface for StorageClientInterface {
+            async fn get_object(&self, key: String) -> Result<String, StorageClientError>;
+            async fn put_object(&self, key: String, body: String) -> Result<(), StorageClientError>;
+            async fn delete_object(&self, key: String) -> Result<(), StorageClientError>;
+        }
+      }
+
+    fn get_cage_context() -> configuration::CageContext {
+        configuration::CageContext::new(
+            "cage_123".to_string(),
+            "v1".to_string(),
+            "test-me".to_string(),
+            "app_123".to_string(),
+            "team_456".to_string(),
+        )
+    }
+
+    #[tokio::test]
+    async fn test_handle_acme_storage_get_request() {
+        let mut mock_storage_client = MockStorageClientInterface::new();
+
+        let key = "some_key".to_string();
+
+        let req_body = GetObjectRequest::new(key.clone()).into_body().unwrap();
+        let req= hyper::Request::builder()
+            .method(Method::GET)
+            .body(req_body)
+            .unwrap();
+
+        let cage_context = get_cage_context();
+
+        let expected_key = format!("{}/{}/{}/{}", cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, key.clone());
+
+        mock_storage_client
+            .expect_get_object()
+            .with(eq(expected_key))
+            .returning(move |_| Ok("super_secret".to_string()));
+
+        let result = handle_acme_storage_get_request(req, mock_storage_client, cage_context).await;
+
+        assert!(result.is_ok());
+        assert!(result.unwrap().status().is_success());
+    }
+
+    #[tokio::test]
+    async fn test_handle_acme_storage_get_request_error_is_response() {
+        let mut mock_storage_client = MockStorageClientInterface::new();
+
+        let key = "some_key".to_string();
+
+        let req_body = GetObjectRequest::new(key.clone()).into_body().unwrap();
+        let req= hyper::Request::builder()
+            .method(Method::GET)
+            .body(req_body)
+            .unwrap();
+
+        let cage_context = get_cage_context();
+
+        let expected_key = format!("{}/{}/{}/{}", cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, key.clone());
+
+        mock_storage_client
+            .expect_get_object()
+            .with(eq(expected_key))
+            .returning(move |_| Err(StorageClientError::General("some_get_object_error".to_string())));
+
+        let result = handle_acme_storage_get_request(req, mock_storage_client, cage_context).await;
+
+        assert!(result.is_ok());
+        assert!(result.unwrap().status().is_server_error());
+    }
+
+    #[tokio::test]
+    async fn test_handle_acme_storage_put_request() {
+        let mut mock_storage_client = MockStorageClientInterface::new();
+
+        let key = "some_key".to_string();
+        let object = "super_secret".to_string();
+
+        let req_body = PutObjectRequest::new(key.clone(), object.clone()).into_body().unwrap();
+        let req= hyper::Request::builder()
+            .method(Method::GET)
+            .body(req_body)
+            .unwrap();
+
+        let cage_context = get_cage_context();
+
+        let expected_key = format!("{}/{}/{}/{}", cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, key);
+
+        mock_storage_client
+            .expect_put_object()
+            .with(eq(expected_key), eq(object))
+            .returning(move |_, _| Ok(()));
+
+        let result = handle_acme_storage_put_request(req, mock_storage_client, cage_context).await;
+
+        assert!(result.is_ok());
+        assert!(result.unwrap().status().is_success());
+    }
+
+    #[tokio::test]
+    async fn test_handle_acme_storage_put_request_error_is_response() {
+        let mut mock_storage_client = MockStorageClientInterface::new();
+
+        let key = "some_key".to_string();
+        let object = "super_secret".to_string();
+
+        let req_body = PutObjectRequest::new(key.clone(), object.clone()).into_body().unwrap();
+        let req= hyper::Request::builder()
+            .method(Method::GET)
+            .body(req_body)
+            .unwrap();
+
+        let cage_context = get_cage_context();
+
+        let expected_key = format!("{}/{}/{}/{}", cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, key);
+
+        mock_storage_client
+            .expect_put_object()
+            .with(eq(expected_key), eq(object))
+            .returning(move |_, _| Err(StorageClientError::General("some_put_object_error".to_string())));
+
+        let result = handle_acme_storage_put_request(req, mock_storage_client, cage_context).await;
+
+        assert!(result.is_ok());
+        assert!(result.unwrap().status().is_server_error());
+    }
+
+    #[tokio::test]
+    async fn test_handle_acme_storage_delete_request() {
+        let mut mock_storage_client = MockStorageClientInterface::new();
+
+        let key = "some_key".to_string();
+
+        let req_body = DeleteObjectRequest::new(key.clone()).into_body().unwrap();
+        let req= hyper::Request::builder()
+            .method(Method::DELETE)
+            .body(req_body)
+            .unwrap();
+
+        let cage_context = get_cage_context();
+
+        let expected_key = format!("{}/{}/{}/{}", cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, key.clone());
+
+        mock_storage_client
+            .expect_delete_object()
+            .with(eq(expected_key))
+            .returning(move |_| Ok(()));
+
+        let result = handle_acme_storage_delete_request(req, mock_storage_client, cage_context).await;
+
+        assert!(result.is_ok());
+        assert!(result.unwrap().status().is_success());
+    }
+
+    #[tokio::test]
+    async fn test_handle_acme_storage_delete_error_is_response() {
+        let mut mock_storage_client = MockStorageClientInterface::new();
+
+        let key = "some_key".to_string();
+
+        let req_body = GetObjectRequest::new(key.clone()).into_body().unwrap();
+        let req= hyper::Request::builder()
+            .method(Method::DELETE)
+            .body(req_body)
+            .unwrap();
+
+        let cage_context = get_cage_context();
+
+        let expected_key = format!("{}/{}/{}/{}", cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, key.clone());
+
+        mock_storage_client
+            .expect_delete_object()
+            .with(eq(expected_key))
+            .returning(move |_| Err(StorageClientError::General("some_delete_object_error".to_string())));
+
+        let result = handle_acme_storage_delete_request(req, mock_storage_client, cage_context).await;
+
+        assert!(result.is_ok());
+        assert!(result.unwrap().status().is_server_error());
+    }
+
 }
