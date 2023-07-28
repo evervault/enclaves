@@ -799,6 +799,7 @@ dependencies = [
  "dashmap 5.4.0",
  "dns-message-parser",
  "futures",
+ "httparse",
  "hyper",
  "lazy_static",
  "nom",
