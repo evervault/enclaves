@@ -50,19 +50,22 @@ ENV MOCK_CERT_PROVISIONER_ROOT_CERT $MOCK_CERT_PROVISIONER_ROOT_CERT
 ENV MOCK_CERT_PROVISIONER_SERVER_KEY $MOCK_CERT_PROVISIONER_SERVER_KEY
 ENV MOCK_CERT_PROVISIONER_SERVER_CERT $MOCK_CERT_PROVISIONER_SERVER_CERT
 
+# USE HTTP OR WS CUSTOMER SERVER
+ARG CUSTOMER_PROCESS=httpCustomerProcess.js
+
 COPY ./e2e-tests/mock-crypto/target/x86_64-unknown-linux-musl/release/mock-crypto /services/
 RUN chmod +x /services/mock-crypto
 
 COPY ./e2e-tests/mockCertProvisionerApi.js ./e2e-tests/mtls-testing-certs/ca/* /services/
 COPY ./e2e-tests/sample-ca/* /services/
-COPY ./e2e-tests/customerProcess.js /services/customerProcess.js
+COPY ./e2e-tests/$CUSTOMER_PROCESS /services/$CUSTOMER_PROCESS
 COPY ./e2e-tests/package.json /services/package.json
 COPY ./e2e-tests/package-lock.json /services/package-lock.json
 
 RUN cd services && npm i
 
 RUN mkdir /etc/service/customer_process \
-    && /bin/sh -c "echo -e '"'#!/bin/sh\nexec /customer_process/customer_process\n'"' > /etc/service/customer_process/run" \
+    && /bin/sh -c "echo -e '"'#!/bin/sh\nexec /customer_process/customer_process ${CUSTOMER_PROCESS}\n'"' > /etc/service/customer_process/run" \
     && chmod +x /etc/service/customer_process/run
 
 RUN mkdir /customer_process

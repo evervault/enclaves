@@ -7,3 +7,4 @@ export MOCK_CERT_PROVISIONER_SERVER_KEY=`cat certs/localhost.key`
 export MOCK_CERT_PROVISIONER_ROOT_CERT=`cat certs/ca.crt`
 export MOCK_CERT_PROVISIONER_SERVER_CERT=`cat certs/localhost.crt`
 export EV_API_KEY_AUTH=true
+export CUSTOMER_PROCESS=httpCustomerProcess.js

@@ -16,7 +16,6 @@ pub enum StorageClientError {
 }
 
 // Make generic so other storage backends can be used
-
 #[async_trait]
 pub trait StorageClientInterface {
     async fn get_object(&self, key: String) -> Result<Option<String>, StorageClientError>;

@@ -36,9 +36,9 @@ then
   cd ../..
 fi
 
-
+export CUSTOMER_PROCESS=httpCustomerProcess.js
 echo "Building cage container"
-docker compose build
+docker compose build --build-arg CUSTOMER_PROCESS=httpCustomerProcess.js
 
 echo "Running cage container"
 # run the container
@@ -71,6 +71,15 @@ docker compose down
 EV_API_KEY_AUTH=false docker compose up -d
 sleep 10
 npm run no-auth-tests
+
+echo "Websocket Tests"
+export CUSTOMER_PROCESS=wsCustomerProcess.js
+docker compose down
+docker compose build --build-arg CUSTOMER_PROCESS=wsCustomerProcess.js
+docker compose up -d
+docker compose logs --tail cages-cages
+sleep 10
+npm run websocket-tests
 
 echo "Testing that Cage is serving trustable cert chain"
 echo "Q" | openssl s_client -verifyCAfile sample-ca/sample-root-ca-cert.pem -showcerts -connect 0.0.0.0:443 | grep "Verification: OK"

@@ -1,4 +1,4 @@
-use hyper::header::InvalidHeaderValue;
+use hyper::header::{InvalidHeaderName, InvalidHeaderValue};
 use shared::server::error::ServerError;
 use thiserror::Error;
 
@@ -57,6 +57,14 @@ pub enum Error {
     #[cfg(feature = "enclave")]
     #[error("Failed to get connection to nsm")]
     NsmConnectionError(#[from] crate::utils::nsm::NsmConnectionError),
+    #[error("Couldn't build header name")]
+    InvalidHeaderName(#[from] InvalidHeaderName),
+    #[error("Hyper error")]
+    HyperError(#[from] hyper::http::Error),
+    #[error("Api key is missing from request")]
+    MissingApiKey,
+    #[error("Api key is invalid")]
+    ApiKeyInvalid,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
