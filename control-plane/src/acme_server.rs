@@ -75,6 +75,7 @@ fn build_infallible_response(msg: &str, status_code: StatusCode) -> Response<Bod
         .expect("Infallible - hardcoded response")
 }
 
+#[cfg(test)]
 mod tests {
 
     use super::*;
