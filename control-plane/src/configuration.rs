@@ -71,6 +71,10 @@ impl CageContext {
             team_uuid: get_team_uuid(),
         }
     }
+
+    pub fn get_namespace_string(self) -> String {
+        format!("{}/{}/{}", self.team_uuid, self.app_uuid, self.cage_uuid)
+    }
 }
 
 pub fn get_cage_uuid() -> String {

@@ -1,3 +1,4 @@
+pub mod acme_server;
 pub mod cert_proxy;
 pub mod clients;
 pub mod config_server;
@@ -11,5 +12,6 @@ pub mod enclave_connection;
 pub mod error;
 pub mod health;
 pub mod internal_dns;
+mod mocks;
 pub mod stats_client;
 pub mod stats_proxy;
