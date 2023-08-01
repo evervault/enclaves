@@ -95,10 +95,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_challenge_success() {
-        let path = "/www/.well-known/acme-challenge/abc".to_string();
-        let path_path = Path(path);
-        println!("Path: {:?}", path_path);
-
         let mut mock = MockStorageClientInterface::new();
         let cage_context = get_cage_context();
         let challenge_key = "test-success";
@@ -126,10 +122,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_challenge_not_found() {
-        let path = "/www/.well-known/acme-challenge/abc".to_string();
-        let path_path = Path(path);
-        println!("Path: {:?}", path_path);
-
         let mut mock = MockStorageClientInterface::new();
         let cage_context = get_cage_context();
         let challenge_key = "test-not-found";
@@ -157,10 +149,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_challenge_error() {
-        let path = "/www/.well-known/acme-challenge/abc".to_string();
-        let path_path = Path(path);
-        println!("Path: {:?}", path_path);
-
         let mut mock = MockStorageClientInterface::new();
         let cage_context = get_cage_context();
         let challenge_key = "test-error";
@@ -177,7 +165,7 @@ mod tests {
         let response = get_challenge(expected_path, mock).await;
 
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-        // Assert the body of the response.
+
         let body_bytes = hyper::body::to_bytes(response.into_body())
             .await
             .expect("Failed to convert body to bytes");
