@@ -46,6 +46,22 @@ pub struct CageContext {
 }
 
 impl CageContext {
+    pub fn new(
+        cage_uuid: String,
+        cage_version: String,
+        cage_name: String,
+        app_uuid: String,
+        team_uuid: String,
+    ) -> CageContext {
+        CageContext {
+            cage_uuid,
+            cage_version,
+            cage_name,
+            app_uuid,
+            team_uuid,
+        }
+    }
+
     pub fn from_env_vars() -> CageContext {
         CageContext {
             cage_uuid: get_cage_uuid(),
@@ -106,4 +122,8 @@ pub fn get_cert_provisioner_mtls_root_cert_env() -> Result<String, std::env::Var
 
 pub fn get_data_plane_version() -> Result<String, std::env::VarError> {
     std::env::var("DATA_PLANE_VERSION")
+}
+
+pub fn get_acme_s3_bucket() -> String {
+    std::env::var("ACME_S3_BUCKET").expect("ACME_S3_BUCKET is not set in env")
 }
