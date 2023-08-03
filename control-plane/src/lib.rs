@@ -1,4 +1,3 @@
-pub mod cert_proxy;
 pub mod clients;
 pub mod config_server;
 pub mod configuration;

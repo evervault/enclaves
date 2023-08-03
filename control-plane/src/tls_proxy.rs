@@ -109,11 +109,12 @@ impl TlsProxy {
 
     #[cfg(feature = "enclave")]
     async fn get_ip_target_host(&self) -> Result<Option<SocketAddr>> {
-        let target_host_dns_name = format!("{}.", self.target_host);
+        let target = self.target.clone();
+        let target_host_dns_name = format!("{}.", target.host);
         internal_dns::get_ip_for_host_with_dns_resolver(
             &self.dns_resolver,
             target_host_dns_name.as_str(),
-            self.target_port,
+            target.port,
         )
         .await
     }
