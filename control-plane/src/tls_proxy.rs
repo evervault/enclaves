@@ -12,22 +12,33 @@ use trust_dns_resolver::AsyncResolver;
 
 type AsyncDnsResolver = AsyncResolver<GenericConnection, GenericConnectionProvider<TokioRuntime>>;
 
-pub struct CertProxy {
-    #[allow(unused)]
-    dns_resolver: AsyncDnsResolver,
+#[derive(Debug, Clone)]
+pub struct TlsTargetDetails {
+    pub host: String,
+    pub port: u16,
 }
 
-impl std::default::Default for CertProxy {
-    fn default() -> Self {
-        Self::new()
+impl TlsTargetDetails {
+    pub fn new(host: String, port: u16) -> Self {
+        Self { host, port }
     }
 }
 
-impl CertProxy {
-    pub fn new() -> Self {
+//Used for connecting a stream from the data plane to a TLS target
+#[derive(Debug, Clone)]
+pub struct TlsProxy {
+    #[allow(unused)]
+    dns_resolver: AsyncDnsResolver,
+    target: TlsTargetDetails,
+    vsock_port: u16
+}
+
+impl TlsProxy {
+    pub fn new(target_host: String, target_port: u16, vsock_port: u16) -> Self {
         let dns_resolver =
             internal_dns::get_internal_dns_resolver().expect("Couldn't get internal DNS resolver");
-        Self { dns_resolver }
+        let target = TlsTargetDetails::new(target_host, target_port);
+        Self { dns_resolver, target, vsock_port }
     }
 
     #[cfg(feature = "enclave")]
@@ -45,47 +56,49 @@ impl CertProxy {
     }
 
     pub async fn listen(self) -> Result<()> {
-        let mut enclave_conn = get_vsock_server(shared::ENCLAVE_CERT_PORT, Parent).await?;
+        let mut enclave_conn = get_vsock_server(self.vsock_port, Parent).await?;
 
-        println!("Running cert proxy on {}", shared::ENCLAVE_CERT_PORT);
+        println!("Running TLS proxy to {} on {}", &self.target.host.clone(), &self.vsock_port);
+        let target = self.target.clone();
         loop {
+            let target = target.clone();
             let connection = match enclave_conn.accept().await {
                 Ok(conn) => conn,
                 Err(e) => {
-                    eprintln!("Error accepting cert request — {e:?}");
+                    eprintln!("Error accepting connection request in TLS proxy — {e:?}");
                     continue;
                 }
             };
-            println!("Forwarding stream to cert provisioner");
-            let cert_provisioner_ip = match self.get_ip_for_cert_provisioner().await {
+            println!("Forwarding stream to {}", target.host);
+            let target_ip = match self.get_ip_target_host().await {
                 Ok(Some(ip)) => ip,
                 Ok(None) => {
-                    eprintln!("No IP returned for Cert Provisioner");
+                    eprintln!("No IP returned for {}", target.host);
                     Self::shutdown_conn(connection).await;
                     continue;
                 }
                 Err(e) => {
-                    eprintln!("Error obtaining IP for Cert Provisioner — {e:?}");
+                    eprintln!("Error obtaining IP for {} — {e:?}", target.host);
                     Self::shutdown_conn(connection).await;
                     continue;
                 }
             };
 
             tokio::spawn(async move {
-                let cert_provisioner_stream =
-                    match tokio::net::TcpStream::connect(cert_provisioner_ip).await {
+                let target_stream =
+                    match tokio::net::TcpStream::connect(target_ip).await {
                         Ok(stream) => stream,
                         Err(e) => {
-                            eprintln!("Failed to connect to Cert Provisioner — {e:?}");
+                            eprintln!("Failed to connect to {} — {e:?}", target.host);
                             Self::shutdown_conn(connection).await;
                             return;
                         }
                     };
 
                 if let Err(e) =
-                    shared::utils::pipe_streams(connection, cert_provisioner_stream).await
+                    shared::utils::pipe_streams(connection, target_stream).await
                 {
-                    eprintln!("Error streaming from Data Plane to Cert Provisioner — {e:?}");
+                    eprintln!("Error streaming from Data Plane to {} — {e:?}", target.host);
                 }
             });
         }
@@ -95,18 +108,18 @@ impl CertProxy {
     }
 
     #[cfg(feature = "enclave")]
-    async fn get_ip_for_cert_provisioner(&self) -> Result<Option<SocketAddr>> {
-        let cert_pro_host = format!("{}.", configuration::get_cert_provisoner_host());
+    async fn get_ip_target_host(&self) -> Result<Option<SocketAddr>> {
+        let target_host_dns_name = format!("{}.", self.target_host);
         internal_dns::get_ip_for_host_with_dns_resolver(
             &self.dns_resolver,
-            cert_pro_host.as_str(),
-            3000,
+            target_host_dns_name.as_str(),
+            self.target_port,
         )
         .await
     }
 
     #[cfg(not(feature = "enclave"))]
-    async fn get_ip_for_cert_provisioner(&self) -> Result<Option<SocketAddr>> {
-        internal_dns::get_ip_for_localhost(3000)
+    async fn get_ip_target_host(&self) -> Result<Option<SocketAddr>> {
+        internal_dns::get_ip_for_localhost(self.target.port)
     }
 }

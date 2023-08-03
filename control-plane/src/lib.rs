@@ -13,3 +13,4 @@ pub mod health;
 pub mod internal_dns;
 pub mod stats_client;
 pub mod stats_proxy;
+pub mod tls_proxy;
