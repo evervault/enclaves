@@ -32,7 +32,7 @@ async fn main() -> Result<()> {
     print_version!("Control Plane");
     println!("Starting control plane on {CONTROL_PLANE_PORT}");
     let e3_proxy = e3proxy::E3Proxy::new();
-    
+
     let provisioner_proxy = tls_proxy::TlsProxy::new(
         configuration::get_cert_provisoner_host(),
         3000,

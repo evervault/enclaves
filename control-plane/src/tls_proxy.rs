@@ -30,7 +30,7 @@ pub struct TlsProxy {
     #[allow(unused)]
     dns_resolver: AsyncDnsResolver,
     target: TlsTargetDetails,
-    vsock_port: u16
+    vsock_port: u16,
 }
 
 impl TlsProxy {
@@ -38,7 +38,11 @@ impl TlsProxy {
         let dns_resolver =
             internal_dns::get_internal_dns_resolver().expect("Couldn't get internal DNS resolver");
         let target = TlsTargetDetails::new(target_host, target_port);
-        Self { dns_resolver, target, vsock_port }
+        Self {
+            dns_resolver,
+            target,
+            vsock_port,
+        }
     }
 
     #[cfg(feature = "enclave")]
@@ -58,7 +62,11 @@ impl TlsProxy {
     pub async fn listen(self) -> Result<()> {
         let mut enclave_conn = get_vsock_server(self.vsock_port, Parent).await?;
 
-        println!("Running TLS proxy to {} on {}", &self.target.host.clone(), &self.vsock_port);
+        println!(
+            "Running TLS proxy to {} on {}",
+            &self.target.host.clone(),
+            &self.vsock_port
+        );
         let target = self.target.clone();
         loop {
             let target = target.clone();
@@ -85,19 +93,16 @@ impl TlsProxy {
             };
 
             tokio::spawn(async move {
-                let target_stream =
-                    match tokio::net::TcpStream::connect(target_ip).await {
-                        Ok(stream) => stream,
-                        Err(e) => {
-                            eprintln!("Failed to connect to {} — {e:?}", target.host);
-                            Self::shutdown_conn(connection).await;
-                            return;
-                        }
-                    };
+                let target_stream = match tokio::net::TcpStream::connect(target_ip).await {
+                    Ok(stream) => stream,
+                    Err(e) => {
+                        eprintln!("Failed to connect to {} — {e:?}", target.host);
+                        Self::shutdown_conn(connection).await;
+                        return;
+                    }
+                };
 
-                if let Err(e) =
-                    shared::utils::pipe_streams(connection, target_stream).await
-                {
+                if let Err(e) = shared::utils::pipe_streams(connection, target_stream).await {
                     eprintln!("Error streaming from Data Plane to {} — {e:?}", target.host);
                 }
             });
