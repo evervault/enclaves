@@ -1,5 +1,3 @@
-#[cfg(feature = "enclave")]
-use crate::configuration;
 use crate::error::Result;
 use crate::internal_dns;
 use shared::server::CID::Parent;
