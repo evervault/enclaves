@@ -115,7 +115,10 @@ impl ConfigClient {
         if response.status() == StatusCode::OK {
             Ok(())
         } else {
-            println!("Error in message send to control plane");
+            println!(
+                "Error in post_trx_logs request to control plane: {}",
+                response.status()
+            );
             Err(Error::ConfigServer(
                 "Invalid Response code returned when sending trx logs to control plane "
                     .to_string(),
@@ -124,24 +127,39 @@ impl ConfigClient {
     }
 
     pub async fn get_object(&self, key: String) -> Result<GetObjectResponse> {
-        let payload = GetObjectRequest::new(key).into_body()?;
+        let payload = GetObjectRequest::new(key.clone()).into_body()?;
 
         let response = self.send(ConfigServerPath::Storage, "GET", payload).await?;
 
-        let result: GetObjectResponse = self.parse_response(response).await?;
-
-        Ok(result)
+        if response.status() == StatusCode::OK {
+            let result: GetObjectResponse = self.parse_response(response).await?;
+            Ok(result)
+        } else {
+            println!(
+                "Error from get object request to control plane. Key: {}, Response Code{}",
+                key,
+                response.status()
+            );
+            Err(Error::ConfigServer(
+                "Invalid Response code returned when sending getObject request to control plane"
+                    .to_string(),
+            ))
+        }
     }
 
     pub async fn put_object(&self, key: String, object: String) -> Result<()> {
-        let payload = PutObjectRequest::new(key, object).into_body()?;
+        let payload = PutObjectRequest::new(key.clone(), object).into_body()?;
 
         let response = self.send(ConfigServerPath::Storage, "PUT", payload).await?;
 
         if response.status() == StatusCode::OK {
             Ok(())
         } else {
-            println!("Error in message send to control plane");
+            println!(
+                "Error sending put object request to control plane. Key: {}, Response Code{}",
+                key,
+                response.status()
+            );
             Err(Error::ConfigServer(
                 "Invalid Response code returned when sending putObject request to control plane "
                     .to_string(),
@@ -150,7 +168,7 @@ impl ConfigClient {
     }
 
     pub async fn delete_object(&self, key: String) -> Result<()> {
-        let payload = DeleteObjectRequest::new(key).into_body()?;
+        let payload = DeleteObjectRequest::new(key.clone()).into_body()?;
 
         let response = self
             .send(ConfigServerPath::Storage, "DELETE", payload)
@@ -159,7 +177,11 @@ impl ConfigClient {
         if response.status() == StatusCode::OK {
             Ok(())
         } else {
-            println!("Error in message send to control plane.");
+            println!(
+                "Error sending delete object request to control plane. Key: {}, Response Code{}",
+                key,
+                response.status()
+            );
             Err(Error::ConfigServer(
                 "Invalid Response code returned when sending deleteObject request to control plane"
                     .to_string(),
