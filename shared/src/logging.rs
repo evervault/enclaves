@@ -111,7 +111,7 @@ impl TrxContextBuilder {
             content_type: None,
             response_content_type: None,
             elapsed: None,
-            remote_ip: None,
+            remote_ip: None
         }
     }
 
@@ -154,10 +154,10 @@ impl TrxContextBuilder {
         self.response_code(Some(status_code.to_string()));
     }
 
-    pub fn add_req_to_trx_context(&mut self, req: &Request<Body>) {
+    pub fn add_req_to_trx_context(&mut self, req: &Request<Body>, trusted_headers: &[String]) {
         self.uri(req.uri().to_string());
         self.request_method(req.method().to_string());
-        self.add_headers_to_request(req.headers());
+        self.add_headers_to_request(req.headers(), trusted_headers);
 
         //Pull out content type
         if let Some(content_type) = req.headers().get(CONTENT_TYPE) {
@@ -176,9 +176,9 @@ impl TrxContextBuilder {
         }
     }
 
-    pub fn add_res_to_trx_context(&mut self, res: &Response<Body>) {
+    pub fn add_res_to_trx_context(&mut self, res: &Response<Body>, trusted_headers: &[String]) {
         self.add_status_and_group(res.status().as_u16());
-        self.add_headers_to_response(res.headers());
+        self.add_headers_to_response(res.headers(), trusted_headers);
 
         //Pull out content type
         if let Some(content_type) = res.headers().get(CONTENT_TYPE) {
@@ -189,15 +189,15 @@ impl TrxContextBuilder {
         }
     }
 
-    fn add_headers_to_request(&mut self, headers: &HeaderMap<HeaderValue>) {
-        let headers_map = convert_headers_to_map(headers);
+    fn add_headers_to_request(&mut self, headers: &HeaderMap<HeaderValue>, trusted_headers: &[String]) {
+        let headers_map: Map<String, Value> = convert_headers_to_map(headers, trusted_headers);
         if let Ok(headers_string) = serde_json::to_string(&headers_map) {
             self.request_headers(Some(headers_string));
         }
     }
 
-    fn add_headers_to_response(&mut self, headers: &HeaderMap<HeaderValue>) {
-        let headers_map = convert_headers_to_map(headers);
+    fn add_headers_to_response(&mut self, headers: &HeaderMap<HeaderValue>, trusted_headers: &[String]) {
+        let headers_map = convert_headers_to_map(headers, trusted_headers);
         if let Ok(headers_string) = serde_json::to_string(&headers_map) {
             self.response_headers(Some(headers_string));
         }
@@ -217,16 +217,27 @@ fn get_iso_timestamp() -> String {
     timestamp.to_rfc3339_opts(SecondsFormat::Millis, true)
 }
 
-fn convert_headers_to_map(headers: &HeaderMap<HeaderValue>) -> Map<String, Value> {
+fn is_trusted_header(trusted_headers: &[String], header_key: &str) -> bool {
+  trusted_headers.iter().find(|&trusted_header| {
+    if NON_SENSITIVE_HEADERS.contains(header_key) {
+      return true;
+    } else if trusted_header.ends_with("*") {
+      return header_key.starts_with(&trusted_header[..trusted_header.len()-1])
+    }
+    return header_key == trusted_header;
+  }).is_some()
+}
+
+fn convert_headers_to_map(headers: &HeaderMap<HeaderValue>, trusted_headers: &[String]) -> Map<String, Value> {
     let mut tracked_headers: Map<String, Value> = Map::new();
     for (header_key, header_value) in headers {
         match header_value.to_str() {
-            Ok(header_value_str) if NON_SENSITIVE_HEADERS.contains(&header_key.to_string()) => {
+            Ok(header_value_str) if is_trusted_header(trusted_headers, header_key.as_str()) => {
                 tracked_headers.insert(
                     header_key.to_string(),
                     Value::String(header_value_str.to_string()),
                 );
-            }
+            },
             _ => {
                 tracked_headers.insert(header_key.to_string(), Value::String("***".to_string()));
             }
@@ -373,4 +384,20 @@ impl std::fmt::Display for StatusGroup {
         };
         write!(f, "{str_prefix}")
     }
+}
+
+#[cfg(test)]
+mod test {
+  use super::is_trusted_header;
+
+  #[test]
+  fn test_trusted_headers_matching() {
+    let trusted_headers = vec!["X-Evervault-*".to_string(), "X-Error-Code".to_string()];
+
+    assert!(is_trusted_header(&trusted_headers, "X-Evervault-Debug"));
+    assert!(is_trusted_header(&trusted_headers, "X-Error-Code"));
+    assert!(!is_trusted_header(&trusted_headers, "X-Error-Debug"));
+    assert!(!is_trusted_header(&trusted_headers, "Foo-Bar"));
+  }
+
 }
