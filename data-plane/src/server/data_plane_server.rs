@@ -553,7 +553,11 @@ async fn extract_ciphertexts_from_payload(
     Ok(decryption_payload)
 }
 
-fn init_trx(cage_context: &CageContext, feature_context: &FeatureContext, req: &Request<Body>) -> TrxContextBuilder {
+fn init_trx(
+    cage_context: &CageContext,
+    feature_context: &FeatureContext,
+    req: &Request<Body>,
+) -> TrxContextBuilder {
     let mut trx_ctx = TrxContextBuilder::init_trx_context_with_cage_details(
         &cage_context.cage_uuid,
         &cage_context.cage_name,
