@@ -278,7 +278,7 @@ async fn handle_http_request(
     let tx_for_req = tx_for_tcp.clone();
     let remote_ip = remote_ip.clone();
     let request_timer = TrxContextBuilder::get_timer();
-    let mut trx_context = init_trx(&cage_context, &req);
+    let mut trx_context = init_trx(&cage_context, &feature_context, &req);
     let trx_id = trx_context.get_trx_id();
     if remote_ip.is_some() {
         trx_context.remote_ip(remote_ip.clone());
@@ -301,7 +301,8 @@ async fn handle_http_request(
     )
     .await;
 
-    trx_context.add_res_to_trx_context(&response);
+    let trusted_headers = FeatureContext::get().trusted_headers;
+    trx_context.add_res_to_trx_context(&response, trusted_headers.as_ref());
     let built_context = trx_context.stop_timer_and_build(request_timer);
 
     match built_context {
@@ -552,14 +553,18 @@ async fn extract_ciphertexts_from_payload(
     Ok(decryption_payload)
 }
 
-fn init_trx(cage_context: &CageContext, req: &Request<Body>) -> TrxContextBuilder {
+fn init_trx(
+    cage_context: &CageContext,
+    feature_context: &FeatureContext,
+    req: &Request<Body>,
+) -> TrxContextBuilder {
     let mut trx_ctx = TrxContextBuilder::init_trx_context_with_cage_details(
         &cage_context.cage_uuid,
         &cage_context.cage_name,
         &cage_context.app_uuid,
         &cage_context.team_uuid,
     );
-    trx_ctx.add_req_to_trx_context(req);
+    trx_ctx.add_req_to_trx_context(req, &feature_context.trusted_headers);
     trx_ctx
 }
 

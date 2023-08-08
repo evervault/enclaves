@@ -156,6 +156,7 @@ impl FeatureContext {
             api_key_auth,
             trx_logging_enabled,
             forward_proxy_protocol: should_forward_proxy_protocol(),
+            trusted_headers: vec![],
             #[cfg(feature = "network_egress")]
             egress: EgressConfig {
                 ports: get_egress_ports_from_env(),
@@ -177,6 +178,8 @@ pub struct FeatureContext {
     pub trx_logging_enabled: bool,
     #[serde(default)]
     pub forward_proxy_protocol: bool,
+    #[serde(default)]
+    pub trusted_headers: Vec<String>,
     #[cfg(feature = "network_egress")]
     pub egress: EgressConfig,
 }
