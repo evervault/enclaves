@@ -12,6 +12,7 @@ pub mod enclave_connection;
 pub mod error;
 pub mod health;
 pub mod internal_dns;
+#[cfg(test)]
 mod mocks;
 pub mod stats_client;
 pub mod stats_proxy;
