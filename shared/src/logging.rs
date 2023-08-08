@@ -226,10 +226,15 @@ fn get_iso_timestamp() -> String {
 }
 
 fn is_trusted_header(trusted_headers: &[String], header_key: &str) -> bool {
+    // Prevent sensitive headers from being logged
+    if SENSITIVE_HEADERS.contains(header_key) {
+        return false;
+    }
+    if NON_SENSITIVE_HEADERS.contains(header_key) {
+        return true;
+    }
     trusted_headers.iter().any(|trusted_header| {
-        if NON_SENSITIVE_HEADERS.contains(header_key) {
-            return true;
-        } else if trusted_header.ends_with('*') {
+        if trusted_header.ends_with('*') {
             return header_key.starts_with(&trusted_header[..trusted_header.len() - 1]);
         }
         header_key == trusted_header
@@ -259,6 +264,7 @@ fn convert_headers_to_map(
 
 lazy_static::lazy_static!(
     pub static ref NON_SENSITIVE_HEADERS: HashSet<String> = create_non_sensitive_header_set();
+    pub static ref SENSITIVE_HEADERS: HashSet<String> = create_sensitive_header_set();
 );
 
 fn create_non_sensitive_header_set() -> HashSet<String> {
@@ -357,6 +363,16 @@ fn create_non_sensitive_header_set() -> HashSet<String> {
     header_set
 }
 
+fn create_sensitive_header_set() -> HashSet<String> {
+    let mut header_set = HashSet::new();
+    header_set.insert(header::AUTHORIZATION.to_string());
+    header_set.insert(header::PROXY_AUTHORIZATION.to_string());
+    if let Ok(api_key) = header::HeaderName::from_bytes(b"Api-Key") {
+        header_set.insert(api_key.to_string());
+    }
+    header_set
+}
+
 pub enum StatusGroup {
     Information,
     Success,
@@ -403,11 +419,45 @@ mod test {
 
     #[test]
     fn test_trusted_headers_matching() {
-        let trusted_headers = vec!["X-Evervault-*".to_string(), "X-Error-Code".to_string()];
+        let trusted_headers = vec!["x-evervault-*".to_string(), "x-error-code".to_string()];
 
-        assert!(is_trusted_header(&trusted_headers, "X-Evervault-Debug"));
-        assert!(is_trusted_header(&trusted_headers, "X-Error-Code"));
-        assert!(!is_trusted_header(&trusted_headers, "X-Error-Debug"));
-        assert!(!is_trusted_header(&trusted_headers, "Foo-Bar"));
+        let ev_debug_header = hyper::header::HeaderName::from_bytes(b"X-Evervault-Debug").unwrap();
+        assert!(is_trusted_header(
+            &trusted_headers,
+            ev_debug_header.as_str()
+        ));
+        let error_code_header = hyper::header::HeaderName::from_bytes(b"X-Error-Code").unwrap();
+        assert!(is_trusted_header(
+            &trusted_headers,
+            error_code_header.as_str()
+        ));
+        assert!(!is_trusted_header(&trusted_headers, "x-error-debug"));
+        assert!(!is_trusted_header(&trusted_headers, "foo-bar"));
+
+        // Block sensitive headers
+        let api_key_header = hyper::header::HeaderName::from_bytes(b"api-key").unwrap();
+        assert!(!is_trusted_header(
+            &trusted_headers,
+            api_key_header.as_str()
+        ));
+        assert!(!is_trusted_header(
+            &trusted_headers,
+            hyper::header::AUTHORIZATION.as_str()
+        ));
+    }
+
+    #[test]
+    fn test_sensitive_header_check_in_trusted_headers() {
+        let trusted_headers = vec!["api-key".to_string(), "authorization".to_string()];
+        // Block sensitive headers
+        let api_key_header = hyper::header::HeaderName::from_bytes(b"api-key").unwrap();
+        assert!(!is_trusted_header(
+            &trusted_headers,
+            api_key_header.as_str()
+        ));
+        assert!(!is_trusted_header(
+            &trusted_headers,
+            hyper::header::AUTHORIZATION.as_str()
+        ));
     }
 }
