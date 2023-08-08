@@ -422,16 +422,28 @@ mod test {
         let trusted_headers = vec!["x-evervault-*".to_string(), "x-error-code".to_string()];
 
         let ev_debug_header = hyper::header::HeaderName::from_bytes(b"X-Evervault-Debug").unwrap();
-        assert!(is_trusted_header(&trusted_headers, ev_debug_header.as_str()));
+        assert!(is_trusted_header(
+            &trusted_headers,
+            ev_debug_header.as_str()
+        ));
         let error_code_header = hyper::header::HeaderName::from_bytes(b"X-Error-Code").unwrap();
-        assert!(is_trusted_header(&trusted_headers, error_code_header.as_str()));
+        assert!(is_trusted_header(
+            &trusted_headers,
+            error_code_header.as_str()
+        ));
         assert!(!is_trusted_header(&trusted_headers, "x-error-debug"));
         assert!(!is_trusted_header(&trusted_headers, "foo-bar"));
-        
+
         // Block sensitive headers
         let api_key_header = hyper::header::HeaderName::from_bytes(b"api-key").unwrap();
-        assert!(!is_trusted_header(&trusted_headers, api_key_header.as_str()));
-        assert!(!is_trusted_header(&trusted_headers, hyper::header::AUTHORIZATION.as_str()));
+        assert!(!is_trusted_header(
+            &trusted_headers,
+            api_key_header.as_str()
+        ));
+        assert!(!is_trusted_header(
+            &trusted_headers,
+            hyper::header::AUTHORIZATION.as_str()
+        ));
     }
 
     #[test]
@@ -439,7 +451,13 @@ mod test {
         let trusted_headers = vec!["api-key".to_string(), "authorization".to_string()];
         // Block sensitive headers
         let api_key_header = hyper::header::HeaderName::from_bytes(b"api-key").unwrap();
-        assert!(!is_trusted_header(&trusted_headers, api_key_header.as_str()));
-        assert!(!is_trusted_header(&trusted_headers, hyper::header::AUTHORIZATION.as_str()));
+        assert!(!is_trusted_header(
+            &trusted_headers,
+            api_key_header.as_str()
+        ));
+        assert!(!is_trusted_header(
+            &trusted_headers,
+            hyper::header::AUTHORIZATION.as_str()
+        ));
     }
 }
