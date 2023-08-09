@@ -23,6 +23,7 @@ pub struct AcmeClient {
 }
 
 impl AcmeClient {
+    #[allow(unused)]
     fn new(server_name: ServerName) -> Self {
         let mut root_cert_store = RootCertStore::empty();
 
