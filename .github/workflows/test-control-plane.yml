@@ -2,10 +2,11 @@ on:
   push:
     paths:
       - control-plane/**
-      - .github/workflows/lint-and-test-control-plane.yml
-name: Lint and Test Control Plane
+      - shared/**
+      - .github/workflows/test-control-plane.yml
+name: Test Control Plane
 jobs:
-  clippy_check_control_plane:
+  test_control_plane:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -22,5 +23,3 @@ jobs:
         run: cargo build --features not_enclave,network_egress -p control-plane 
       - name: Test project
         run: cargo test --features enclave,network_egress -p control-plane
-      - name: Format project
-        run: cargo fmt --check

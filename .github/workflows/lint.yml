@@ -23,3 +23,5 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --features not_enclave -- -D warnings  
+      - name: Check formatting
+        run: cargo fmt --check

@@ -154,10 +154,10 @@ impl TrxContextBuilder {
         self.response_code(Some(status_code.to_string()));
     }
 
-    pub fn add_req_to_trx_context(&mut self, req: &Request<Body>) {
+    pub fn add_req_to_trx_context(&mut self, req: &Request<Body>, trusted_headers: &[String]) {
         self.uri(req.uri().to_string());
         self.request_method(req.method().to_string());
-        self.add_headers_to_request(req.headers());
+        self.add_headers_to_request(req.headers(), trusted_headers);
 
         //Pull out content type
         if let Some(content_type) = req.headers().get(CONTENT_TYPE) {
@@ -176,9 +176,9 @@ impl TrxContextBuilder {
         }
     }
 
-    pub fn add_res_to_trx_context(&mut self, res: &Response<Body>) {
+    pub fn add_res_to_trx_context(&mut self, res: &Response<Body>, trusted_headers: &[String]) {
         self.add_status_and_group(res.status().as_u16());
-        self.add_headers_to_response(res.headers());
+        self.add_headers_to_response(res.headers(), trusted_headers);
 
         //Pull out content type
         if let Some(content_type) = res.headers().get(CONTENT_TYPE) {
@@ -189,15 +189,23 @@ impl TrxContextBuilder {
         }
     }
 
-    fn add_headers_to_request(&mut self, headers: &HeaderMap<HeaderValue>) {
-        let headers_map = convert_headers_to_map(headers);
+    fn add_headers_to_request(
+        &mut self,
+        headers: &HeaderMap<HeaderValue>,
+        trusted_headers: &[String],
+    ) {
+        let headers_map: Map<String, Value> = convert_headers_to_map(headers, trusted_headers);
         if let Ok(headers_string) = serde_json::to_string(&headers_map) {
             self.request_headers(Some(headers_string));
         }
     }
 
-    fn add_headers_to_response(&mut self, headers: &HeaderMap<HeaderValue>) {
-        let headers_map = convert_headers_to_map(headers);
+    fn add_headers_to_response(
+        &mut self,
+        headers: &HeaderMap<HeaderValue>,
+        trusted_headers: &[String],
+    ) {
+        let headers_map = convert_headers_to_map(headers, trusted_headers);
         if let Ok(headers_string) = serde_json::to_string(&headers_map) {
             self.response_headers(Some(headers_string));
         }
@@ -217,11 +225,30 @@ fn get_iso_timestamp() -> String {
     timestamp.to_rfc3339_opts(SecondsFormat::Millis, true)
 }
 
-fn convert_headers_to_map(headers: &HeaderMap<HeaderValue>) -> Map<String, Value> {
+fn is_trusted_header(trusted_headers: &[String], header_key: &str) -> bool {
+    // Prevent sensitive headers from being logged
+    if SENSITIVE_HEADERS.contains(header_key) {
+        return false;
+    }
+    if NON_SENSITIVE_HEADERS.contains(header_key) {
+        return true;
+    }
+    trusted_headers.iter().any(|trusted_header| {
+        if trusted_header.ends_with('*') {
+            return header_key.starts_with(&trusted_header[..trusted_header.len() - 1]);
+        }
+        header_key == trusted_header
+    })
+}
+
+fn convert_headers_to_map(
+    headers: &HeaderMap<HeaderValue>,
+    trusted_headers: &[String],
+) -> Map<String, Value> {
     let mut tracked_headers: Map<String, Value> = Map::new();
     for (header_key, header_value) in headers {
         match header_value.to_str() {
-            Ok(header_value_str) if NON_SENSITIVE_HEADERS.contains(&header_key.to_string()) => {
+            Ok(header_value_str) if is_trusted_header(trusted_headers, header_key.as_str()) => {
                 tracked_headers.insert(
                     header_key.to_string(),
                     Value::String(header_value_str.to_string()),
@@ -237,6 +264,7 @@ fn convert_headers_to_map(headers: &HeaderMap<HeaderValue>) -> Map<String, Value
 
 lazy_static::lazy_static!(
     pub static ref NON_SENSITIVE_HEADERS: HashSet<String> = create_non_sensitive_header_set();
+    pub static ref SENSITIVE_HEADERS: HashSet<String> = create_sensitive_header_set();
 );
 
 fn create_non_sensitive_header_set() -> HashSet<String> {
@@ -335,6 +363,16 @@ fn create_non_sensitive_header_set() -> HashSet<String> {
     header_set
 }
 
+fn create_sensitive_header_set() -> HashSet<String> {
+    let mut header_set = HashSet::new();
+    header_set.insert(header::AUTHORIZATION.to_string());
+    header_set.insert(header::PROXY_AUTHORIZATION.to_string());
+    if let Ok(api_key) = header::HeaderName::from_bytes(b"Api-Key") {
+        header_set.insert(api_key.to_string());
+    }
+    header_set
+}
+
 pub enum StatusGroup {
     Information,
     Success,
@@ -372,5 +410,54 @@ impl std::fmt::Display for StatusGroup {
             Self::ServerErr => "5XX",
         };
         write!(f, "{str_prefix}")
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::is_trusted_header;
+
+    #[test]
+    fn test_trusted_headers_matching() {
+        let trusted_headers = vec!["x-evervault-*".to_string(), "x-error-code".to_string()];
+
+        let ev_debug_header = hyper::header::HeaderName::from_bytes(b"X-Evervault-Debug").unwrap();
+        assert!(is_trusted_header(
+            &trusted_headers,
+            ev_debug_header.as_str()
+        ));
+        let error_code_header = hyper::header::HeaderName::from_bytes(b"X-Error-Code").unwrap();
+        assert!(is_trusted_header(
+            &trusted_headers,
+            error_code_header.as_str()
+        ));
+        assert!(!is_trusted_header(&trusted_headers, "x-error-debug"));
+        assert!(!is_trusted_header(&trusted_headers, "foo-bar"));
+
+        // Block sensitive headers
+        let api_key_header = hyper::header::HeaderName::from_bytes(b"api-key").unwrap();
+        assert!(!is_trusted_header(
+            &trusted_headers,
+            api_key_header.as_str()
+        ));
+        assert!(!is_trusted_header(
+            &trusted_headers,
+            hyper::header::AUTHORIZATION.as_str()
+        ));
+    }
+
+    #[test]
+    fn test_sensitive_header_check_in_trusted_headers() {
+        let trusted_headers = vec!["api-key".to_string(), "authorization".to_string()];
+        // Block sensitive headers
+        let api_key_header = hyper::header::HeaderName::from_bytes(b"api-key").unwrap();
+        assert!(!is_trusted_header(
+            &trusted_headers,
+            api_key_header.as_str()
+        ));
+        assert!(!is_trusted_header(
+            &trusted_headers,
+            hyper::header::AUTHORIZATION.as_str()
+        ));
     }
 }

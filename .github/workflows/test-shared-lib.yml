@@ -1,0 +1,21 @@
+on:
+  push:
+    paths:
+      - shared/**
+      - .github/workflows/test-shared-lib.yml
+name: Test Shared Library
+jobs:
+  test_shared_lib:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "standard-cache"
+      - name: Compile project
+        run: cargo check -p shared --no-default-features --features network_egress
+      - name: Test project
+        run: cargo test -p shared --no-default-features --features network_egress

@@ -112,6 +112,10 @@ pub fn get_cert_provisoner_host() -> String {
     }
 }
 
+pub fn get_acme_host() -> String {
+    "acme.zerossl.com".to_string()
+}
+
 pub fn get_cert_provisioner_mtls_cert_env() -> Result<String, std::env::VarError> {
     std::env::var("CERT_PROVISIONER_MTLS_CLIENT_CERT")
 }

@@ -156,6 +156,7 @@ impl FeatureContext {
             api_key_auth,
             trx_logging_enabled,
             forward_proxy_protocol: should_forward_proxy_protocol(),
+            trusted_headers: vec![],
             #[cfg(feature = "network_egress")]
             egress: EgressConfig {
                 ports: get_egress_ports_from_env(),
@@ -165,9 +166,16 @@ impl FeatureContext {
     }
 
     fn read_dataplane_context() -> Option<FeatureContext> {
-        fs::read_to_string("/etc/dataplane-config.json")
+        let mut feature_context: FeatureContext = fs::read_to_string("/etc/dataplane-config.json")
             .ok()
-            .and_then(|contents| serde_json::from_str(&contents).ok())
+            .and_then(|contents| serde_json::from_str(&contents).ok())?;
+        // map trusted headers to lowercase
+        feature_context.trusted_headers = feature_context
+            .trusted_headers
+            .iter()
+            .map(|header| header.to_lowercase())
+            .collect();
+        Some(feature_context)
     }
 }
 
@@ -177,6 +185,8 @@ pub struct FeatureContext {
     pub trx_logging_enabled: bool,
     #[serde(default)]
     pub forward_proxy_protocol: bool,
+    #[serde(default)]
+    pub trusted_headers: Vec<String>,
     #[cfg(feature = "network_egress")]
     pub egress: EgressConfig,
 }

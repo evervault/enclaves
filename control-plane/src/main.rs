@@ -1,7 +1,7 @@
 use control_plane::clients::{cert_provisioner, mtls_config, storage};
 use control_plane::stats_client::StatsClient;
 use control_plane::stats_proxy::StatsProxy;
-use control_plane::{cert_proxy, config_server};
+use control_plane::{config_server, tls_proxy};
 use shared::server::error::ServerResult;
 use shared::{print_version, utils::pipe_streams, ENCLAVE_CONNECT_PORT};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -32,7 +32,19 @@ async fn main() -> Result<()> {
     print_version!("Control Plane");
     println!("Starting control plane on {CONTROL_PLANE_PORT}");
     let e3_proxy = e3proxy::E3Proxy::new();
-    let cert_proxy = cert_proxy::CertProxy::new();
+
+    let provisioner_proxy = tls_proxy::TlsProxy::new(
+        configuration::get_cert_provisoner_host(),
+        3000,
+        shared::ENCLAVE_CERT_PORT,
+    );
+
+    let acme_proxy = tls_proxy::TlsProxy::new(
+        configuration::get_acme_host(),
+        443,
+        shared::ENCLAVE_ACME_PORT,
+    );
+
     StatsClient::init();
 
     let mtls_config = mtls_config::CertProvisionerMtlsCerts::from_env_vars()
@@ -59,14 +71,16 @@ async fn main() -> Result<()> {
             e3_result,
             health_check_result,
             config_server_result,
-            cert_proxy_result,
+            provisioner_proxy_result,
+            acme_proxy_result,
             _,
         ) = tokio::join!(
             tcp_server(),
             e3_proxy.listen(),
             health_check_server.start(),
             config_server.listen(),
-            cert_proxy.listen(),
+            provisioner_proxy.listen(),
+            acme_proxy.listen(),
             StatsProxy::listen()
         );
 
@@ -86,8 +100,12 @@ async fn main() -> Result<()> {
             eprintln!("Error running config server on host: {err:?}");
         }
 
-        if let Err(err) = cert_proxy_result {
-            eprintln!("Error running cert proxy on host: {err:?}");
+        if let Err(err) = provisioner_proxy_result {
+            eprintln!("Error running provisioner proxy on host: {err:?}");
+        }
+
+        if let Err(err) = acme_proxy_result {
+            eprintln!("Error running acme proxy on host: {err:?}");
         }
     }
 
@@ -105,7 +123,8 @@ async fn main() -> Result<()> {
             e3_result,
             health_check_result,
             config_server_result,
-            cert_proxy_result,
+            provisioner_result,
+            acme_proxy_result,
             _,
         ) = tokio::join!(
             tcp_server(),
@@ -114,7 +133,8 @@ async fn main() -> Result<()> {
             e3_proxy.listen(),
             health_check_server.start(),
             config_server.listen(),
-            cert_proxy.listen(),
+            provisioner_proxy.listen(),
+            acme_proxy.listen(),
             StatsProxy::listen()
         );
 
@@ -142,8 +162,12 @@ async fn main() -> Result<()> {
             eprintln!("Error running config server on host: {err:?}");
         }
 
-        if let Err(err) = cert_proxy_result {
-            eprintln!("Error running cert proxy on host: {err:?}");
+        if let Err(err) = provisioner_result {
+            eprintln!("Error running provisioner proxy on host: {err:?}");
+        }
+
+        if let Err(err) = acme_proxy_result {
+            eprintln!("Error running acme proxy on host: {err:?}");
         }
     }
 

@@ -16,3 +16,4 @@ pub mod internal_dns;
 mod mocks;
 pub mod stats_client;
 pub mod stats_proxy;
+pub mod tls_proxy;
