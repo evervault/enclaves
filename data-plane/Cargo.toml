@@ -39,6 +39,7 @@ cadence = "0.29.0"
 cadence-macros = "0.29.0"
 tokio-retry = "0.3.0"
 httparse = "1.8.0"
+mockall = "0.11.4"
 
 [dev-dependencies]
 tokio-test = "0.4.2"

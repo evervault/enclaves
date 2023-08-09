@@ -892,6 +892,7 @@ dependencies = [
  "httparse",
  "hyper",
  "lazy_static",
+ "mockall",
  "nom",
  "once_cell",
  "openssl",
