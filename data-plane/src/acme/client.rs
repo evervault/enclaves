@@ -1,12 +1,11 @@
-
 use std::sync::Arc;
 
+use crate::acme::error::AcmeError;
 use async_trait::async_trait;
 use hyper::client::conn::{Connection as HyperConnection, SendRequest};
-use crate::acme::error::AcmeError;
 
 use hyper::{Body, Response};
-use tokio_rustls::rustls::{ServerName, ClientConfig, RootCertStore, OwnedTrustAnchor};
+use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore, ServerName};
 use tokio_rustls::{client::TlsStream, TlsConnector};
 
 use crate::connection::{self, Connection};
@@ -27,13 +26,15 @@ impl AcmeClient {
     fn new(server_name: ServerName) -> Self {
         let mut root_cert_store = RootCertStore::empty();
 
-        root_cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
-            OwnedTrustAnchor::from_subject_spki_name_constraints(
-                ta.subject,
-                ta.spki,
-                ta.name_constraints,
-            )
-        }));
+        root_cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(
+            |ta| {
+                OwnedTrustAnchor::from_subject_spki_name_constraints(
+                    ta.subject,
+                    ta.spki,
+                    ta.name_constraints,
+                )
+            },
+        ));
 
         let config = ClientConfig::builder()
             .with_safe_defaults()
@@ -74,10 +75,7 @@ impl AcmeClient {
 
 #[async_trait]
 impl AcmeClientInterface for AcmeClient {
-    async fn send(
-        &self,
-        request: hyper::Request<Body>,
-    ) -> Result<Response<Body>, AcmeError> {
+    async fn send(&self, request: hyper::Request<Body>) -> Result<Response<Body>, AcmeError> {
         let (mut request_sender, connection) = self.get_conn().await?;
         tokio::spawn(async move {
             if let Err(e) = connection.await {
