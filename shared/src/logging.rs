@@ -155,7 +155,7 @@ impl TrxContextBuilder {
     }
 
     pub fn add_req_to_trx_context(&mut self, req: &Request<Body>, trusted_headers: &[String]) {
-        self.uri(req.uri().to_string());
+        self.uri(req.uri().path().to_string());
         self.request_method(req.method().to_string());
         self.add_headers_to_request(req.headers(), trusted_headers);
 
