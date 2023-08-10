@@ -7,7 +7,7 @@ use std::{collections::HashSet, time::SystemTime};
 use hyper::{
     header::{self, CONTENT_TYPE, USER_AGENT},
     http::HeaderValue,
-    Body, HeaderMap, Request, Response,
+    Body, HeaderMap, Request, Response, Uri
 };
 
 use rand::{thread_rng, Rng};
@@ -155,7 +155,7 @@ impl TrxContextBuilder {
     }
 
     pub fn add_req_to_trx_context(&mut self, req: &Request<Body>, trusted_headers: &[String]) {
-        self.uri(req.uri().path().to_string());
+        self.uri(build_log_uri(req.uri()));
         self.request_method(req.method().to_string());
         self.add_headers_to_request(req.headers(), trusted_headers);
 
@@ -260,6 +260,14 @@ fn convert_headers_to_map(
         }
     }
     tracked_headers
+}
+
+fn build_log_uri(uri: &Uri) -> String {
+  if let Some(query) = uri.query() {
+    format!("{}?{}", uri.path(), query)
+  } else {
+    uri.path().to_string()
+  }
 }
 
 lazy_static::lazy_static!(
@@ -460,4 +468,24 @@ mod test {
             hyper::header::AUTHORIZATION.as_str()
         ));
     }
+
+    use super::{Uri, build_log_uri};
+    #[test]
+    fn test_uri_formatting() {
+      let path_and_query = "/path?query=true".to_string();
+      let uri = Uri::builder().scheme("https").authority("cages.evervault.com").path_and_query(&path_and_query).build().unwrap();
+      assert_eq!(path_and_query, build_log_uri(&uri));
+      
+      let path_only = "/path".to_string();
+      let uri = Uri::builder().scheme("https").authority("cages.evervault.com").path_and_query(&path_only).build().unwrap();
+      assert_eq!(path_only, build_log_uri(&uri));
+      
+      let base_path = "/".to_string();
+      let uri = Uri::builder().scheme("https").authority("cages.evervault.com").path_and_query(&base_path).build().unwrap();
+      assert_eq!(base_path, build_log_uri(&uri));
+
+      let base_query = "?query".to_string();
+      let uri = Uri::builder().scheme("https").authority("cages.evervault.com").path_and_query(&base_query).build().unwrap();
+      assert_eq!(format!("/{}", base_query), build_log_uri(&uri));
+    } 
 }
