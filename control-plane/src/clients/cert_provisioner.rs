@@ -24,13 +24,13 @@ async fn get_socket() -> Result<TcpStream> {
         CERT_PROVISIONER_MTLS_PORT
     );
 
-    println!("Attempting to get socket connection to {addr:?}");
+    log::debug!("Attempting to get socket connection to {addr:?}");
 
     let socket_connection = TcpStream::connect(addr.clone())
         .await
         .map_err(ServerError::Io);
 
-    println!("Got socket connection to {addr:?}");
+    log::debug!("Got socket connection to {addr:?}");
 
     socket_connection
 }
@@ -142,7 +142,7 @@ impl CertProvisionerClient {
         let (mut request_sender, connection) = self.get_connection().await?;
         tokio::spawn(async move {
             if let Err(e) = connection.await {
-                eprintln!("Error in cert provisoner connection: {e} MTLS connection: {mtls}");
+                log::error!("Error in cert provisoner connection: {e} MTLS connection: {mtls}");
             }
         });
 

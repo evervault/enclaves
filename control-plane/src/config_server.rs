@@ -46,7 +46,7 @@ impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> 
         let storage_client = self.storage_client.clone();
         let cage_context = self.cage_context.clone();
 
-        println!("Running config server on {}", shared::ENCLAVE_CONFIG_PORT);
+        log::info!("Running config server on {}", shared::ENCLAVE_CONFIG_PORT);
         loop {
             let cert_client = cert_client.clone();
             let storage_client = storage_client.clone();
@@ -54,7 +54,7 @@ impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> 
             let connection = match enclave_conn.accept().await {
                 Ok(conn) => conn,
                 Err(e) => {
-                    eprintln!("Error accepting config request from data plane — {e:?}");
+                    log::error!("Error accepting config request from data plane — {e:?}");
                     continue;
                 }
             };
@@ -86,7 +86,7 @@ impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> 
                     .await;
 
                 if let Err(processing_err) = sent_response {
-                    eprintln!("An error occurred while processing the request — {processing_err}");
+                    log::error!("An error occurred while processing the request — {processing_err}");
                 }
             });
         }
@@ -170,7 +170,7 @@ async fn get_token(
         .header("Content-Type", "application/json")
         .body(body)?;
 
-    println!("Token returned from cert provisioner, sending it back to the cage");
+    log::info!("Token returned from cert provisioner, sending it back to the cage");
 
     Ok(res)
 }
@@ -186,7 +186,7 @@ async fn handle_post_trx_logs_request(
     req: Request<Body>,
     cage_context: configuration::CageContext,
 ) -> Response<Body> {
-    println!("Recieved request in config server to log transactions");
+    log::info!("Recieved request in config server to log transactions");
     let parsed_result: ServerResult<PostTrxLogsRequest> = parse_request(req).await;
     match parsed_result {
         Ok(log_body) => {
@@ -206,7 +206,7 @@ async fn handle_acme_storage_get_request<T: StorageClientInterface>(
     storage_client: T,
     cage_context: configuration::CageContext,
 ) -> ServerResult<Response<Body>> {
-    println!("Recieved get request in config server for acme storage");
+    log::info!("Recieved get request in config server for acme storage");
     let parsed_result: ServerResult<GetObjectRequest> = parse_request(req).await;
     match parsed_result {
         Ok(request_body) => {
@@ -215,12 +215,12 @@ async fn handle_acme_storage_get_request<T: StorageClientInterface>(
                 Ok(object) => match object {
                     Some(object) => object,
                     None => {
-                        println!("Object not found in storage client");
+                        log::warn!("Object not found in storage client");
                         return Ok(build_bad_request_response());
                     }
                 },
                 Err(err) => {
-                    println!("Failed to get object in storage client: {}", err);
+                    log::error!("Failed to get object in storage client: {}", err);
                     return Ok(build_error_response(
                         "Failed to get object in storage client".to_string(),
                     ));
@@ -245,7 +245,7 @@ async fn handle_acme_storage_put_request<T: StorageClientInterface>(
     storage_client: T,
     cage_context: configuration::CageContext,
 ) -> ServerResult<Response<Body>> {
-    println!("Recieved post request in config server for acme storage");
+    log::info!("Recieved post request in config server for acme storage");
     let parsed_result: ServerResult<PutObjectRequest> = parse_request(req).await;
     match parsed_result {
         Ok(request_body) => {
@@ -257,7 +257,7 @@ async fn handle_acme_storage_put_request<T: StorageClientInterface>(
             {
                 Ok(_) => Ok(build_success_response()),
                 Err(err) => {
-                    println!("Failed to put object in storage client: {}", err);
+                    log::warn!("Failed to put object in storage client: {}", err);
                     Ok(build_error_response(
                         "Failed to put object in storage client".to_string(),
                     ))
@@ -283,7 +283,7 @@ async fn handle_acme_storage_delete_request<T: StorageClientInterface>(
             match storage_client.delete_object(namespaced_key).await {
                 Ok(_) => Ok(build_success_response()),
                 Err(err) => {
-                    println!("Failed to delete object in storage client: {}", err);
+                    log::error!("Failed to delete object in storage client: {}", err);
                     Ok(build_error_response(
                         "Failed to delete object in storage client".to_string(),
                     ))
@@ -313,7 +313,7 @@ fn build_bad_request_response() -> Response<Body> {
 }
 
 fn build_error_response(body_msg: String) -> Response<Body> {
-    println!("Request failed: {body_msg}");
+    log::debug!("Request failed: {body_msg}");
     Response::builder()
         .status(500)
         .header("Content-Type", "application/json")

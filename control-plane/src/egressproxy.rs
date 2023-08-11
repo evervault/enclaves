@@ -23,7 +23,7 @@ lazy_static! {
 
 impl EgressProxy {
     pub async fn listen() -> Result<()> {
-        println!("Egress proxy started");
+        log::info!("Egress proxy started");
         let mut server = get_vsock_server(EGRESS_PROXY_VSOCK_PORT, Parent).await?;
         let allowed_domains = shared::server::egress::get_egress_allow_list_from_env();
 
@@ -33,14 +33,14 @@ impl EgressProxy {
                 Ok(stream) => {
                     tokio::spawn(async move {
                         if let Err(e) = Self::handle_connection(stream, domains).await {
-                            eprintln!(
+                            log::error!(
                                 "An error occurred while handling an egress connection - {e:?}"
                             );
                         }
                     });
                 }
                 Err(e) => {
-                    eprintln!("An error occurred accepting the egress connection — {e:?}");
+                    log::error!("An error occurred accepting the egress connection — {e:?}");
                 }
             }
         }
@@ -52,7 +52,7 @@ impl EgressProxy {
         mut external_stream: T,
         egress_domains: EgressDomains,
     ) -> Result<(u64, u64)> {
-        println!("Received request to egress proxy");
+        log::debug!("Received request to egress proxy");
         let mut request_buffer = [0; 4096];
         let packet_size = external_stream.read(&mut request_buffer).await?;
         let req = &request_buffer[..packet_size];
@@ -104,11 +104,11 @@ fn validate_requested_ip(ip_addr: &str, allow_egress_to_internal: bool) -> Resul
         Ok(parsed_addr)
             if is_not_globally_reachable_ip(&parsed_addr) && !allow_egress_to_internal =>
         {
-            println!("Blocking request to internal IP");
+            log::warn!("Blocking request to internal IP");
             Err(ServerError::IllegalInternalIp(parsed_addr))
         }
         Err(e) => {
-            println!("Failed to parse IP");
+            log::error!("Failed to parse IP");
             Err(ServerError::InvalidIp(e))
         }
         Ok(ip_addr) => Ok(ip_addr),

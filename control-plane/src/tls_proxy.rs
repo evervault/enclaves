@@ -46,21 +46,21 @@ impl TlsProxy {
     #[cfg(feature = "enclave")]
     async fn shutdown_conn(connection: tokio_vsock::VsockStream) {
         if let Err(e) = connection.shutdown(std::net::Shutdown::Both) {
-            eprintln!("Failed to shutdown data plane connection — {e:?}");
+            log::error!("Failed to shutdown data plane connection — {e:?}");
         }
     }
 
     #[cfg(not(feature = "enclave"))]
     async fn shutdown_conn(mut connection: tokio::net::TcpStream) {
         if let Err(e) = connection.shutdown().await {
-            eprintln!("Failed to shutdown data plane connection — {e:?}");
+            log::error!("Failed to shutdown data plane connection — {e:?}");
         }
     }
 
     pub async fn listen(self) -> Result<()> {
         let mut enclave_conn = get_vsock_server(self.vsock_port, Parent).await?;
 
-        println!(
+        log::info!(
             "Running TLS proxy to {} on {}",
             &self.target.host.clone(),
             &self.vsock_port
@@ -71,20 +71,20 @@ impl TlsProxy {
             let connection = match enclave_conn.accept().await {
                 Ok(conn) => conn,
                 Err(e) => {
-                    eprintln!("Error accepting connection request in TLS proxy — {e:?}");
+                    log::error!("Error accepting connection request in TLS proxy — {e:?}");
                     continue;
                 }
             };
-            println!("Forwarding stream to {}", target.host);
+            log::debug!("Forwarding stream to {}", target.host);
             let target_ip = match self.get_ip_target_host().await {
                 Ok(Some(ip)) => ip,
                 Ok(None) => {
-                    eprintln!("No IP returned for {}", target.host);
+                    log::error!("No IP returned for {}", target.host);
                     Self::shutdown_conn(connection).await;
                     continue;
                 }
                 Err(e) => {
-                    eprintln!("Error obtaining IP for {} — {e:?}", target.host);
+                    log::error!("Error obtaining IP for {} — {e:?}", target.host);
                     Self::shutdown_conn(connection).await;
                     continue;
                 }
@@ -94,14 +94,14 @@ impl TlsProxy {
                 let target_stream = match tokio::net::TcpStream::connect(target_ip).await {
                     Ok(stream) => stream,
                     Err(e) => {
-                        eprintln!("Failed to connect to {} — {e:?}", target.host);
+                        log::error!("Failed to connect to {} — {e:?}", target.host);
                         Self::shutdown_conn(connection).await;
                         return;
                     }
                 };
 
                 if let Err(e) = shared::utils::pipe_streams(connection, target_stream).await {
-                    eprintln!("Error streaming from Data Plane to {} — {e:?}", target.host);
+                    log::warn!("Error streaming from Data Plane to {} — {e:?}", target.host);
                 }
             });
         }

@@ -8,7 +8,7 @@ use tokio_vsock::VsockStream;
 #[cfg(not(feature = "enclave"))]
 pub async fn get_connection_to_enclave(port: u16) -> std::io::Result<TcpStream> {
     let ip_addr = std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0));
-    println!("Connecting to tcp data plane on ({ip_addr},{port})");
+    log::debug!("Connecting to tcp data plane on ({ip_addr},{port})");
     TcpStream::connect(std::net::SocketAddr::new(ip_addr, port)).await
 }
 

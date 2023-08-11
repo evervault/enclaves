@@ -31,56 +31,56 @@ impl E3Proxy {
     #[cfg(feature = "enclave")]
     async fn shutdown_conn(connection: tokio_vsock::VsockStream) {
         if let Err(e) = connection.shutdown(std::net::Shutdown::Both) {
-            eprintln!("Failed to shutdown data plane connection — {e:?}");
+            log::warn!("Failed to shutdown data plane connection — {e:?}");
         }
     }
 
     #[cfg(not(feature = "enclave"))]
     async fn shutdown_conn(mut connection: tokio::net::TcpStream) {
         if let Err(e) = connection.shutdown().await {
-            eprintln!("Failed to shutdown data plane connection — {e:?}");
+            log::warn!("Failed to shutdown data plane connection — {e:?}");
         }
     }
 
     pub async fn listen(self) -> Result<()> {
         let mut enclave_conn = get_vsock_server(shared::ENCLAVE_CRYPTO_PORT, Parent).await?;
 
-        println!("Running e3 proxy on {}", shared::ENCLAVE_CRYPTO_PORT);
+        log::info!("Running e3 proxy on {}", shared::ENCLAVE_CRYPTO_PORT);
         loop {
             let connection = match enclave_conn.accept().await {
                 Ok(conn) => conn,
                 Err(e) => {
-                    eprintln!("Error accepting crypto request — {e:?}");
+                    log::error!("Error accepting crypto request — {e:?}");
                     continue;
                 }
             };
-            println!("Crypto request received");
+            log::info!("Crypto request received");
             let e3_ip = match self.get_ip_for_e3().await {
                 Ok(Some(ip)) => ip,
                 Ok(None) => {
-                    eprintln!("No ip returned for E3");
+                    log::error!("No ip returned for E3");
                     Self::shutdown_conn(connection).await;
                     continue;
                 }
                 Err(e) => {
-                    eprintln!("Error obtaining IP for E3 — {e:?}");
+                    log::error!("Error obtaining IP for E3 — {e:?}");
                     Self::shutdown_conn(connection).await;
                     continue;
                 }
             }; // TODO: cache
-            println!("IP for E3 obtained: {e3_ip}");
+            log::debug!("IP for E3 obtained: {e3_ip}");
             tokio::spawn(async move {
                 let e3_stream = match tokio::net::TcpStream::connect(e3_ip).await {
                     Ok(e3_stream) => e3_stream,
                     Err(e) => {
-                        eprintln!("Failed to connect to E3 ({e3_ip}) — {e:?}");
+                        log::error!("Failed to connect to E3 ({e3_ip}) — {e:?}");
                         Self::shutdown_conn(connection).await;
                         return;
                     }
                 };
 
                 if let Err(e) = shared::utils::pipe_streams(connection, e3_stream).await {
-                    eprintln!("Error streaming from Data Plane to e3 ({e3_ip})— {e:?}");
+                    log::warn!("Error streaming from Data Plane to e3 ({e3_ip})— {e:?}");
                 }
             });
         }
