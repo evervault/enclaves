@@ -19,7 +19,7 @@ use crate::server::error::ServerResult;
 use crate::server::error::TlsError;
 use rand::Rng;
 
-use log::{error,info};
+use log::{error, info};
 
 pub struct TlsServer<S: Listener + Send + Sync> {
     tls_acceptor: TlsAcceptor,

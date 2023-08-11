@@ -1,13 +1,13 @@
 use std::time::Duration;
 
 use bytes::Bytes;
+use log::error;
 use shared::server::get_vsock_client;
 use shared::server::CID::Parent;
 use shared::{ENCLAVE_STATSD_PORT, STATS_VSOCK_PORT};
 use tokio::net::UdpSocket;
 use tokio::task;
 use tokio::{io::AsyncWriteExt, time};
-use log::error;
 
 use crate::stats_client::StatsClient;
 

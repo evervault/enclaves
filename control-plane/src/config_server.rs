@@ -86,7 +86,9 @@ impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> 
                     .await;
 
                 if let Err(processing_err) = sent_response {
-                    log::error!("An error occurred while processing the request — {processing_err}");
+                    log::error!(
+                        "An error occurred while processing the request — {processing_err}"
+                    );
                 }
             });
         }

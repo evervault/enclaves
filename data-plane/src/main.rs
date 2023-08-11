@@ -18,7 +18,7 @@ use data_plane::FeatureContext;
 use futures::future::join_all;
 use shared::ENCLAVE_CONNECT_PORT;
 
-use log::{info, error};
+use log::{error, info};
 
 #[tokio::main]
 async fn main() {

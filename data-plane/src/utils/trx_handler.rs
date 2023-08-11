@@ -4,7 +4,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use shared::logging::TrxContext;
 use tokio::time::sleep;
 
-use log::{debug,warn};
+use log::{debug, warn};
 
 use crate::config_client::ConfigClient;
 

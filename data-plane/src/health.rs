@@ -6,7 +6,7 @@ use shared::server::health::{HealthCheckLog, HealthCheckStatus};
 use shared::server::CID::Enclave;
 use shared::{server::Listener, ENCLAVE_HEALTH_CHECK_PORT};
 
-use log::{info, error};
+use log::{error, info};
 
 pub async fn start_health_check_server() {
     let mut health_check_server = get_vsock_server(ENCLAVE_HEALTH_CHECK_PORT, Enclave)

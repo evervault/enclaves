@@ -200,7 +200,9 @@ async fn tcp_server() -> Result<()> {
                     {
                         Ok(enclave_stream) => enclave_stream,
                         Err(e) => {
-                            log::error!("An error occurred while connecting to the enclave — {e:?}");
+                            log::error!(
+                                "An error occurred while connecting to the enclave — {e:?}"
+                            );
                             connection
                                 .shutdown()
                                 .await

@@ -29,7 +29,7 @@ use tokio::net::TcpStream;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio_rustls::server::TlsStream;
 
-use log::{debug,error,info,warn};
+use log::{debug, error, info, warn};
 
 pub async fn run<L: Listener + Send + Sync>(tcp_server: L, port: u16)
 where
@@ -151,17 +151,13 @@ where
                     Err(_) => {
                         // We need to figure out a better auth mechanism for other protocols
                         if feature_context.api_key_auth {
-                            error!(
-                                "API key auth needs to be turned off for non HTTPS/WS streams"
-                            );
+                            error!("API key auth needs to be turned off for non HTTPS/WS streams");
                             shutdown_conn(&mut stream).await;
                             break;
                         }
                         if let Err(err) = pipe_to_customer_process(&mut stream, &buffer, port).await
                         {
-                            warn!(
-                                "Failed piping non HTTP/WS stream to customer process — {err:?}"
-                            );
+                            warn!("Failed piping non HTTP/WS stream to customer process — {err:?}");
                             shutdown_conn(&mut stream).await;
                             break;
                         }
@@ -319,7 +315,7 @@ async fn handle_http_request(
                 }
             }
         }
-        Err(e) => error!("Failed to build transaction context. err: {e:?}")
+        Err(e) => error!("Failed to build transaction context. err: {e:?}"),
     };
 
     Ok(response)
