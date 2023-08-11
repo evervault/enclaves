@@ -110,12 +110,13 @@ async fn start_data_plane(data_plane_port: u16) {
 }
 
 #[cfg(not(feature = "tls_termination"))]
+use shared::server::proxy_protocol::ProxiedConnection;
+#[cfg(not(feature = "tls_termination"))]
 async fn run_tcp_passthrough<L: Listener>(mut server: L, port: u16)
 where
     <L as Listener>::Connection: ProxiedConnection + 'static,
 {
     use log::warn;
-    use shared::server::proxy_protocol::ProxiedConnection;
     use shared::utils::pipe_streams;
     use tokio::io::AsyncWriteExt;
 
