@@ -19,6 +19,8 @@ use crate::server::error::ServerResult;
 use crate::server::error::TlsError;
 use rand::Rng;
 
+use log::{error,info};
+
 pub struct TlsServer<S: Listener + Send + Sync> {
     tls_acceptor: TlsAcceptor,
     inner: S,
@@ -68,9 +70,9 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
     }
 
     pub async fn with_attestable_cert(self) -> ServerResult<TlsServer<S>> {
-        println!("Creating TLSServer with attestable cert");
+        info!("Creating TLSServer with attestable cert");
         let (ca_cert, ca_private_key) = Self::get_ca_with_retry().await;
-        println!("Received intermediate CA from cert provisioner. Using it with TLS Server.");
+        info!("Received intermediate CA from cert provisioner. Using it with TLS Server.");
         let attestable_cert_resolver =
             super::cert_resolver::AttestableCertResolver::new(ca_cert, ca_private_key)?;
         let tls_config =
@@ -88,14 +90,14 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
                     let exp_duration =
                         Duration::from_millis(((2 ^ attempts) * 100) + rng.gen_range(50..150));
                     thread::sleep(exp_duration);
-                    println!(
+                    error!(
                         "Error from provisioner sleeping for {} ms, error: {e}",
                         exp_duration.as_millis()
                     );
                     attempts += 1;
                 }
                 Err(e) => {
-                    println!("Error from provisioner sleeping for 20 seconds: {e}");
+                    error!("Error from provisioner sleeping for 20 seconds: {e}");
                     thread::sleep(Duration::from_secs(20));
                 }
                 Ok(ca) => break ca,

@@ -20,7 +20,7 @@ pub struct EnclaveDnsProxy;
 
 impl EnclaveDnsProxy {
     pub async fn bind_server() -> Result<(), DNSError> {
-        println!("Starting DNS proxy");
+        log::info!("Starting DNS proxy");
         let socket = UdpSocket::bind("127.0.0.1:53").await?;
         let shared_socket = std::sync::Arc::new(socket);
         let dns_dispatch_timeout = std::time::Duration::from_secs(1);
@@ -40,9 +40,9 @@ impl EnclaveDnsProxy {
             max_concurrent_requests,
         );
         tokio::spawn(async move {
-            println!("Starting DNS request driver");
+            log::info!("Starting DNS request driver");
             dns_driver.start_driver().await;
-            eprintln!("Enclave DNS Driver exiting");
+            log::info!("Enclave DNS Driver exiting");
         });
 
         loop {
@@ -53,8 +53,8 @@ impl EnclaveDnsProxy {
                 timeout(dns_dispatch_timeout, dns_lookup_sender.send((buf, src))).await;
 
             match dispatch_result {
-                Ok(Err(e)) => eprintln!("Error dispatching DNS request: {e:?}"),
-                Err(e) => eprintln!("Timeout dispatching DNS request: {e:?}"),
+                Ok(Err(e)) => log::error!("Error dispatching DNS request: {e:?}"),
+                Err(e) => log::error!("Timeout dispatching DNS request: {e:?}"),
                 _ => {}
             };
         }
@@ -92,7 +92,7 @@ impl EnclaveDnsDriver {
             let permit = match self.concurrency_gate.clone().acquire_owned().await {
                 Ok(permit) => permit,
                 Err(e) => {
-                    eprintln!("Failed to acquire permit from Semaphore, dropping lookup. {e:?}");
+                    log::error!("Failed to acquire permit from Semaphore, dropping lookup. {e:?}");
                     continue;
                 }
             };
@@ -105,13 +105,13 @@ impl EnclaveDnsDriver {
                     match Self::perform_dns_lookup(dns_packet, request_upper_bound).await {
                         Ok(dns_response) => dns_response,
                         Err(e) => {
-                            eprintln!("Failed to perform DNS Lookup: {e}");
+                            log::error!("Failed to perform DNS Lookup: {e}");
                             return;
                         }
                     };
 
                 if let Err(e) = udp_socket.send_to(&dns_response, &src_addr).await {
-                    eprintln!("Failed to send DNS Response: {e}");
+                    log::error!("Failed to send DNS Response: {e}");
                 }
             });
         }

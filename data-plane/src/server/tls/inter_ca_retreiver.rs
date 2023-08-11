@@ -7,6 +7,8 @@ use crate::error::{Error, Result};
 use crate::{cert_provisioner_client, config_client, CageContext};
 use crate::{cert_provisioner_client::CertProvisionerClient, config_client::ConfigClient};
 
+use log::info;
+
 pub struct InterCaRetreiver {
     cert_provisioner_client: CertProvisionerClient,
     config_client: ConfigClient,
@@ -28,10 +30,10 @@ impl InterCaRetreiver {
     }
 
     pub async fn get_intermediate_ca(&self) -> Result<(X509, PKey<Private>)> {
-        println!("Sending request to control plane for cert provisioner token.");
+        info!("Sending request to control plane for cert provisioner token.");
         let token = self.config_client.get_cert_token().await?.token();
 
-        println!("Received token for cert provisioner. Requesting intermediate CA.");
+        info!("Received token for cert provisioner. Requesting intermediate CA.");
         let cert_response = self
             .cert_provisioner_client
             .get_cert(token)

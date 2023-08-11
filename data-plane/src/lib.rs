@@ -88,8 +88,9 @@ impl CageContext {
 
     #[cfg(staging)]
     pub fn get_hyphenated_cert_name(&self) -> String {
+        use log::debug;
         let hyphenated_app_uuid = self.app_uuid.clone().replace('_', "-");
-        println!("hyphenated_app_uuid: {:?}", hyphenated_app_uuid);
+        debug!("hyphenated_app_uuid: {:?}", hyphenated_app_uuid);
         format!(
             "{}.{}.cages.evervault.dev",
             &self.cage_name, hyphenated_app_uuid

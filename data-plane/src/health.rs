@@ -6,17 +6,19 @@ use shared::server::health::{HealthCheckLog, HealthCheckStatus};
 use shared::server::CID::Enclave;
 use shared::{server::Listener, ENCLAVE_HEALTH_CHECK_PORT};
 
+use log::{info, error};
+
 pub async fn start_health_check_server() {
     let mut health_check_server = get_vsock_server(ENCLAVE_HEALTH_CHECK_PORT, Enclave)
         .await
         .unwrap();
-    println!("Data plane health check server running on port {ENCLAVE_HEALTH_CHECK_PORT}");
+    info!("Data plane health check server running on port {ENCLAVE_HEALTH_CHECK_PORT}");
 
     loop {
         let stream = match health_check_server.accept().await {
             Ok(stream) => stream,
             Err(e) => {
-                eprintln!("Error accepting health check request — {e:?}");
+                error!("Error accepting health check request — {e:?}");
                 continue;
             }
         };
@@ -45,7 +47,7 @@ pub async fn start_health_check_server() {
             .serve_connection(stream, service)
             .await
         {
-            eprintln!("Data plane health check error: {error}");
+            error!("Data plane health check error: {error}");
         }
     }
 

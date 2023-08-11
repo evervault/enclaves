@@ -29,6 +29,8 @@ use tokio::net::TcpStream;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio_rustls::server::TlsStream;
 
+use log::{debug,error,info,warn};
+
 pub async fn run<L: Listener + Send + Sync>(tcp_server: L, port: u16)
 where
     TlsError: From<<L as Listener>::Error>,
@@ -54,12 +56,12 @@ where
         });
     }
 
-    println!("TLS Server Created - Listening for new connections.");
+    info!("TLS Server Created - Listening for new connections.");
     loop {
         let mut stream = match server.accept().await {
             Ok(stream) => stream,
             Err(tls_err) => {
-                eprintln!("An error occurred while accepting the incoming connection — {tls_err}");
+                error!("An error occurred while accepting the incoming connection — {tls_err}");
                 continue;
             }
         };
@@ -79,7 +81,7 @@ where
                 let chunk_size = match stream.read(&mut temp_chunk).await {
                     Ok(chunk_size) => chunk_size,
                     Err(e) => {
-                        eprintln!("Connection read error - {e:?}");
+                        error!("Connection read error - {e:?}");
                         shutdown_conn(&mut stream).await;
                         break;
                     }
@@ -99,14 +101,14 @@ where
                             if let Err(err) =
                                 auth_request_non_http(headers, e3_client_for_tcp.clone()).await
                             {
-                                eprintln!("Failed to authenticate request — {err:?}");
+                                error!("Failed to authenticate request — {err:?}");
                                 shutdown_conn(&mut stream).await;
                                 break;
                             }
                             if let Err(err) =
                                 pipe_to_customer_process(&mut stream, &buffer, port).await
                             {
-                                eprintln!("Failed piping WS stream to customer process — {err:?}");
+                                warn!("Failed piping WS stream to customer process — {err:?}");
                                 shutdown_conn(&mut stream).await;
                                 break;
                             }
@@ -115,7 +117,7 @@ where
                                 match build_http_request(req, &buffer[body_offset..], port) {
                                     Ok(request) => request,
                                     Err(e) => {
-                                        eprintln!("Connection read error - {e:?}");
+                                        error!("Connection read error - {e:?}");
                                         shutdown_conn(&mut stream).await;
                                         break;
                                     }
@@ -136,7 +138,7 @@ where
                                     break;
                                 }
                                 Err(err) => {
-                                    eprintln!(
+                                    error!(
                                         "Failed sending HTTP request to customer process — {err:?}"
                                     );
                                     shutdown_conn(&mut stream).await;
@@ -149,7 +151,7 @@ where
                     Err(_) => {
                         // We need to figure out a better auth mechanism for other protocols
                         if feature_context.api_key_auth {
-                            eprintln!(
+                            error!(
                                 "API key auth needs to be turned off for non HTTPS/WS streams"
                             );
                             shutdown_conn(&mut stream).await;
@@ -157,7 +159,7 @@ where
                         }
                         if let Err(err) = pipe_to_customer_process(&mut stream, &buffer, port).await
                         {
-                            eprintln!(
+                            warn!(
                                 "Failed piping non HTTP/WS stream to customer process — {err:?}"
                             );
                             shutdown_conn(&mut stream).await;
@@ -194,7 +196,7 @@ where
     TlsStream<L>: AsyncWriteExt + Unpin,
 {
     if let Err(e) = stream.shutdown().await {
-        eprintln!("Failed to shutdown data plane connection — {e:?}");
+        error!("Failed to shutdown data plane connection — {e:?}");
     }
 }
 
@@ -313,13 +315,11 @@ async fn handle_http_request(
 
                 //Send trx to config server in data plane
                 if let Err(e) = tx_for_req.send(LogHandlerMessage::new_log_message(ctx)) {
-                    println!("Failed to send transaction context to log handler. err: {e}")
+                    error!("Failed to send transaction context to log handler. err: {e}")
                 }
             }
         }
-        Err(e) => {
-            println!("Failed to build transaction context. err: {e:?}")
-        }
+        Err(e) => error!("Failed to build transaction context. err: {e:?}")
     };
 
     Ok(response)
@@ -330,7 +330,7 @@ async fn auth_request(
     cage_context: CageContext,
     e3_client: Arc<E3Client>,
 ) -> Option<Response<Body>> {
-    println!("Authenticating request");
+    debug!("Authenticating request");
 
     let hashed_api_key = match HeaderValue::from_bytes(&compute_base64_sha512(api_key.as_bytes())) {
         Ok(hashed_api_key_header) => hashed_api_key_header,
@@ -351,7 +351,7 @@ async fn auth_request(
     {
         Ok(auth_status) => {
             if !auth_status {
-                println!("Failed to authenticate request using provided API Key");
+                info!("Failed to authenticate request using provided API Key");
                 let response: Response<Body> = AuthError::FailedToAuthenticateApiKey.into();
                 Some(response)
             } else {
@@ -360,14 +360,14 @@ async fn auth_request(
         }
         Err(ClientError::FailedRequest(status)) if status.as_u16() == 401 => {
             //Temporary fallback to authenticate with APP api key -- remove this match when moving to just scoped api keys
-            println!("Failed to auth with scoped api key hash, attempting with app api key");
+            debug!("Failed to auth with scoped api key hash, attempting with app api key");
             match e3_client
                 .authenticate(&api_key, auth_payload_for_app_api_key)
                 .await
             {
                 Ok(auth_status) => {
                     if !auth_status {
-                        println!("Failed to authenticate request using provided API Key");
+                        info!("Failed to authenticate request using provided API Key");
                         let response: Response<Body> = AuthError::FailedToAuthenticateApiKey.into();
                         Some(response)
                     } else {
@@ -379,7 +379,7 @@ async fn auth_request(
                     Some(response)
                 }
                 Err(e) => {
-                    eprintln!("Failed to authenticate against e3 — {e:?}");
+                    error!("Failed to authenticate against e3 — {e:?}");
                     Some(build_error_response(Some(
                         "Connection to E3 failed.".to_string(),
                     )))
@@ -387,7 +387,7 @@ async fn auth_request(
             }
         }
         Err(e) => {
-            eprintln!("Failed to authenticate against e3 — {e:?}");
+            error!("Failed to authenticate against e3 — {e:?}");
             Some(build_error_response(Some(
                 "Connection to E3 failed.".to_string(),
             )))
@@ -408,7 +408,7 @@ async fn handle_incoming_request(
     // Serialize request onto socket
 
     if feature_context.api_key_auth {
-        println!("Authenticating request");
+        debug!("Authenticating request");
         let api_key = match req
             .headers()
             .get(hyper::http::header::HeaderName::from_static("api-key"))
@@ -457,7 +457,7 @@ pub async fn handle_standard_request(
     let request_bytes = match hyper::body::to_bytes(req_body).await {
         Ok(body_bytes) => body_bytes,
         Err(e) => {
-            eprintln!("Failed to read entire body — {e}");
+            error!("Failed to read entire body — {e}");
             return build_error_response(None);
         }
     };
@@ -484,12 +484,12 @@ pub async fn handle_standard_request(
         {
             Ok(decrypted) => decrypted,
             Err(e) => {
-                eprintln!("Failed to decrypt — {e}");
+                error!("Failed to decrypt — {e}");
                 return build_error_response(Some(format!("Failed to decrypt ciphertexts {e}")));
             }
         };
 
-        println!("Decryption complete");
+        debug!("Decryption complete");
         decrypted.data().iter().rev().for_each(|entry| {
             let range = entry.range();
             let value_in_bytes = serde_json::to_vec(entry.value());
@@ -498,7 +498,7 @@ pub async fn handle_standard_request(
                     let _: Vec<u8> = bytes_vec.splice(range.0..range.1, value).collect();
                 }
                 Err(err) => {
-                    eprintln!("Failed to convert Json Value into bytes. Error {err}");
+                    warn!("Failed to convert Json Value into bytes. Error {err}");
                 }
             }
         });
@@ -519,13 +519,13 @@ pub async fn handle_standard_request(
         .insert("Content-Length", HeaderValue::from(bytes_vec.len()));
 
     let decrypted_request = Request::from_parts(req_info, Body::from(bytes_vec));
-    println!("Finished processing request");
+    debug!("Finished processing request");
     let http_client = hyper::Client::new();
     match http_client.request(decrypted_request).await {
         Ok(res) => res,
         Err(e) => {
             let msg = format!("Error requesting user process - {e}");
-            eprintln!("{msg}");
+            error!("Error forwarding request to user process: {msg}");
             build_error_response(Some(msg))
         }
     }

@@ -22,7 +22,7 @@ pub struct EgressProxy;
 
 impl EgressProxy {
     pub async fn listen(port: u16) -> ServerResult<()> {
-        println!("Egress proxy started on port {port}");
+        log::info!("Egress proxy started on port {port}");
         let allowed_domains = FeatureContext::get().egress.allow_list;
         let mut server =
             TcpServer::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), port)).await?;

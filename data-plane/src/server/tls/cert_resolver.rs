@@ -20,6 +20,8 @@ use tokio_rustls::rustls::server::ResolvesServerCert;
 use tokio_rustls::rustls::sign::{self, CertifiedKey};
 use tokio_rustls::rustls::{Certificate, PrivateKey};
 
+use log::error;
+
 use crate::server::error::{ServerResult, TlsError};
 use crate::CageContext;
 
@@ -292,7 +294,7 @@ impl AttestableCertResolver {
                 Some(nonce),
             )
             .map_err(|err| {
-                eprintln!("An error occurred while generating the self signed cert");
+                error!("An error occurred while generating the self signed cert");
                 err
             })
             .ok()

@@ -7,6 +7,7 @@ use shared::{ENCLAVE_STATSD_PORT, STATS_VSOCK_PORT};
 use tokio::net::UdpSocket;
 use tokio::task;
 use tokio::{io::AsyncWriteExt, time};
+use log::error;
 
 use crate::stats_client::StatsClient;
 
@@ -23,7 +24,7 @@ impl StatsProxy {
             let (amt, _) = match socket.recv_from(&mut buffer).await {
                 Ok((amt, src)) => (amt, src),
                 Err(e) => {
-                    eprintln!("Error receiving stats: {e}");
+                    error!("Error receiving stats: {e}");
                     buffer.fill(0);
                     continue;
                 }
@@ -31,7 +32,7 @@ impl StatsProxy {
 
             let buf = Bytes::copy_from_slice(&buffer[..amt]);
             if let Err(e) = Self::forward_stats(buf).await {
-                eprintln!("Error forwarding stats: {e}");
+                error!("Error forwarding stats: {e}");
             }
             buffer.fill(0);
         }

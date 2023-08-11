@@ -17,6 +17,8 @@ use crate::error::{self, Error};
 
 use connection::Connection;
 
+use log::error;
+
 #[derive(Clone)]
 pub struct ConfigClient {}
 
@@ -68,7 +70,7 @@ impl ConfigClient {
         let (mut request_sender, connection) = self.get_conn().await?;
         tokio::spawn(async move {
             if let Err(e) = connection.await {
-                eprintln!("Error with connection to config server in control plane: {e}");
+                error!("Error with connection to config server in control plane: {e}");
             }
         });
 
@@ -115,7 +117,7 @@ impl ConfigClient {
         if response.status() == StatusCode::OK {
             Ok(())
         } else {
-            println!(
+            error!(
                 "Error in post_trx_logs request to control plane: {}",
                 response.status()
             );
@@ -135,7 +137,7 @@ impl ConfigClient {
             let result: GetObjectResponse = self.parse_response(response).await?;
             Ok(result)
         } else {
-            println!(
+            error!(
                 "Error from get object request to control plane. Key: {}, Response Code{}",
                 key,
                 response.status()
@@ -155,7 +157,7 @@ impl ConfigClient {
         if response.status() == StatusCode::OK {
             Ok(())
         } else {
-            println!(
+            error!(
                 "Error sending put object request to control plane. Key: {}, Response Code{}",
                 key,
                 response.status()
@@ -177,7 +179,7 @@ impl ConfigClient {
         if response.status() == StatusCode::OK {
             Ok(())
         } else {
-            println!(
+            error!(
                 "Error sending delete object request to control plane. Key: {}, Response Code{}",
                 key,
                 response.status()

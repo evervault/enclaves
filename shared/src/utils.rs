@@ -38,7 +38,7 @@ impl<'a> std::convert::From<&'a [u8]> for HexSlice<'a> {
 macro_rules! print_version {
     ($label:tt) => {
         if let Ok(version) = std::env::var("CARGO_PKG_VERSION") {
-            println!("{} Version: {}", $label, version);
+            log::info!("{} Version: {}", $label, version);
         }
     };
 }

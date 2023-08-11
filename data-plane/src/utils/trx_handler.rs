@@ -4,6 +4,8 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use shared::logging::TrxContext;
 use tokio::time::sleep;
 
+use log::{debug,warn};
+
 use crate::config_client::ConfigClient;
 
 enum LogHandlerMessageType {
@@ -56,9 +58,7 @@ impl LogHandlerBuffer {
     // Removes logs from the buffer and sends them to the control plane
     pub async fn send_logs(&mut self) {
         let trx_logs: Vec<TrxContext> = self.buffer.drain(..).collect();
-        if let Err(err) = self.config_client.post_trx_logs(trx_logs).await {
-            println!("Failed to ship trx logs to control plane. {err:?}");
-        };
+        let _ = self.config_client.post_trx_logs(trx_logs).await;
     }
 }
 
@@ -77,7 +77,7 @@ pub async fn start_log_handler(
             LogHandlerMessageType::TickMsg => {
                 let current_size = buffer.get_size();
                 if current_size > 0 {
-                    println!("{current_size:?} logs in the buffer. Sending to control plane");
+                    debug!("{current_size:?} logs in the buffer. Sending to control plane");
                     buffer.send_logs().await;
                 };
                 //No logs in the buffer. No op.
@@ -106,7 +106,7 @@ fn start_log_timer(tx: UnboundedSender<LogHandlerMessage>) {
 
             //Send tick message to handler
             if let Err(err) = tx.send(LogHandlerMessage::new_tick_message()) {
-                println!("Failed sending trx tick message to trx handler. {err}")
+                warn!("Failed sending trx tick message to trx handler. {err}")
             }
         }
     });

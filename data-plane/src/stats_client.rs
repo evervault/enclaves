@@ -4,6 +4,7 @@ use cadence_macros::{set_global_default, statsd_count, statsd_gauge};
 use shared::stats::StatsError;
 use shared::{publish_count, publish_gauge, ENCLAVE_STATSD_PORT};
 use std::net::UdpSocket;
+use log::{error, warn};
 
 use crate::CageContext;
 
@@ -12,7 +13,7 @@ pub struct StatsClient;
 impl StatsClient {
     pub fn init() {
         if let Err(e) = Self::initialize_sink() {
-            println!("Couldn't init statsd client: {e}");
+            error!("Couldn't init statsd client: {e}");
         }
     }
 
@@ -39,7 +40,7 @@ impl StatsClient {
 
     pub fn record_system_metrics() {
         if let Err(e) = Self::try_record_system_metrics() {
-            println!("Couldn't get system metrics: {e}");
+            warn!("Couldn't get system metrics: {e}");
         }
     }
 
