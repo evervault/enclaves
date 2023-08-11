@@ -80,7 +80,7 @@ impl E3Proxy {
                 };
 
                 if let Err(e) = shared::utils::pipe_streams(connection, e3_stream).await {
-                    log::warn!("Error streaming from Data Plane to e3 ({e3_ip})— {e:?}");
+                    log::debug!("Error streaming from Data Plane to e3 ({e3_ip})— {e:?}");
                 }
             });
         }

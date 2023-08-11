@@ -1,11 +1,25 @@
 use tokio::io::{AsyncRead, AsyncWrite};
 
-pub async fn pipe_streams<T1, T2>(mut src: T1, mut dest: T2) -> Result<(u64, u64), tokio::io::Error>
+fn is_low_signal_error(err: &tokio::io::Error) -> bool {
+    let err_kind = err.kind();
+    matches!(err_kind, tokio::io::ErrorKind::NotConnected)
+        || matches!(err_kind, tokio::io::ErrorKind::ConnectionReset)
+        || matches!(err_kind, tokio::io::ErrorKind::BrokenPipe)
+}
+
+pub async fn pipe_streams<T1, T2>(
+    mut src: T1,
+    mut dest: T2,
+) -> Result<Option<(u64, u64)>, tokio::io::Error>
 where
     T1: AsyncRead + AsyncWrite + Unpin,
     T2: AsyncRead + AsyncWrite + Unpin,
 {
-    tokio::io::copy_bidirectional(&mut src, &mut dest).await
+    match tokio::io::copy_bidirectional(&mut src, &mut dest).await {
+        Ok(bytes_written) => Ok(Some(bytes_written)),
+        Err(e) if is_low_signal_error(&e) => Ok(None),
+        Err(e) => Err(e),
+    }
 }
 
 pub struct HexSlice<'a>(&'a [u8]);

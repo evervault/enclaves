@@ -240,7 +240,7 @@ async fn strip_proxy_protocol_and_pipe<
 >(
     connection: T1,
     enclave_stream: T2,
-) -> ServerResult<(u64, u64)> {
+) -> ServerResult<Option<(u64, u64)>> {
     let parsed_connection =
         shared::server::proxy_protocol::try_parse_proxy_protocol(connection).await?;
     let pipe_result = pipe_streams(parsed_connection, enclave_stream).await?;
