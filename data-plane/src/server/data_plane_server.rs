@@ -371,6 +371,7 @@ async fn auth_request(
                     }
                 }
                 Err(ClientError::FailedRequest(status)) if status.as_u16() == 401 => {
+                    info!("Failed to authenticate request using provided API Key");
                     let response: Response<Body> = AuthError::FailedToAuthenticateApiKey.into();
                     Some(response)
                 }
