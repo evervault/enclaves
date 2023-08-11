@@ -3,8 +3,6 @@ use shared::server::Listener;
 use shared::server::CID::Enclave;
 use shared::{print_version, server::get_vsock_server_with_proxy_protocol};
 
-#[cfg(not(feature = "tls_termination"))]
-use data_plane::configuration;
 #[cfg(feature = "network_egress")]
 use data_plane::dns::egressproxy::EgressProxy;
 #[cfg(feature = "network_egress")]
@@ -112,14 +110,15 @@ async fn start_data_plane(data_plane_port: u16) {
 }
 
 #[cfg(not(feature = "tls_termination"))]
-use shared::server::proxy_protocol::ProxiedConnection;
-#[cfg(not(feature = "tls_termination"))]
 async fn run_tcp_passthrough<L: Listener>(mut server: L, port: u16)
 where
     <L as Listener>::Connection: ProxiedConnection + 'static,
 {
+    use log::warn;
+    use shared::server::proxy_protocol::ProxiedConnection;
     use shared::utils::pipe_streams;
     use tokio::io::AsyncWriteExt;
+
     info!("TLS Termination disabled, piping TCP streams directly to user process");
     let should_forward_proxy_protocol = FeatureContext::get().forward_proxy_protocol;
 
