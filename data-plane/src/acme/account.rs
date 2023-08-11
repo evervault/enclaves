@@ -147,7 +147,9 @@ impl<T: AcmeClientInterface + Default> AccountBuilder<T> {
 
         let account_id = headers
             .get(hyper::header::LOCATION)
-            .ok_or(AcmeError::General(String::from("No location header in newAccount request")))?
+            .ok_or(AcmeError::General(String::from(
+                "No location header in newAccount request",
+            )))?
             .to_str()?
             .to_string();
 
