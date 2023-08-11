@@ -51,7 +51,7 @@ impl EgressProxy {
     async fn handle_connection<T: AsyncReadExt + AsyncWriteExt + Unpin>(
         mut external_stream: T,
         egress_domains: EgressDomains,
-    ) -> Result<(u64, u64)> {
+    ) -> Result<Option<(u64, u64)>> {
         log::debug!("Received request to egress proxy");
         let mut request_buffer = [0; 4096];
         let packet_size = external_stream.read(&mut request_buffer).await?;
