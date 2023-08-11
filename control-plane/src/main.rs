@@ -29,6 +29,7 @@ const PROXY_PROTOCOL_MIN_VERSION: semver::Version = semver::Version::new(0, 0, 3
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    shared::logging::init_env_logger();
     print_version!("Control Plane");
     log::info!("Starting control plane on {CONTROL_PLANE_PORT}");
     let e3_proxy = e3proxy::E3Proxy::new();

@@ -26,6 +26,7 @@ ppp = { version = "2.2.0" }
 tokio-rustls = { version = "0.23.4", features = ["dangerous_configuration"] }
 sys-info = "0.9.1"
 cadence = "0.29.0"
+env_logger = "0.10.0"
 
 [dev-dependencies]
 tokio-test = "0.4.2"

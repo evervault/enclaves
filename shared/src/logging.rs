@@ -421,6 +421,13 @@ impl std::fmt::Display for StatusGroup {
     }
 }
 
+use env_logger::Env;
+pub fn init_env_logger() {
+    let env = Env::default().filter_or("EV_CAGE_LOG", "info");
+
+    env_logger::init_from_env(env);
+}
+
 #[cfg(test)]
 mod test {
     use super::is_trusted_header;

@@ -20,7 +20,7 @@ use log::{error, info};
 
 #[tokio::main]
 async fn main() {
-    env_logger::init();
+    shared::logging::init_env_logger();
     info!("Data plane running.");
     print_version!("Data Plane");
 
