@@ -22,6 +22,8 @@ pub enum AcmeError {
     OpenSSLError(#[from] openssl::error::ErrorStack),
     #[error("Base64 Decode Error — {0:?}")]
     Base64DecodeError(#[from] base64::DecodeError),
+    #[error("Error interpretting utf8 sequence — {0:?}")]
+    Utf8Error(#[from] std::str::Utf8Error),
     #[error("ACME Error {0:?}")]
     General(String),
 }

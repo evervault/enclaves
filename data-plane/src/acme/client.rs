@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::acme::error::AcmeError;
+use crate::configuration;
 use async_trait::async_trait;
 use hyper::client::conn::{Connection as HyperConnection, SendRequest};
 
@@ -22,9 +23,17 @@ pub struct AcmeClient {
     port: u16,
 }
 
+impl Default for AcmeClient {
+    fn default() -> Self {
+        let server_name = ServerName::try_from(configuration::get_acme_host().as_str())
+            .expect("Hardcoded hostname");
+
+        Self::new(server_name)
+    }
+}
+
 impl AcmeClient {
-    #[allow(unused)]
-    fn new(server_name: ServerName) -> Self {
+    pub fn new(server_name: ServerName) -> Self {
         let mut root_cert_store = RootCertStore::empty();
 
         root_cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(
