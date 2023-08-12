@@ -52,9 +52,7 @@ impl S3Client {
 
 #[async_trait]
 impl StorageClientInterface for S3Client {
-    async fn get_object(&self, key: String) -> Result<Option<String>, StorageClientError> {
-        println!("Gettting object at s3://{}/{}", self.bucket, key);
-    
+    async fn get_object(&self, key: String) -> Result<Option<String>, StorageClientError> {    
         let object_res = self
             .client
             .get_object()
