@@ -12,6 +12,12 @@ const CHALLENGE_PATH: &str = "/www/.well-known/acme-challenge/:token";
 
 pub struct AcmeServer {}
 
+impl Default for AcmeServer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[allow(unused)]
 impl AcmeServer {
     pub fn new() -> Self {
@@ -21,7 +27,7 @@ impl AcmeServer {
     pub async fn run_server<T: StorageClientInterface + Send + Sync + Clone + 'static>(
         &self,
         storage_client: T,
-    ) -> Result<()>{
+    ) -> Result<()> {
         let cage_context = configuration::CageContext::from_env_vars();
         let app = Router::new().route(
             CHALLENGE_PATH,

@@ -6,7 +6,8 @@ use s3::{
     operation::{
         delete_object::DeleteObjectError, get_object::GetObjectError, put_object::PutObjectError,
     },
-    primitives::ByteStream, Client,
+    primitives::ByteStream,
+    Client,
 };
 use thiserror::Error;
 
@@ -52,7 +53,7 @@ impl S3Client {
 
 #[async_trait]
 impl StorageClientInterface for S3Client {
-    async fn get_object(&self, key: String) -> Result<Option<String>, StorageClientError> {    
+    async fn get_object(&self, key: String) -> Result<Option<String>, StorageClientError> {
         let object_res = self
             .client
             .get_object()
@@ -67,8 +68,8 @@ impl StorageClientInterface for S3Client {
                 GetObjectError::NoSuchKey(_) => return Ok(None),
                 err => {
                     println!("Error getting object: {:?}", err);
-                    return Err(StorageClientError::GetObject(err.to_string()))
-                },
+                    return Err(StorageClientError::GetObject(err.to_string()));
+                }
             },
         };
 
