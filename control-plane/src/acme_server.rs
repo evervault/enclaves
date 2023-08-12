@@ -6,10 +6,11 @@ use hyper::Body;
 
 use crate::clients::storage::StorageClientInterface;
 use crate::configuration;
+use crate::error::Result;
 
 const CHALLENGE_PATH: &str = "/www/.well-known/acme-challenge/:token";
 
-struct AcmeServer {}
+pub struct AcmeServer {}
 
 #[allow(unused)]
 impl AcmeServer {
@@ -20,7 +21,7 @@ impl AcmeServer {
     pub async fn run_server<T: StorageClientInterface + Send + Sync + Clone + 'static>(
         &self,
         storage_client: T,
-    ) {
+    ) -> Result<()>{
         let cage_context = configuration::CageContext::from_env_vars();
         let app = Router::new().route(
             CHALLENGE_PATH,
@@ -33,8 +34,8 @@ impl AcmeServer {
                 .expect("Infallible - hardcoded address"),
         )
         .serve(app.into_make_service())
-        .await
-        .unwrap();
+        .await?;
+        Ok(())
     }
 }
 
@@ -43,6 +44,7 @@ async fn handle_get_challenge<T: StorageClientInterface>(
     cage_context: configuration::CageContext,
     storage_client: T,
 ) -> Response<Body> {
+    println!("Received request for token: {}", token);
     let namespace = cage_context.get_namespace_string();
     let file_path = format!("{}/www/.well-known/acme-challenge/{}", namespace, token);
     get_challenge(file_path, storage_client).await
