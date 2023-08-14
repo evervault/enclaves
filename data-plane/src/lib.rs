@@ -4,6 +4,7 @@ use configuration::should_forward_proxy_protocol;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 
+pub mod acme;
 pub mod base_tls_client;
 pub mod cache;
 pub mod cert_provisioner_client;
