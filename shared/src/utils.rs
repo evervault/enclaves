@@ -3,10 +3,10 @@ use tokio::io::{AsyncRead, AsyncWrite};
 #[cfg(target_os = "macos")]
 // MacOS throws a NotConnected/ConnectionReset errors when piping over localhost sockets https://github.com/tokio-rs/tokio/issues/4674
 fn is_low_signal_error(err: &tokio::io::Error) -> bool {
-  let err_kind = err.kind();
-  matches!(err_kind, tokio::io::ErrorKind::ConnectionReset)
-      || matches!(err_kind, tokio::io::ErrorKind::BrokenPipe)
-      || matches!(err_kind, tokio::io::ErrorKind::NotConnected)
+    let err_kind = err.kind();
+    matches!(err_kind, tokio::io::ErrorKind::ConnectionReset)
+        || matches!(err_kind, tokio::io::ErrorKind::BrokenPipe)
+        || matches!(err_kind, tokio::io::ErrorKind::NotConnected)
 }
 
 #[cfg(not(target_os = "macos"))]
