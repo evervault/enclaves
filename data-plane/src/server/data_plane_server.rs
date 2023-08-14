@@ -97,11 +97,12 @@ where
                         });
                         let not_http = req.method.is_none();
                         if is_websocket || not_http {
-                            //TODO: send 401 response
                             if let Err(err) =
                                 auth_request_non_http(headers, e3_client_for_tcp.clone()).await
                             {
                                 error!("Failed to authenticate request — {err:?}");
+                                let unauth_resp = build_401_response().await;
+                                let _ = stream.write_all(&unauth_resp).await;
                                 shutdown_conn(&mut stream).await;
                                 break;
                             }
@@ -166,6 +167,14 @@ where
             }
         });
     }
+}
+
+async fn build_401_response() -> Vec<u8> {
+    let response = Response::builder()
+        .status(401)
+        .body(Body::empty())
+        .expect("infallible");
+    response_to_bytes(response).await
 }
 
 async fn auth_request_non_http(
