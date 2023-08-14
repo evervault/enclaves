@@ -16,7 +16,7 @@ pub enum AcmeError {
     HttpError(#[from] hyper::http::Error),
     #[error("No Nonce Found")]
     NoNonce,
-    #[error("Http Header Converion Error")]
+    #[error("Http Header Conversion Error")]
     HeaderConversionError(#[from] hyper::header::ToStrError),
     #[error("ACME Error {0:?}")]
     General(String),
