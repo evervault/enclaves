@@ -4,7 +4,7 @@ const WebSocket = require('ws');
 
 describe('Make websocket request', () => {
 
-    it('should start websocket session', async () => {
+    it('should start websocket session when authorised', async () => {
         const options = {
             rejectUnauthorized: false,
             headers: {
@@ -29,7 +29,7 @@ describe('Make websocket request', () => {
         
     })
 
-    it('should start websocket session', async () => {
+    it('should not start websocket session when not authorised', async () => {
         const options = {
             rejectUnauthorized: false
         };
