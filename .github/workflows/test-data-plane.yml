@@ -2,24 +2,11 @@ on:
   push:
     paths:
       - data-plane/**
-      - .github/workflows/lint-and-test-data-plane.yml
-name: Lint and Test Data Plane
+      - shared/**
+      - .github/workflows/test-data-plane.yml
+name: Test Data Plane
 jobs:
-  lint_data_plane:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          components: rustfmt
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: "standard-cache"
-      - name: Format project
-        run: cargo fmt --check
   check_data_plane:
-    needs: [lint_data_plane]
     strategy:
       matrix:
         feature-flags:
@@ -46,7 +33,7 @@ jobs:
         run: cargo check -p data-plane --no-default-features --features ${{ matrix.feature-flags }}
 
   test_data_plane:
-    needs: [lint_data_plane, check_data_plane]
+    needs: [check_data_plane]
     strategy:
       matrix:
         feature-flags:
