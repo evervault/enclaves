@@ -146,8 +146,8 @@ where
         log_non_http_trx(tx_sender, false)?;
         return Err(Error::NonHttpAuthError);
     };
-    log_non_http_trx(tx_sender, true)?;
-    pipe_to_customer_process(stream, buffer, port).await
+    pipe_to_customer_process(stream, buffer, port).await?;
+    log_non_http_trx(tx_sender, true)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -173,15 +173,15 @@ where
     if is_websocket || not_http {
         match auth_request_non_http(headers, e3_client.clone()).await {
             Ok(_) => {
-                log_non_http_trx(tx_sender, true)?;
                 pipe_to_customer_process(stream, buffer, port).await?;
+                log_non_http_trx(tx_sender, false)?;
                 Ok(())
             }
             Err(_) => {
-                log_non_http_trx(tx_sender, false)?;
                 let unauth_resp = build_401_response().await;
                 stream.write_all(&unauth_resp).await?;
                 shutdown_conn(stream).await;
+                log_non_http_trx(tx_sender, false)?;
                 Ok(())
             }
         }
@@ -206,6 +206,8 @@ fn log_non_http_trx(tx_sender: UnboundedSender<LogHandlerMessage>, authorized: b
     let cage_context = CageContext::get()?;
     let feature_context = FeatureContext::get();
     let mut context_builder = init_trx(&cage_context, &feature_context, None);
+    context_builder.uri(None);
+    context_builder.request_method(None);
     if !authorized {
         context_builder.add_status_and_group(401);
     }

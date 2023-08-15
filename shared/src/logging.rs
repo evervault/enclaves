@@ -19,9 +19,9 @@ pub struct TrxContext {
     txid: String,
     ts: String,
     msg: String,
-    uri: String,
+    uri: Option<String>,
     r#type: String,
-    request_method: String,
+    request_method: Option<String>,
     #[builder(default)]
     remote_ip: Option<String>,
     #[builder(default)]
@@ -155,8 +155,8 @@ impl TrxContextBuilder {
     }
 
     pub fn add_req_to_trx_context(&mut self, req: &Request<Body>, trusted_headers: &[String]) {
-        self.uri(build_log_uri(req.uri()));
-        self.request_method(req.method().to_string());
+        self.uri(Some(build_log_uri(req.uri())));
+        self.request_method(Some(req.method().to_string()));
         self.add_headers_to_request(req.headers(), trusted_headers);
 
         //Pull out content type
