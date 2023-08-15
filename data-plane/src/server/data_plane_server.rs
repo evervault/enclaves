@@ -14,6 +14,7 @@ use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
 use bytes::Bytes;
 use futures::StreamExt;
 
+use crate::error::Error;
 use httparse::Status;
 use hyper::http::{self, request, HeaderName, HeaderValue};
 use hyper::{Body, HeaderMap, Request, Response};
@@ -88,75 +89,30 @@ where
 
                 match req.parse(&buffer) {
                     Ok(Status::Complete(body_offset)) => {
-                        let headers = &req.headers;
-                        let is_websocket = headers.iter().any(|header| {
-                            header.name.to_ascii_lowercase() == "upgrade"
-                                && header.value.to_ascii_lowercase() == "websocket".as_bytes()
-                        });
-                        let not_http = req.method.is_none();
-                        if is_websocket || not_http {
-                            if let Err(err) =
-                                auth_request_non_http(headers, e3_client_for_tcp.clone()).await
-                            {
-                                eprintln!("Failed to authenticate request — {err:?}");
-                                let unauth_resp = build_401_response().await;
-                                let _ = stream.write_all(&unauth_resp).await;
-                                shutdown_conn(&mut stream).await;
-                                break;
-                            }
-                            if let Err(err) =
-                                pipe_to_customer_process(&mut stream, &buffer, port).await
-                            {
-                                eprintln!("Failed piping WS stream to customer process — {err:?}");
-                                shutdown_conn(&mut stream).await;
-                                break;
-                            }
-                        } else {
-                            let request: Request<Body> =
-                                match build_http_request(req, &buffer[body_offset..], port) {
-                                    Ok(request) => request,
-                                    Err(e) => {
-                                        eprintln!("Connection read error - {e:?}");
-                                        shutdown_conn(&mut stream).await;
-                                        break;
-                                    }
-                                };
-                            match handle_http_request(
-                                request,
-                                e3_client_for_tcp.clone(),
-                                tx_for_tcp.clone(),
-                                remote_ip.clone(),
-                                port,
-                            )
-                            .await
-                            {
-                                Ok(res) => {
-                                    let response_bytes = response_to_bytes(res).await;
-                                    let _ = stream.write_all(&response_bytes).await;
-                                    shutdown_conn(&mut stream).await;
-                                    break;
-                                }
-                                Err(err) => {
-                                    eprintln!(
-                                        "Failed sending HTTP request to customer process — {err:?}"
-                                    );
-                                    shutdown_conn(&mut stream).await;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    Ok(Status::Partial) => continue,
-                    Err(_) => {
-                        // We need to figure out a better auth mechanism for other protocols
-                        if feature_context.api_key_auth {
+                        if let Err(err) = handle_full_parsed_http_request(
+                            req,
+                            port,
+                            remote_ip.clone(),
+                            tx_for_tcp.clone(),
+                            e3_client_for_tcp.clone(),
+                            body_offset,
+                            &buffer,
+                            &mut stream,
+                        )
+                        .await
+                        {
                             eprintln!(
-                                "API key auth needs to be turned off for non HTTPS/WS streams"
+                                "Failed piping HTTP or WS stream to customer process — {err:?}"
                             );
                             shutdown_conn(&mut stream).await;
                             break;
                         }
-                        if let Err(err) = pipe_to_customer_process(&mut stream, &buffer, port).await
+                    }
+                    Ok(Status::Partial) => continue,
+                    Err(_) => {
+                        if let Err(err) =
+                            handle_non_http_request(feature_context, &mut stream, &buffer, port)
+                                .await
                         {
                             eprintln!(
                                 "Failed piping non HTTP/WS stream to customer process — {err:?}"
@@ -168,6 +124,66 @@ where
                 }
             }
         });
+    }
+}
+
+async fn handle_non_http_request<L>(
+    feature_context: &FeatureContext,
+    stream: &mut TlsStream<L>,
+    buffer: &[u8],
+    port: u16,
+) -> Result<()>
+where
+    TlsStream<L>: AsyncReadExt + Unpin + AsyncWrite,
+{
+    if feature_context.api_key_auth {
+        return Err(Error::NonHttpAuthError);
+    };
+    pipe_to_customer_process(stream, buffer, port).await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn handle_full_parsed_http_request<L>(
+    req: httparse::Request<'_, '_>,
+    port: u16,
+    remote_ip: Option<String>,
+    tx_sender: UnboundedSender<LogHandlerMessage>,
+    e3_client: Arc<E3Client>,
+    body_offset: usize,
+    buffer: &[u8],
+    stream: &mut TlsStream<L>,
+) -> Result<()>
+where
+    TlsStream<L>: AsyncReadExt + AsyncWriteExt + Unpin,
+{
+    let headers = &req.headers;
+    let is_websocket = headers.iter().any(|header| {
+        header.name.to_ascii_lowercase() == "upgrade"
+            && header.value.to_ascii_lowercase() == "websocket".as_bytes()
+    });
+    let not_http = req.method.is_none();
+    if is_websocket || not_http {
+        match auth_request_non_http(headers, e3_client.clone()).await {
+            Ok(_) => pipe_to_customer_process(stream, buffer, port).await,
+            Err(_) => {
+                let unauth_resp = build_401_response().await;
+                stream.write_all(&unauth_resp).await?;
+                Ok(())
+            }
+        }
+    } else {
+        let request: Request<Body> = build_http_request(req, &buffer[body_offset..], port)?;
+        let response = handle_http_request(
+            request,
+            e3_client.clone(),
+            tx_sender.clone(),
+            remote_ip.clone(),
+            port,
+        )
+        .await?;
+        let response_bytes = response_to_bytes(response).await;
+        stream.write_all(&response_bytes).await?;
+        Ok(())
     }
 }
 

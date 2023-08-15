@@ -65,6 +65,8 @@ pub enum Error {
     MissingApiKey,
     #[error("Api key is invalid")]
     ApiKeyInvalid,
+    #[error("API key auth must be switched off for non http requests")]
+    NonHttpAuthError,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
