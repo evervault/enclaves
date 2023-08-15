@@ -168,6 +168,7 @@ where
             Err(_) => {
                 let unauth_resp = build_401_response().await;
                 stream.write_all(&unauth_resp).await?;
+                shutdown_conn(stream).await;
                 Ok(())
             }
         }
@@ -183,6 +184,7 @@ where
         .await?;
         let response_bytes = response_to_bytes(response).await;
         stream.write_all(&response_bytes).await?;
+        shutdown_conn(stream).await;
         Ok(())
     }
 }
