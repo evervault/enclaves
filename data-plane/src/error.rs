@@ -1,5 +1,5 @@
 use hyper::header::{InvalidHeaderName, InvalidHeaderValue};
-use shared::server::error::ServerError;
+use shared::{logging::TrxContextBuilderError, server::error::ServerError};
 use thiserror::Error;
 
 use crate::{base_tls_client::ClientError, env::EnvError, CageContextError};
@@ -67,6 +67,8 @@ pub enum Error {
     ApiKeyInvalid,
     #[error("API key auth must be switched off for non http requests")]
     NonHttpAuthError,
+    #[error("trx context builder error = {0}")]
+    TrxContextBuilderError(#[from] TrxContextBuilderError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -110,9 +110,14 @@ where
                     }
                     Ok(Status::Partial) => continue,
                     Err(_) => {
-                        if let Err(err) =
-                            handle_non_http_request(feature_context, &mut stream, &buffer, port)
-                                .await
+                        if let Err(err) = handle_non_http_request(
+                            feature_context,
+                            &mut stream,
+                            &buffer,
+                            port,
+                            tx_for_tcp.clone(),
+                        )
+                        .await
                         {
                             eprintln!(
                                 "Failed piping non HTTP/WS stream to customer process — {err:?}"
@@ -132,13 +137,16 @@ async fn handle_non_http_request<L>(
     stream: &mut TlsStream<L>,
     buffer: &[u8],
     port: u16,
+    tx_sender: UnboundedSender<LogHandlerMessage>,
 ) -> Result<()>
 where
     TlsStream<L>: AsyncReadExt + Unpin + AsyncWrite,
 {
     if feature_context.api_key_auth {
+        log_non_http_trx(tx_sender, false)?;
         return Err(Error::NonHttpAuthError);
     };
+    log_non_http_trx(tx_sender, true)?;
     pipe_to_customer_process(stream, buffer, port).await
 }
 
@@ -164,8 +172,13 @@ where
     let not_http = req.method.is_none();
     if is_websocket || not_http {
         match auth_request_non_http(headers, e3_client.clone()).await {
-            Ok(_) => pipe_to_customer_process(stream, buffer, port).await,
+            Ok(_) => {
+                log_non_http_trx(tx_sender, true)?;
+                pipe_to_customer_process(stream, buffer, port).await?;
+                Ok(())
+            }
             Err(_) => {
+                log_non_http_trx(tx_sender, false)?;
                 let unauth_resp = build_401_response().await;
                 stream.write_all(&unauth_resp).await?;
                 shutdown_conn(stream).await;
@@ -187,6 +200,20 @@ where
         shutdown_conn(stream).await;
         Ok(())
     }
+}
+
+fn log_non_http_trx(tx_sender: UnboundedSender<LogHandlerMessage>, authorized: bool) -> Result<()> {
+    let cage_context = CageContext::get()?;
+    let feature_context = FeatureContext::get();
+    let mut context_builder = init_trx(&cage_context, &feature_context, None);
+    if !authorized {
+        context_builder.add_status_and_group(401);
+    }
+    let trx_context = context_builder.build()?;
+    if let Err(e) = tx_sender.send(LogHandlerMessage::new_log_message(trx_context)) {
+        println!("Failed to send transaction context to log handler. err: {e}");
+    }
+    Ok(())
 }
 
 async fn build_401_response() -> Vec<u8> {
@@ -305,7 +332,7 @@ async fn handle_http_request(
     let tx_for_req = tx_for_tcp.clone();
     let remote_ip = remote_ip.clone();
     let request_timer = TrxContextBuilder::get_timer();
-    let mut trx_context = init_trx(&cage_context, &feature_context, &req);
+    let mut trx_context = init_trx(&cage_context, &feature_context, Some(&req));
     let trx_id = trx_context.get_trx_id();
     if remote_ip.is_some() {
         trx_context.remote_ip(remote_ip.clone());
@@ -583,7 +610,7 @@ async fn extract_ciphertexts_from_payload(
 fn init_trx(
     cage_context: &CageContext,
     feature_context: &FeatureContext,
-    req: &Request<Body>,
+    request: Option<&Request<Body>>,
 ) -> TrxContextBuilder {
     let mut trx_ctx = TrxContextBuilder::init_trx_context_with_cage_details(
         &cage_context.cage_uuid,
@@ -591,7 +618,9 @@ fn init_trx(
         &cage_context.app_uuid,
         &cage_context.team_uuid,
     );
-    trx_ctx.add_req_to_trx_context(req, &feature_context.trusted_headers);
+    if let Some(req) = request {
+        trx_ctx.add_req_to_trx_context(req, &feature_context.trusted_headers)
+    };
     trx_ctx
 }
 
