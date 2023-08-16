@@ -12,6 +12,7 @@ use hyper::{
 
 use rand::{thread_rng, Rng};
 
+
 #[allow(dead_code)]
 #[derive(Serialize, Deserialize, Clone, Debug, Builder)]
 #[serde(rename_all = "camelCase")]
@@ -186,6 +187,29 @@ impl TrxContextBuilder {
                 .to_str()
                 .expect("Infallible - Failed to convert HeaderValue of ContentType to String");
             self.response_content_type(Some(content_type_str.into()));
+        }
+    }
+
+    fn format_headers(headers: &[httparse::Header<'_>]) -> Option<String> {
+        let mut map = Map::new();
+        let _ = headers
+            .iter()
+            .map(|header| map.insert(header.name.to_string(), header.value.into()));
+        serde_json::to_string(&map).ok()
+    }
+
+    pub fn add_httparse_to_trx(
+        &mut self,
+        authorized: bool,
+        request: Option<httparse::Request<'_, '_>>,
+    ) {
+        if let Some(req) = request {
+            self.uri(req.path.map(|s| s.to_string()));
+            self.request_method(req.method.map(|s| s.to_string()));
+            self.request_headers(Self::format_headers(req.headers));
+        };
+        if !authorized {
+            self.add_status_and_group(401);
         }
     }
 

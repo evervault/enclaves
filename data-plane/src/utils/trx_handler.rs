@@ -56,6 +56,7 @@ impl LogHandlerBuffer {
     // Removes logs from the buffer and sends them to the control plane
     pub async fn send_logs(&mut self) {
         let trx_logs: Vec<TrxContext> = self.buffer.drain(..).collect();
+        println!("LOGSSS:::: {:?}", trx_logs);
         if let Err(err) = self.config_client.post_trx_logs(trx_logs).await {
             println!("Failed to ship trx logs to control plane. {err:?}");
         };

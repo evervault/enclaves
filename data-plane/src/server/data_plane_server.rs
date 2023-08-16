@@ -143,11 +143,11 @@ where
     TlsStream<L>: AsyncReadExt + Unpin + AsyncWrite,
 {
     if feature_context.api_key_auth {
-        log_non_http_trx(tx_sender, false)?;
+        log_non_http_trx(tx_sender, false, None);
         return Err(Error::NonHttpAuthError);
     };
-    pipe_to_customer_process(stream, buffer, port).await?;
-    log_non_http_trx(tx_sender, true)
+    log_non_http_trx(tx_sender, true, None);
+    pipe_to_customer_process(stream, buffer, port).await
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -173,15 +173,15 @@ where
     if is_websocket || not_http {
         match auth_request_non_http(headers, e3_client.clone()).await {
             Ok(_) => {
+                log_non_http_trx(tx_sender, true, Some(req));
                 pipe_to_customer_process(stream, buffer, port).await?;
-                log_non_http_trx(tx_sender, false)?;
                 Ok(())
             }
             Err(_) => {
+                log_non_http_trx(tx_sender, true, Some(req));
                 let unauth_resp = build_401_response().await;
                 stream.write_all(&unauth_resp).await?;
                 shutdown_conn(stream).await;
-                log_non_http_trx(tx_sender, false)?;
                 Ok(())
             }
         }
@@ -202,20 +202,29 @@ where
     }
 }
 
-fn log_non_http_trx(tx_sender: UnboundedSender<LogHandlerMessage>, authorized: bool) -> Result<()> {
+fn log_non_http_trx(
+    tx_sender: UnboundedSender<LogHandlerMessage>,
+    authorized: bool,
+    req: Option<httparse::Request<'_, '_>>,
+) {
+    if let Err(e) = try_log_non_http_trx(tx_sender, authorized, req) {
+        println!("Failed to send transaction context to log handler. err: {e}");
+    };
+}
+
+fn try_log_non_http_trx(
+    tx_sender: UnboundedSender<LogHandlerMessage>,
+    authorized: bool,
+    request: Option<httparse::Request<'_, '_>>,
+) -> Result<()> {
     let cage_context = CageContext::get()?;
     let feature_context = FeatureContext::get();
     let mut context_builder = init_trx(&cage_context, &feature_context, None);
-    context_builder.uri(None);
-    context_builder.request_method(None);
-    if !authorized {
-        context_builder.add_status_and_group(401);
-    }
+    context_builder.add_httparse_to_trx(authorized, request);
     let trx_context = context_builder.build()?;
-    if let Err(e) = tx_sender.send(LogHandlerMessage::new_log_message(trx_context)) {
-        println!("Failed to send transaction context to log handler. err: {e}");
-    }
-    Ok(())
+    tx_sender
+        .send(LogHandlerMessage::new_log_message(trx_context))
+        .map_err(|e| Error::FailedToSendTrxLog(e.to_string()))
 }
 
 async fn build_401_response() -> Vec<u8> {

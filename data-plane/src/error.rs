@@ -69,6 +69,8 @@ pub enum Error {
     NonHttpAuthError,
     #[error("trx context builder error = {0}")]
     TrxContextBuilderError(#[from] TrxContextBuilderError),
+    #[error("Failed to send trx log= {0}")]
+    FailedToSendTrxLog(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

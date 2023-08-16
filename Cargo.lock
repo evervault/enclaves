@@ -2360,6 +2360,7 @@ dependencies = [
  "cadence",
  "chrono",
  "derive_builder",
+ "httparse",
  "hyper",
  "lazy_static",
  "ppp",
