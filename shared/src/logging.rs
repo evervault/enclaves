@@ -12,7 +12,6 @@ use hyper::{
 
 use rand::{thread_rng, Rng};
 
-
 #[allow(dead_code)]
 #[derive(Serialize, Deserialize, Clone, Debug, Builder)]
 #[serde(rename_all = "camelCase")]
@@ -47,6 +46,7 @@ pub struct TrxContext {
     response_content_type: Option<String>,
     #[builder(default)]
     elapsed: Option<f64>,
+    request_type: String,
 }
 
 impl TrxContext {
@@ -87,8 +87,24 @@ impl std::fmt::Display for TrxContextId {
     }
 }
 
+pub enum RequestType {
+    HTTP,
+    Websocket,
+    TCP,
+}
+
+impl From<RequestType> for String {
+    fn from(val: RequestType) -> String {
+        match val {
+            RequestType::HTTP => "HTTP".to_string(),
+            RequestType::TCP => "TCP".to_string(),
+            RequestType::Websocket => "Websocket".to_string(),
+        }
+    }
+}
+
 impl TrxContextBuilder {
-    fn new() -> TrxContextBuilder {
+    fn new(request_type: RequestType) -> TrxContextBuilder {
         let timestamp = get_iso_timestamp();
         let trx_id = format!("{}", TrxContextId::new());
         let trx_type = "cage_trx".to_string();
@@ -113,6 +129,7 @@ impl TrxContextBuilder {
             response_content_type: None,
             elapsed: None,
             remote_ip: None,
+            request_type: Some(request_type.into()),
         }
     }
 
@@ -134,8 +151,9 @@ impl TrxContextBuilder {
         cage_name: &str,
         app_uuid: &str,
         team_uuid: &str,
+        request_type: RequestType,
     ) -> Self {
-        let mut trx_context = Self::new();
+        let mut trx_context = Self::new(request_type);
         trx_context.cage_uuid(cage_uuid.to_string());
         trx_context.cage_name(cage_name.to_string());
         trx_context.app_uuid(app_uuid.to_string());
@@ -192,16 +210,19 @@ impl TrxContextBuilder {
 
     fn format_headers(headers: &[httparse::Header<'_>]) -> Option<String> {
         let mut map = Map::new();
-        let _ = headers
-            .iter()
-            .map(|header| map.insert(header.name.to_string(), header.value.into()));
+        for header in headers {
+            map.insert(
+                header.name.to_string(),
+                std::str::from_utf8(header.value).ok().into(),
+            );
+        }
         serde_json::to_string(&map).ok()
     }
 
     pub fn add_httparse_to_trx(
         &mut self,
         authorized: bool,
-        request: Option<httparse::Request<'_, '_>>,
+        request: Option<httparse::Request<'_, '_>>
     ) {
         if let Some(req) = request {
             self.uri(req.path.map(|s| s.to_string()));
@@ -447,7 +468,23 @@ impl std::fmt::Display for StatusGroup {
 
 #[cfg(test)]
 mod test {
-    use super::is_trusted_header;
+    use super::{is_trusted_header, TrxContextBuilder, TrxContext};
+
+    #[test]
+    fn test_format_httparse_headers() {
+        let headers = vec![
+            httparse::Header {
+                name: "test",
+                value: "value".as_bytes(),
+            },
+            httparse::Header {
+                name: "anotherTest",
+                value: "value".as_bytes(),
+            },
+        ];
+        let result = TrxContextBuilder::format_headers(&headers).unwrap();
+        assert_eq!(result, "{\"anotherTest\":\"value\",\"test\":\"value\"}");
+    }
 
     #[test]
     fn test_trusted_headers_matching() {

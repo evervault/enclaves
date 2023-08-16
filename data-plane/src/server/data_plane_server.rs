@@ -19,7 +19,7 @@ use httparse::Status;
 use hyper::http::{self, request, HeaderName, HeaderValue};
 use hyper::{Body, HeaderMap, Request, Response};
 use sha2::Digest;
-use shared::logging::TrxContextBuilder;
+use shared::logging::{RequestType, TrxContextBuilder};
 use shared::server::proxy_protocol::ProxiedConnection;
 use shared::server::Listener;
 use shared::utils::pipe_streams;
@@ -207,7 +207,7 @@ fn log_non_http_trx(
     authorized: bool,
     req: Option<httparse::Request<'_, '_>>,
 ) {
-    if let Err(e) = try_log_non_http_trx(tx_sender, authorized, req) {
+    if let Err(e) = try_log_non_http_trx(tx_sender, authorized, req, RequestType::TCP) {
         println!("Failed to send transaction context to log handler. err: {e}");
     };
 }
@@ -216,10 +216,11 @@ fn try_log_non_http_trx(
     tx_sender: UnboundedSender<LogHandlerMessage>,
     authorized: bool,
     request: Option<httparse::Request<'_, '_>>,
+    request_type: RequestType,
 ) -> Result<()> {
     let cage_context = CageContext::get()?;
     let feature_context = FeatureContext::get();
-    let mut context_builder = init_trx(&cage_context, &feature_context, None);
+    let mut context_builder = init_trx(&cage_context, &feature_context, None, request_type);
     context_builder.add_httparse_to_trx(authorized, request);
     let trx_context = context_builder.build()?;
     tx_sender
@@ -343,7 +344,12 @@ async fn handle_http_request(
     let tx_for_req = tx_for_tcp.clone();
     let remote_ip = remote_ip.clone();
     let request_timer = TrxContextBuilder::get_timer();
-    let mut trx_context = init_trx(&cage_context, &feature_context, Some(&req));
+    let mut trx_context = init_trx(
+        &cage_context,
+        &feature_context,
+        Some(&req),
+        RequestType::HTTP,
+    );
     let trx_id = trx_context.get_trx_id();
     if remote_ip.is_some() {
         trx_context.remote_ip(remote_ip.clone());
@@ -622,12 +628,14 @@ fn init_trx(
     cage_context: &CageContext,
     feature_context: &FeatureContext,
     request: Option<&Request<Body>>,
+    request_type: RequestType,
 ) -> TrxContextBuilder {
     let mut trx_ctx = TrxContextBuilder::init_trx_context_with_cage_details(
         &cage_context.cage_uuid,
         &cage_context.cage_name,
         &cage_context.app_uuid,
         &cage_context.team_uuid,
+        request_type,
     );
     if let Some(req) = request {
         trx_ctx.add_req_to_trx_context(req, &feature_context.trusted_headers)
