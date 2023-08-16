@@ -13,7 +13,7 @@ use hyper::{
 use rand::{thread_rng, Rng};
 
 #[allow(dead_code)]
-#[derive(Serialize, Deserialize, Clone, Debug, Builder)]
+#[derive(Serialize, Deserialize, Clone, Debug, Builder, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct TrxContext {
     txid: String,
@@ -222,7 +222,8 @@ impl TrxContextBuilder {
     pub fn add_httparse_to_trx(
         &mut self,
         authorized: bool,
-        request: Option<httparse::Request<'_, '_>>
+        request: Option<httparse::Request<'_, '_>>,
+        remote_ip: Option<String>,
     ) {
         if let Some(req) = request {
             self.uri(req.path.map(|s| s.to_string()));
@@ -232,6 +233,7 @@ impl TrxContextBuilder {
         if !authorized {
             self.add_status_and_group(401);
         }
+        self.remote_ip(remote_ip);
     }
 
     fn add_headers_to_request(
@@ -468,11 +470,11 @@ impl std::fmt::Display for StatusGroup {
 
 #[cfg(test)]
 mod test {
-    use super::{is_trusted_header, TrxContextBuilder, TrxContext};
+    use super::{is_trusted_header, TrxContext, TrxContextBuilder};
 
     #[test]
-    fn test_format_httparse_headers() {
-        let headers = vec![
+    fn test_create_non_http_log() {
+        let mut headers = vec![
             httparse::Header {
                 name: "test",
                 value: "value".as_bytes(),
@@ -482,8 +484,45 @@ mod test {
                 value: "value".as_bytes(),
             },
         ];
-        let result = TrxContextBuilder::format_headers(&headers).unwrap();
-        assert_eq!(result, "{\"anotherTest\":\"value\",\"test\":\"value\"}");
+        let request = httparse::Request {
+            method: Some("GET"),
+            path: Some("/hello"),
+            version: None,
+            headers: &mut headers,
+        };
+
+        let mut trx = TrxContextBuilder::new(super::RequestType::Websocket);
+        trx.app_uuid("123".to_string());
+        trx.team_uuid("123".to_string());
+        trx.cage_uuid("123".to_string());
+        trx.cage_name("name".to_string());
+        trx.add_httparse_to_trx(true, Some(request), Some("1.1.1.1".to_string()));
+        let log = trx.build().unwrap();
+
+        let expected_log = TrxContext {
+            txid: trx.txid.unwrap(),
+            ts: trx.ts.unwrap(),
+            msg: "Cage Transaction Complete".to_owned(),
+            uri: Some("/hello".to_string()),
+            r#type: "cage_trx".to_string(),
+            request_method: Some("GET".to_string()),
+            remote_ip: Some("1.1.1.1".to_string()),
+            request_headers: Some("{\"anotherTest\":\"value\",\"test\":\"value\"}".to_string()),
+            user_agent: None,
+            response_headers: None,
+            response_code: None,
+            status_group: None,
+            cage_name: "name".to_string(),
+            cage_uuid: "123".to_string(),
+            app_uuid: "123".to_string(),
+            team_uuid: "123".to_string(),
+            n_decrypted_fields: None,
+            content_type: None,
+            response_content_type: None,
+            elapsed: None,
+            request_type: super::RequestType::Websocket.into(),
+        };
+        assert_eq!(log, expected_log);
     }
 
     #[test]

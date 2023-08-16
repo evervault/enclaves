@@ -116,6 +116,7 @@ where
                             &buffer,
                             port,
                             tx_for_tcp.clone(),
+                            remote_ip.clone(),
                         )
                         .await
                         {
@@ -138,15 +139,16 @@ async fn handle_non_http_request<L>(
     buffer: &[u8],
     port: u16,
     tx_sender: UnboundedSender<LogHandlerMessage>,
+    remote_ip: Option<String>,
 ) -> Result<()>
 where
     TlsStream<L>: AsyncReadExt + Unpin + AsyncWrite,
 {
     if feature_context.api_key_auth {
-        log_non_http_trx(tx_sender, false, None);
+        log_non_http_trx(tx_sender, false, None, remote_ip);
         return Err(Error::NonHttpAuthError);
     };
-    log_non_http_trx(tx_sender, true, None);
+    log_non_http_trx(tx_sender, true, None, remote_ip);
     pipe_to_customer_process(stream, buffer, port).await
 }
 
@@ -173,12 +175,12 @@ where
     if is_websocket || not_http {
         match auth_request_non_http(headers, e3_client.clone()).await {
             Ok(_) => {
-                log_non_http_trx(tx_sender, true, Some(req));
+                log_non_http_trx(tx_sender, true, Some(req), remote_ip);
                 pipe_to_customer_process(stream, buffer, port).await?;
                 Ok(())
             }
             Err(_) => {
-                log_non_http_trx(tx_sender, true, Some(req));
+                log_non_http_trx(tx_sender, true, Some(req), remote_ip);
                 let unauth_resp = build_401_response().await;
                 stream.write_all(&unauth_resp).await?;
                 shutdown_conn(stream).await;
@@ -206,8 +208,9 @@ fn log_non_http_trx(
     tx_sender: UnboundedSender<LogHandlerMessage>,
     authorized: bool,
     req: Option<httparse::Request<'_, '_>>,
+    remote_ip: Option<String>,
 ) {
-    if let Err(e) = try_log_non_http_trx(tx_sender, authorized, req, RequestType::TCP) {
+    if let Err(e) = try_log_non_http_trx(tx_sender, authorized, req, RequestType::TCP, remote_ip) {
         println!("Failed to send transaction context to log handler. err: {e}");
     };
 }
@@ -217,11 +220,12 @@ fn try_log_non_http_trx(
     authorized: bool,
     request: Option<httparse::Request<'_, '_>>,
     request_type: RequestType,
+    remote_ip: Option<String>,
 ) -> Result<()> {
     let cage_context = CageContext::get()?;
     let feature_context = FeatureContext::get();
     let mut context_builder = init_trx(&cage_context, &feature_context, None, request_type);
-    context_builder.add_httparse_to_trx(authorized, request);
+    context_builder.add_httparse_to_trx(authorized, request, remote_ip);
     let trx_context = context_builder.build()?;
     tx_sender
         .send(LogHandlerMessage::new_log_message(trx_context))
