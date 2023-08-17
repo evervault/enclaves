@@ -18,6 +18,10 @@ pub enum AcmeError {
     NoNonce,
     #[error("Http Header Conversion Error")]
     HeaderConversionError(#[from] hyper::header::ToStrError),
+    #[error("OpenSSL Error — {0:?}")]
+    OpenSSLError(#[from] openssl::error::ErrorStack),
+    #[error("Base64 Decode Error — {0:?}")]
+    Base64DecodeError(#[from] base64::DecodeError),
     #[error("ACME Error {0:?}")]
     General(String),
 }
