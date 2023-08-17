@@ -28,9 +28,9 @@ fn extract_ec_coordinates(
 ) -> Result<(String, String), AcmeError> {
     let group = key.group();
     let public_key = key.public_key();
-    let mut x = BigNum::new().unwrap();
-    let mut y = BigNum::new().unwrap();
-    let mut ctx = BigNumContext::new().unwrap();
+    let mut x = BigNum::new()?;
+    let mut y = BigNum::new()?;
+    let mut ctx = BigNumContext::new()?;
 
     public_key.affine_coordinates_gfp(group, &mut x, &mut y, &mut ctx)?;
 
