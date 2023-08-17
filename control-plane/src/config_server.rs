@@ -335,22 +335,11 @@ async fn parse_request<T: DeserializeOwned>(req: Request<Body>) -> ServerResult<
 
 #[cfg(test)]
 mod tests {
-    use crate::clients::storage::StorageClientError;
 
     use super::*;
-    use async_trait::async_trait;
-    use mockall::{mock, predicate::eq};
-
-    mock! {
-      #[derive(Debug)]
-      pub StorageClientInterface {}
-      #[async_trait]
-      impl StorageClientInterface for StorageClientInterface {
-          async fn get_object(&self, key: String) -> Result<Option<String>, StorageClientError>;
-          async fn put_object(&self, key: String, body: String) -> Result<(), StorageClientError>;
-          async fn delete_object(&self, key: String) -> Result<(), StorageClientError>;
-      }
-    }
+    use crate::clients::storage::StorageClientError;
+    use crate::mocks::storage_client_mock::MockStorageClientInterface;
+    use mockall::predicate::eq;
 
     fn get_cage_context() -> configuration::CageContext {
         configuration::CageContext::new(

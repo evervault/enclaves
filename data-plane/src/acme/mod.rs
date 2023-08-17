@@ -6,5 +6,4 @@ pub mod jws;
 
 //Later PR
 // pub mod account;
-#[cfg(test)]
 pub mod mocks;

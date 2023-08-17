@@ -1,9 +1,10 @@
 const { expect } = require('chai');
+const assert = require('assert');
 const WebSocket = require('ws');
 
 describe('Make websocket request', () => {
 
-    it('should output success exit code', async () => {
+    it('should start websocket session when authorised', async () => {
         const options = {
             rejectUnauthorized: false,
             headers: {
@@ -26,6 +27,29 @@ describe('Make websocket request', () => {
             socket.close()
         });
         
+    })
+
+    it('should not start websocket session when not authorised', async () => {
+        const options = {
+            rejectUnauthorized: false
+        };
+
+        const serverUrl = 'wss://localhost:443/hello';
+
+        const socket = new WebSocket(serverUrl, options);
+
+        socket.on('open', () => {
+            console.log('Connected to WebSocket server');
+            socket.send('test connection');
+        });
+
+        socket.on('error', (err) => {
+            expect(err.message).to.equal("Unexpected server response: 401");
+        });  
+
+        socket.on('message', (data) => {
+            assert.fail('Connection was sucessful, 401 expected');
+        });
     })
 
 });

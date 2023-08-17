@@ -167,9 +167,16 @@ impl FeatureContext {
     }
 
     fn read_dataplane_context() -> Option<FeatureContext> {
-        fs::read_to_string("/etc/dataplane-config.json")
+        let mut feature_context: FeatureContext = fs::read_to_string("/etc/dataplane-config.json")
             .ok()
-            .and_then(|contents| serde_json::from_str(&contents).ok())
+            .and_then(|contents| serde_json::from_str(&contents).ok())?;
+        // map trusted headers to lowercase
+        feature_context.trusted_headers = feature_context
+            .trusted_headers
+            .iter()
+            .map(|header| header.to_lowercase())
+            .collect();
+        Some(feature_context)
     }
 }
 

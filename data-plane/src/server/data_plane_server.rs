@@ -14,11 +14,12 @@ use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
 use bytes::Bytes;
 use futures::StreamExt;
 
+use crate::error::Error;
 use httparse::Status;
 use hyper::http::{self, request, HeaderName, HeaderValue};
 use hyper::{Body, HeaderMap, Request, Response};
 use sha2::Digest;
-use shared::logging::TrxContextBuilder;
+use shared::logging::{RequestType, TrxContextBuilder};
 use shared::server::proxy_protocol::ProxiedConnection;
 use shared::server::Listener;
 use shared::utils::pipe_streams;
@@ -88,74 +89,36 @@ where
 
                 match req.parse(&buffer) {
                     Ok(Status::Complete(body_offset)) => {
-                        let headers = &req.headers;
-                        let is_websocket = headers.iter().any(|header| {
-                            header.name.to_ascii_lowercase() == "upgrade"
-                                && header.value.to_ascii_lowercase() == "websocket".as_bytes()
-                        });
-                        let not_http = req.method.is_none();
-                        if is_websocket || not_http {
-                            //TODO: send 401 response
-                            if let Err(err) =
-                                auth_request_non_http(headers, e3_client_for_tcp.clone()).await
-                            {
-                                eprintln!("Failed to authenticate request — {err:?}");
-                                shutdown_conn(&mut stream).await;
-                                break;
-                            }
-                            if let Err(err) =
-                                pipe_to_customer_process(&mut stream, &buffer, port).await
-                            {
-                                eprintln!("Failed piping WS stream to customer process — {err:?}");
-                                shutdown_conn(&mut stream).await;
-                                break;
-                            }
-                        } else {
-                            let request: Request<Body> =
-                                match build_http_request(req, &buffer[body_offset..], port) {
-                                    Ok(request) => request,
-                                    Err(e) => {
-                                        eprintln!("Connection read error - {e:?}");
-                                        shutdown_conn(&mut stream).await;
-                                        break;
-                                    }
-                                };
-                            match handle_http_request(
-                                request,
-                                e3_client_for_tcp.clone(),
-                                tx_for_tcp.clone(),
-                                remote_ip.clone(),
-                                port,
-                            )
-                            .await
-                            {
-                                Ok(res) => {
-                                    let response_bytes = response_to_bytes(res).await;
-                                    let _ = stream.write_all(&response_bytes).await;
-                                    shutdown_conn(&mut stream).await;
-                                    break;
-                                }
-                                Err(err) => {
-                                    eprintln!(
-                                        "Failed sending HTTP request to customer process — {err:?}"
-                                    );
-                                    shutdown_conn(&mut stream).await;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    Ok(Status::Partial) => continue,
-                    Err(_) => {
-                        // We need to figure out a better auth mechanism for other protocols
-                        if feature_context.api_key_auth {
+                        if let Err(err) = handle_full_parsed_http_request(
+                            req,
+                            port,
+                            remote_ip.clone(),
+                            tx_for_tcp.clone(),
+                            e3_client_for_tcp.clone(),
+                            body_offset,
+                            &buffer,
+                            &mut stream,
+                        )
+                        .await
+                        {
                             eprintln!(
-                                "API key auth needs to be turned off for non HTTPS/WS streams"
+                                "Failed piping HTTP or WS stream to customer process — {err:?}"
                             );
                             shutdown_conn(&mut stream).await;
                             break;
                         }
-                        if let Err(err) = pipe_to_customer_process(&mut stream, &buffer, port).await
+                    }
+                    Ok(Status::Partial) => continue,
+                    Err(_) => {
+                        if let Err(err) = handle_non_http_request(
+                            feature_context,
+                            &mut stream,
+                            &buffer,
+                            port,
+                            tx_for_tcp.clone(),
+                            remote_ip.clone(),
+                        )
+                        .await
                         {
                             eprintln!(
                                 "Failed piping non HTTP/WS stream to customer process — {err:?}"
@@ -168,6 +131,113 @@ where
             }
         });
     }
+}
+
+async fn handle_non_http_request<L>(
+    feature_context: &FeatureContext,
+    stream: &mut TlsStream<L>,
+    buffer: &[u8],
+    port: u16,
+    tx_sender: UnboundedSender<LogHandlerMessage>,
+    remote_ip: Option<String>,
+) -> Result<()>
+where
+    TlsStream<L>: AsyncReadExt + Unpin + AsyncWrite,
+{
+    if feature_context.api_key_auth {
+        log_non_http_trx(tx_sender, false, None, remote_ip);
+        return Err(Error::NonHttpAuthError);
+    };
+    log_non_http_trx(tx_sender, true, None, remote_ip);
+    pipe_to_customer_process(stream, buffer, port).await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn handle_full_parsed_http_request<L>(
+    req: httparse::Request<'_, '_>,
+    port: u16,
+    remote_ip: Option<String>,
+    tx_sender: UnboundedSender<LogHandlerMessage>,
+    e3_client: Arc<E3Client>,
+    body_offset: usize,
+    buffer: &[u8],
+    stream: &mut TlsStream<L>,
+) -> Result<()>
+where
+    TlsStream<L>: AsyncReadExt + AsyncWriteExt + Unpin,
+{
+    let headers = &req.headers;
+    let is_websocket = headers.iter().any(|header| {
+        header.name.to_ascii_lowercase() == "upgrade"
+            && header.value.to_ascii_lowercase() == "websocket".as_bytes()
+    });
+    let not_http = req.method.is_none();
+    if is_websocket || not_http {
+        match auth_request_non_http(headers, e3_client.clone()).await {
+            Ok(_) => {
+                log_non_http_trx(tx_sender, true, Some(req), remote_ip);
+                pipe_to_customer_process(stream, buffer, port).await?;
+                Ok(())
+            }
+            Err(_) => {
+                log_non_http_trx(tx_sender, true, Some(req), remote_ip);
+                let unauth_resp = build_401_response().await;
+                stream.write_all(&unauth_resp).await?;
+                shutdown_conn(stream).await;
+                Ok(())
+            }
+        }
+    } else {
+        let request: Request<Body> = build_http_request(req, &buffer[body_offset..], port)?;
+        let response = handle_http_request(
+            request,
+            e3_client.clone(),
+            tx_sender.clone(),
+            remote_ip.clone(),
+            port,
+        )
+        .await?;
+        let response_bytes = response_to_bytes(response).await;
+        stream.write_all(&response_bytes).await?;
+        shutdown_conn(stream).await;
+        Ok(())
+    }
+}
+
+fn log_non_http_trx(
+    tx_sender: UnboundedSender<LogHandlerMessage>,
+    authorized: bool,
+    req: Option<httparse::Request<'_, '_>>,
+    remote_ip: Option<String>,
+) {
+    if let Err(e) = try_log_non_http_trx(tx_sender, authorized, req, RequestType::TCP, remote_ip) {
+        println!("Failed to send transaction context to log handler. err: {e}");
+    };
+}
+
+fn try_log_non_http_trx(
+    tx_sender: UnboundedSender<LogHandlerMessage>,
+    authorized: bool,
+    request: Option<httparse::Request<'_, '_>>,
+    request_type: RequestType,
+    remote_ip: Option<String>,
+) -> Result<()> {
+    let cage_context = CageContext::get()?;
+    let feature_context = FeatureContext::get();
+    let mut context_builder = init_trx(&cage_context, &feature_context, None, request_type);
+    context_builder.add_httparse_to_trx(authorized, request, remote_ip);
+    let trx_context = context_builder.build()?;
+    tx_sender
+        .send(LogHandlerMessage::new_log_message(trx_context))
+        .map_err(|e| Error::FailedToSendTrxLog(e.to_string()))
+}
+
+async fn build_401_response() -> Vec<u8> {
+    let response = Response::builder()
+        .status(401)
+        .body(Body::empty())
+        .expect("infallible");
+    response_to_bytes(response).await
 }
 
 async fn auth_request_non_http(
@@ -278,7 +348,12 @@ async fn handle_http_request(
     let tx_for_req = tx_for_tcp.clone();
     let remote_ip = remote_ip.clone();
     let request_timer = TrxContextBuilder::get_timer();
-    let mut trx_context = init_trx(&cage_context, &feature_context, &req);
+    let mut trx_context = init_trx(
+        &cage_context,
+        &feature_context,
+        Some(&req),
+        RequestType::HTTP,
+    );
     let trx_id = trx_context.get_trx_id();
     if remote_ip.is_some() {
         trx_context.remote_ip(remote_ip.clone());
@@ -556,15 +631,19 @@ async fn extract_ciphertexts_from_payload(
 fn init_trx(
     cage_context: &CageContext,
     feature_context: &FeatureContext,
-    req: &Request<Body>,
+    request: Option<&Request<Body>>,
+    request_type: RequestType,
 ) -> TrxContextBuilder {
     let mut trx_ctx = TrxContextBuilder::init_trx_context_with_cage_details(
         &cage_context.cage_uuid,
         &cage_context.cage_name,
         &cage_context.app_uuid,
         &cage_context.team_uuid,
+        request_type,
     );
-    trx_ctx.add_req_to_trx_context(req, &feature_context.trusted_headers);
+    if let Some(req) = request {
+        trx_ctx.add_req_to_trx_context(req, &feature_context.trusted_headers)
+    };
     trx_ctx
 }
 

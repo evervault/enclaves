@@ -67,7 +67,7 @@ impl E3Proxy {
                     Self::shutdown_conn(connection).await;
                     continue;
                 }
-            }; // TODO: cache
+            };
             println!("IP for E3 obtained: {e3_ip}");
             tokio::spawn(async move {
                 let e3_stream = match tokio::net::TcpStream::connect(e3_ip).await {

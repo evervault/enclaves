@@ -7,21 +7,21 @@ use std::{collections::HashSet, time::SystemTime};
 use hyper::{
     header::{self, CONTENT_TYPE, USER_AGENT},
     http::HeaderValue,
-    Body, HeaderMap, Request, Response,
+    Body, HeaderMap, Request, Response, Uri,
 };
 
 use rand::{thread_rng, Rng};
 
 #[allow(dead_code)]
-#[derive(Serialize, Deserialize, Clone, Debug, Builder)]
+#[derive(Serialize, Deserialize, Clone, Debug, Builder, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct TrxContext {
     txid: String,
     ts: String,
     msg: String,
-    uri: String,
+    uri: Option<String>,
     r#type: String,
-    request_method: String,
+    request_method: Option<String>,
     #[builder(default)]
     remote_ip: Option<String>,
     #[builder(default)]
@@ -46,6 +46,7 @@ pub struct TrxContext {
     response_content_type: Option<String>,
     #[builder(default)]
     elapsed: Option<f64>,
+    request_type: String,
 }
 
 impl TrxContext {
@@ -86,8 +87,24 @@ impl std::fmt::Display for TrxContextId {
     }
 }
 
+pub enum RequestType {
+    HTTP,
+    Websocket,
+    TCP,
+}
+
+impl From<RequestType> for String {
+    fn from(val: RequestType) -> String {
+        match val {
+            RequestType::HTTP => "HTTP".to_string(),
+            RequestType::TCP => "TCP".to_string(),
+            RequestType::Websocket => "Websocket".to_string(),
+        }
+    }
+}
+
 impl TrxContextBuilder {
-    fn new() -> TrxContextBuilder {
+    fn new(request_type: RequestType) -> TrxContextBuilder {
         let timestamp = get_iso_timestamp();
         let trx_id = format!("{}", TrxContextId::new());
         let trx_type = "cage_trx".to_string();
@@ -112,6 +129,7 @@ impl TrxContextBuilder {
             response_content_type: None,
             elapsed: None,
             remote_ip: None,
+            request_type: Some(request_type.into()),
         }
     }
 
@@ -133,8 +151,9 @@ impl TrxContextBuilder {
         cage_name: &str,
         app_uuid: &str,
         team_uuid: &str,
+        request_type: RequestType,
     ) -> Self {
-        let mut trx_context = Self::new();
+        let mut trx_context = Self::new(request_type);
         trx_context.cage_uuid(cage_uuid.to_string());
         trx_context.cage_name(cage_name.to_string());
         trx_context.app_uuid(app_uuid.to_string());
@@ -155,8 +174,8 @@ impl TrxContextBuilder {
     }
 
     pub fn add_req_to_trx_context(&mut self, req: &Request<Body>, trusted_headers: &[String]) {
-        self.uri(req.uri().to_string());
-        self.request_method(req.method().to_string());
+        self.uri(Some(build_log_uri(req.uri())));
+        self.request_method(Some(req.method().to_string()));
         self.add_headers_to_request(req.headers(), trusted_headers);
 
         //Pull out content type
@@ -187,6 +206,34 @@ impl TrxContextBuilder {
                 .expect("Infallible - Failed to convert HeaderValue of ContentType to String");
             self.response_content_type(Some(content_type_str.into()));
         }
+    }
+
+    fn format_headers(headers: &[httparse::Header<'_>]) -> Option<String> {
+        let mut map = Map::new();
+        for header in headers {
+            map.insert(
+                header.name.to_string(),
+                std::str::from_utf8(header.value).ok().into(),
+            );
+        }
+        serde_json::to_string(&map).ok()
+    }
+
+    pub fn add_httparse_to_trx(
+        &mut self,
+        authorized: bool,
+        request: Option<httparse::Request<'_, '_>>,
+        remote_ip: Option<String>,
+    ) {
+        if let Some(req) = request {
+            self.uri(req.path.map(|s| s.to_string()));
+            self.request_method(req.method.map(|s| s.to_string()));
+            self.request_headers(Self::format_headers(req.headers));
+        };
+        if !authorized {
+            self.add_status_and_group(401);
+        }
+        self.remote_ip(remote_ip);
     }
 
     fn add_headers_to_request(
@@ -226,10 +273,15 @@ fn get_iso_timestamp() -> String {
 }
 
 fn is_trusted_header(trusted_headers: &[String], header_key: &str) -> bool {
+    // Prevent sensitive headers from being logged
+    if SENSITIVE_HEADERS.contains(header_key) {
+        return false;
+    }
+    if NON_SENSITIVE_HEADERS.contains(header_key) {
+        return true;
+    }
     trusted_headers.iter().any(|trusted_header| {
-        if NON_SENSITIVE_HEADERS.contains(header_key) {
-            return true;
-        } else if trusted_header.ends_with('*') {
+        if trusted_header.ends_with('*') {
             return header_key.starts_with(&trusted_header[..trusted_header.len() - 1]);
         }
         header_key == trusted_header
@@ -257,8 +309,17 @@ fn convert_headers_to_map(
     tracked_headers
 }
 
+fn build_log_uri(uri: &Uri) -> String {
+    if let Some(query) = uri.query() {
+        format!("{}?{}", uri.path(), query)
+    } else {
+        uri.path().to_string()
+    }
+}
+
 lazy_static::lazy_static!(
     pub static ref NON_SENSITIVE_HEADERS: HashSet<String> = create_non_sensitive_header_set();
+    pub static ref SENSITIVE_HEADERS: HashSet<String> = create_sensitive_header_set();
 );
 
 fn create_non_sensitive_header_set() -> HashSet<String> {
@@ -357,6 +418,16 @@ fn create_non_sensitive_header_set() -> HashSet<String> {
     header_set
 }
 
+fn create_sensitive_header_set() -> HashSet<String> {
+    let mut header_set = HashSet::new();
+    header_set.insert(header::AUTHORIZATION.to_string());
+    header_set.insert(header::PROXY_AUTHORIZATION.to_string());
+    if let Ok(api_key) = header::HeaderName::from_bytes(b"Api-Key") {
+        header_set.insert(api_key.to_string());
+    }
+    header_set
+}
+
 pub enum StatusGroup {
     Information,
     Success,
@@ -399,15 +470,142 @@ impl std::fmt::Display for StatusGroup {
 
 #[cfg(test)]
 mod test {
-    use super::is_trusted_header;
+    use super::{is_trusted_header, TrxContext, TrxContextBuilder};
+
+    #[test]
+    fn test_create_non_http_log() {
+        let mut headers = vec![
+            httparse::Header {
+                name: "test",
+                value: "value".as_bytes(),
+            },
+            httparse::Header {
+                name: "anotherTest",
+                value: "value".as_bytes(),
+            },
+        ];
+        let request = httparse::Request {
+            method: Some("GET"),
+            path: Some("/hello"),
+            version: None,
+            headers: &mut headers,
+        };
+
+        let mut trx = TrxContextBuilder::new(super::RequestType::Websocket);
+        trx.app_uuid("123".to_string());
+        trx.team_uuid("123".to_string());
+        trx.cage_uuid("123".to_string());
+        trx.cage_name("name".to_string());
+        trx.add_httparse_to_trx(true, Some(request), Some("1.1.1.1".to_string()));
+        let log = trx.build().unwrap();
+
+        let expected_log = TrxContext {
+            txid: trx.txid.unwrap(),
+            ts: trx.ts.unwrap(),
+            msg: "Cage Transaction Complete".to_owned(),
+            uri: Some("/hello".to_string()),
+            r#type: "cage_trx".to_string(),
+            request_method: Some("GET".to_string()),
+            remote_ip: Some("1.1.1.1".to_string()),
+            request_headers: Some("{\"anotherTest\":\"value\",\"test\":\"value\"}".to_string()),
+            user_agent: None,
+            response_headers: None,
+            response_code: None,
+            status_group: None,
+            cage_name: "name".to_string(),
+            cage_uuid: "123".to_string(),
+            app_uuid: "123".to_string(),
+            team_uuid: "123".to_string(),
+            n_decrypted_fields: None,
+            content_type: None,
+            response_content_type: None,
+            elapsed: None,
+            request_type: super::RequestType::Websocket.into(),
+        };
+        assert_eq!(log, expected_log);
+    }
 
     #[test]
     fn test_trusted_headers_matching() {
-        let trusted_headers = vec!["X-Evervault-*".to_string(), "X-Error-Code".to_string()];
+        let trusted_headers = vec!["x-evervault-*".to_string(), "x-error-code".to_string()];
 
-        assert!(is_trusted_header(&trusted_headers, "X-Evervault-Debug"));
-        assert!(is_trusted_header(&trusted_headers, "X-Error-Code"));
-        assert!(!is_trusted_header(&trusted_headers, "X-Error-Debug"));
-        assert!(!is_trusted_header(&trusted_headers, "Foo-Bar"));
+        let ev_debug_header = hyper::header::HeaderName::from_bytes(b"X-Evervault-Debug").unwrap();
+        assert!(is_trusted_header(
+            &trusted_headers,
+            ev_debug_header.as_str()
+        ));
+        let error_code_header = hyper::header::HeaderName::from_bytes(b"X-Error-Code").unwrap();
+        assert!(is_trusted_header(
+            &trusted_headers,
+            error_code_header.as_str()
+        ));
+        assert!(!is_trusted_header(&trusted_headers, "x-error-debug"));
+        assert!(!is_trusted_header(&trusted_headers, "foo-bar"));
+
+        // Block sensitive headers
+        let api_key_header = hyper::header::HeaderName::from_bytes(b"api-key").unwrap();
+        assert!(!is_trusted_header(
+            &trusted_headers,
+            api_key_header.as_str()
+        ));
+        assert!(!is_trusted_header(
+            &trusted_headers,
+            hyper::header::AUTHORIZATION.as_str()
+        ));
+    }
+
+    #[test]
+    fn test_sensitive_header_check_in_trusted_headers() {
+        let trusted_headers = vec!["api-key".to_string(), "authorization".to_string()];
+        // Block sensitive headers
+        let api_key_header = hyper::header::HeaderName::from_bytes(b"api-key").unwrap();
+        assert!(!is_trusted_header(
+            &trusted_headers,
+            api_key_header.as_str()
+        ));
+        assert!(!is_trusted_header(
+            &trusted_headers,
+            hyper::header::AUTHORIZATION.as_str()
+        ));
+    }
+
+    use super::{build_log_uri, Uri};
+    #[test]
+    fn test_uri_formatting() {
+        let path_and_query = "/path?query=true".to_string();
+        let uri = Uri::builder()
+            .scheme("https")
+            .authority("cages.evervault.com")
+            .path_and_query(&path_and_query)
+            .build()
+            .unwrap();
+        assert_eq!(path_and_query, build_log_uri(&uri));
+
+        let path_only = "/path".to_string();
+        let uri = Uri::builder()
+            .scheme("https")
+            .authority("cages.evervault.com")
+            .path_and_query(&path_only)
+            .build()
+            .unwrap();
+        assert_eq!(path_only, build_log_uri(&uri));
+
+        let base_path = "/".to_string();
+        let uri = Uri::builder()
+            .scheme("https")
+            .authority("cages.evervault.com")
+            .path_and_query(&base_path)
+            .build()
+            .unwrap();
+        assert_eq!(base_path, build_log_uri(&uri));
+
+        let base_query = "?query".to_string();
+        let uri = Uri::builder()
+            .scheme("https")
+            .authority("cages.evervault.com")
+            .path_and_query(&base_query)
+            .build()
+            .unwrap();
+        assert_eq!(format!("/{}", base_query), build_log_uri(&uri));
     }
 }
