@@ -13,7 +13,7 @@ use std::sync::Mutex;
 
 use super::client::AcmeClientInterface;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 #[allow(unused)]
 pub struct Directory<T: AcmeClientInterface> {
@@ -47,7 +47,7 @@ pub struct DirectoryMeta {
 }
 
 fn extract_nonce_from_response(
-    resp: &hyper::Response<hyper::Body>,
+    resp: hyper::Response<hyper::Body>,
 ) -> Result<Option<String>, AcmeError> {
     resp.headers()
         .get("replay-nonce")
