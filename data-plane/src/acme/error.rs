@@ -1,3 +1,4 @@
+use serde::Deserialize;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -16,7 +17,9 @@ pub enum AcmeError {
     HttpError(#[from] hyper::http::Error),
     #[error("No Nonce Found")]
     NoNonce,
-    #[error("Http Header Conversion Error")]
+    #[error("Nonce Mutex Poison Error - {0:?}")]
+    PoisonError(String),
+    #[error("Http Header Converion Error")]
     HeaderConversionError(#[from] hyper::header::ToStrError),
     #[error("OpenSSL Error — {0:?}")]
     OpenSSLError(#[from] openssl::error::ErrorStack),
@@ -24,6 +27,12 @@ pub enum AcmeError {
     Base64DecodeError(#[from] base64::DecodeError),
     #[error("Error interpretting utf8 sequence — {0:?}")]
     Utf8Error(#[from] std::str::Utf8Error),
+    #[error("No directory for acme account - {0:?}")]
+    NoDirectory(String),
+    #[error("Error creating CSR - {0:?}")]
+    CsrError(String),
+    #[error("{0:?} Field Not Found")]
+    FieldNotFound(String),
     #[error("ACME Error {0:?}")]
     General(String),
 }

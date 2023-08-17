@@ -13,7 +13,7 @@ use std::sync::Mutex;
 
 use super::client::AcmeClientInterface;
 
-#[derive(Deserialize, Debug, Default)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 #[allow(unused)]
 pub struct Directory<T: AcmeClientInterface> {
@@ -47,7 +47,7 @@ pub struct DirectoryMeta {
 }
 
 fn extract_nonce_from_response(
-    resp: hyper::Response<hyper::Body>,
+    resp: &hyper::Response<hyper::Body>,
 ) -> Result<Option<String>, AcmeError> {
     resp.headers()
         .get("replay-nonce")
@@ -136,7 +136,10 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
         let resp = self.client.send(request).await?;
 
         if let Some(nonce) = extract_nonce_from_response(&resp)? {
-            let mut guard = self.nonce.lock().unwrap();
+            let mut guard = self
+                .nonce
+                .lock()
+                .map_err(|err| AcmeError::PoisonError(err.to_string()))?;
             *guard = Some(nonce);
         }
 
@@ -147,20 +150,27 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
         &self,
         url: &str,
         method: &str,
-        payload: Value,
+        payload: Option<Value>,
         pkey: &PKey<Private>,
         account_id: &Option<String>,
     ) -> Result<hyper::Response<Body>, AcmeError> {
         println!("Sending authenticated request to: {}", url);
 
-        let payload = serde_json::to_string(&payload)?;
+        //Handle empty body
+        let payload_parsed = match payload {
+            None => "".to_string(),
+            Some(payload) => serde_json::to_string(&payload)?,
+        };
 
         let resp = self
-            .authenticated_request_raw(method, url, &payload, pkey, account_id)
+            .authenticated_request_raw(method, url, &payload_parsed, pkey, account_id)
             .await?;
 
         if let Some(nonce) = extract_nonce_from_response(&resp)? {
-            let mut guard: std::sync::MutexGuard<'_, Option<String>> = self.nonce.lock().unwrap();
+            let mut guard: std::sync::MutexGuard<'_, Option<String>> = self
+                .nonce
+                .lock()
+                .map_err(|err| AcmeError::PoisonError(err.to_string()))?;
             *guard = Some(nonce);
         }
 

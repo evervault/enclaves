@@ -1,10 +1,7 @@
 use std::sync::Arc;
 
 use crate::acme::error::AcmeError;
-<<<<<<< HEAD
 use crate::configuration;
-=======
->>>>>>> main
 use async_trait::async_trait;
 use hyper::client::conn::{Connection as HyperConnection, SendRequest};
 

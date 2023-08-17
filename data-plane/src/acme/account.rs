@@ -43,8 +43,6 @@ pub struct Account<T: AcmeClientInterface> {
     pub terms_of_service_agreed: Option<bool>,
 }
 
-/// An builder that is used to create / retrieve an [`Account`] from the
-/// ACME server.
 #[derive(Debug)]
 #[allow(unused)]
 pub struct AccountBuilder<T: AcmeClientInterface> {
@@ -104,13 +102,13 @@ impl<T: AcmeClientInterface + Default> AccountBuilder<T> {
         let private_key = if let Some(private_key) = self.private_key.clone() {
             private_key
         } else {
-            gen_ec_private_key().unwrap()
+            gen_ec_private_key()?
         };
 
         let url = self.directory.new_account_url.clone();
 
         let external_account_binding = if let Some(eab_config) = &self.eab_config {
-            let payload = serde_json::to_string(&Jwk::new(&private_key)?).unwrap();
+            let payload = serde_json::to_string(&Jwk::new(&private_key)?)?;
 
             Some(jws(
                 &url,
@@ -128,12 +126,12 @@ impl<T: AcmeClientInterface + Default> AccountBuilder<T> {
             .authenticated_request(
                 &url,
                 "POST",
-                json!({
+                Some(json!({
                   "contact": self.contact,
                   "termsOfServiceAgreed": self.terms_of_service_agreed,
                   "onlyReturnExisting": self.only_return_existing,
                   "externalAccountBinding": external_account_binding,
-                }),
+                })),
                 &private_key.clone(),
                 &None,
             )
