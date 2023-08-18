@@ -19,7 +19,7 @@ pub enum AcmeError {
     NoNonce,
     #[error("Nonce Mutex Poison Error - {0:?}")]
     PoisonError(String),
-    #[error("Http Header Converion Error")]
+    #[error("Http Header Conversion Error")]
     HeaderConversionError(#[from] hyper::header::ToStrError),
     #[error("OpenSSL Error — {0:?}")]
     OpenSSLError(#[from] openssl::error::ErrorStack),
