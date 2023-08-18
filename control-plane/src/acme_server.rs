@@ -12,6 +12,12 @@ const CHALLENGE_PATH: &str = "/.well-known/acme-challenge/:token";
 
 pub struct AcmeServer {}
 
+impl Default for AcmeServer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[allow(unused)]
 impl AcmeServer {
     pub fn new() -> Self {
