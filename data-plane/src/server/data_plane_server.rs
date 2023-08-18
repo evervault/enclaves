@@ -3,6 +3,7 @@ use super::http::ContentEncoding;
 use super::tls::TlsServerBuilder;
 
 use crate::base_tls_client::ClientError;
+#[cfg(feature = "enclave")]
 use crate::crypto::attest;
 use crate::e3client::DecryptRequest;
 use crate::e3client::{self, AuthRequest, E3Client};
@@ -13,6 +14,7 @@ use crate::{CageContext, FeatureContext, FEATURE_CONTEXT};
 use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
 
 use bytes::Bytes;
+#[cfg(feature = "enclave")]
 use chrono::Utc;
 use futures::StreamExt;
 
@@ -92,6 +94,7 @@ where
 
                 match req.parse(&buffer) {
                     Ok(Status::Complete(body_offset)) => {
+                        #[cfg(feature = "enclave")]
                         if req.path == Some("/.well-known/attestation") {
                             let response_bytes = match handle_attestation_request(req).await {
                                 Ok(response) => response_to_bytes(response).await,
@@ -433,10 +436,12 @@ struct AttestationChallenge {
 
 impl ToString for AttestationChallenge {
     fn to_string(&self) -> String {
-        format!("{}", self.expiry)
+        // TODO(Mark): serialize the expiry and cert
+        self.expiry.clone()
     }
 }
 
+#[cfg(feature = "enclave")]
 async fn handle_attestation_request(_req: httparse::Request<'_, '_>) -> Result<Response<Body>> {
     let challenge = AttestationChallenge {
         expiry: Utc::now().to_string(),
