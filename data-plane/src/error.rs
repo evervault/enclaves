@@ -71,6 +71,8 @@ pub enum Error {
     TrxContextBuilderError(#[from] TrxContextBuilderError),
     #[error("Failed to send trx log= {0}")]
     FailedToSendTrxLog(String),
+    #[error("Request timed out in data plane after {0} seconds")]
+    RequestTimeout(usize),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

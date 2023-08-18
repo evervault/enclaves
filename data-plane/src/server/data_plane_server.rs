@@ -188,7 +188,8 @@ where
             }
         }
     } else {
-        let request: Request<Body> = build_http_request(req, &buffer[body_offset..], port)?;
+        let request: Request<Body> =
+            build_http_request(req, &buffer[body_offset..], port, stream).await?;
         let response = handle_http_request(
             request,
             e3_client.clone(),
@@ -282,11 +283,16 @@ where
     Ok(())
 }
 
-fn build_http_request(
+const READ_TIMEOUT: usize = 10;
+async fn build_http_request<L>(
     request: httparse::Request<'_, '_>,
     body_buffer: &[u8],
     port: u16,
-) -> Result<Request<Body>> {
+    incoming_stream: &mut TlsStream<L>,
+) -> Result<Request<Body>>
+where
+    TlsStream<L>: AsyncReadExt + Unpin + AsyncWrite,
+{
     let uri = format!("http://127.0.0.1:{}{}", port, request.path.unwrap_or("/"));
     let mut header_map = HeaderMap::new();
     for header in request.headers {
@@ -296,10 +302,32 @@ fn build_http_request(
         );
     }
 
+    let content_length = header_map
+        .get(http::header::CONTENT_LENGTH)
+        .and_then(|header_val| header_val.to_str().ok())
+        .and_then(|content_len| content_len.parse::<usize>().ok());
+
+    let mut body = body_buffer.to_vec();
+    if let Some(content_length) = content_length {
+        let mut buf = [0u8; 1024];
+        while body.len() < content_length {
+            let n_bytes_read = tokio::time::timeout(
+                std::time::Duration::from_secs(READ_TIMEOUT as u64),
+                incoming_stream.read(&mut buf),
+            )
+            .await
+            .map_err(|_| crate::error::Error::RequestTimeout(READ_TIMEOUT))??;
+            if n_bytes_read == 0 {
+                break;
+            }
+            body.extend_from_slice(&buf[..n_bytes_read]);
+        }
+    }
+
     let mut req = Request::builder()
         .uri(uri)
         .method(request.method.unwrap())
-        .body(Body::from(body_buffer.to_vec()))?;
+        .body(Body::from(body))?;
     *req.headers_mut() = header_map;
     Ok(req)
 }
