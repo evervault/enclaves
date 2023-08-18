@@ -4,11 +4,12 @@ use hyper::http::StatusCode;
 use hyper::{Body, Response};
 
 use serde::de::DeserializeOwned;
+use serde_json::Value;
 use shared::logging::TrxContext;
 use shared::server::config_server::requests::{
     ConfigServerPayload, DeleteObjectRequest, GetCertTokenResponseDataPlane,
     GetE3TokenResponseDataPlane, GetObjectRequest, GetObjectResponse, GetTokenRequestDataPlane,
-    PostTrxLogsRequest, PutObjectRequest,
+    JwkResponse, JwsRequest, JwsResponse, PostTrxLogsRequest, PutObjectRequest, SignatureType,
 };
 use shared::server::config_server::routes::ConfigServerPath;
 
@@ -17,7 +18,7 @@ use crate::error::{self, Error};
 
 use connection::Connection;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ConfigClient {}
 
 impl Default for ConfigClient {
@@ -184,6 +185,58 @@ impl ConfigClient {
             );
             Err(Error::ConfigServer(
                 "Invalid Response code returned when sending deleteObject request to control plane"
+                    .to_string(),
+            ))
+        }
+    }
+
+    pub async fn jws(
+        &self,
+        signature_type: SignatureType,
+        url: String,
+        nonce: Option<String>,
+        payload: String,
+        account_id: Option<String>,
+    ) -> Result<JwsResponse> {
+        let payload =
+            JwsRequest::new(signature_type, url, nonce, payload, account_id).into_body()?;
+
+        println!("Sending JWS request to control plane: {:#?}", payload);
+
+        let response = self
+            .send(ConfigServerPath::AcmeSign, "GET", payload)
+            .await?;
+
+        if response.status() == StatusCode::OK {
+            let result: JwsResponse = self.parse_response(response).await?;
+            Ok(result)
+        } else {
+            println!(
+                "Error sending jws request to control plane. Response Code: {}",
+                response.status()
+            );
+            Err(Error::ConfigServer(
+                "Invalid Response code returned when sending jws request to control plane"
+                    .to_string(),
+            ))
+        }
+    }
+
+    pub async fn jwk(&self) -> Result<JwkResponse> {
+        let response = self
+            .send(ConfigServerPath::AcmeJWK, "POST", Body::empty())
+            .await?;
+
+        if response.status() == StatusCode::OK {
+            let result: JwkResponse = self.parse_response(response).await?;
+            Ok(result)
+        } else {
+            println!(
+                "Error sending jwk request to control plane. Response Code: {}",
+                response.status()
+            );
+            Err(Error::ConfigServer(
+                "Invalid Response code returned when sending jwk request to control plane"
                     .to_string(),
             ))
         }

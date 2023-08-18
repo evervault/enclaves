@@ -1,7 +1,7 @@
 use thiserror::Error;
 use trust_dns_resolver::error::ResolveError;
 
-use crate::clients::storage::StorageClientError;
+use crate::{acme::error::AcmeError, clients::storage::StorageClientError};
 
 #[derive(Error, Debug)]
 pub enum ServerError {
@@ -34,6 +34,8 @@ pub enum ServerError {
     EgressError(#[from] shared::server::egress::EgressError),
     #[error("Storage Error - {0}")]
     StorageClientError(#[from] StorageClientError),
+    #[error("Acme Error - {0}")]
+    AcmeError(#[from] AcmeError),
 }
 
 pub type Result<T> = std::result::Result<T, ServerError>;

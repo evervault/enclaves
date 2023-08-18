@@ -1,5 +1,6 @@
 use crate::acme::error::*;
-use crate::acme::jws::jws;
+use crate::acme::jws::JwsResult;
+use crate::config_client::ConfigClient;
 use crate::configuration;
 use hyper::Body;
 use hyper::Response;
@@ -19,6 +20,8 @@ use super::client::AcmeClientInterface;
 pub struct Directory<T: AcmeClientInterface> {
     #[serde(skip)]
     pub client: T,
+    #[serde(skip)]
+    pub config_client: ConfigClient,
     #[serde(skip)]
     pub nonce: Mutex<Option<String>>,
     #[serde(rename = "newNonce")]
@@ -64,6 +67,7 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
     pub async fn fetch_directory(
         path: String,
         acme_http_client: T,
+        config_client: ConfigClient,
     ) -> Result<Arc<Directory<T>>, AcmeError> {
         let host = configuration::get_acme_host();
         let url = format!("https://{}{}", host.clone(), path);
@@ -82,6 +86,7 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
             serde_json::from_str(body_str).expect("Failed to deserialize Directory");
 
         directory.client = acme_http_client;
+        directory.config_client = config_client;
         directory.nonce = Mutex::new(None);
 
         Ok(Arc::new(directory))
@@ -123,7 +128,20 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
         account_id: &Option<String>,
     ) -> Result<hyper::Response<Body>, AcmeError> {
         let nonce = self.get_nonce().await?;
-        let body = jws(url, Some(nonce), payload, pkey, account_id.clone())?;
+        let body: JwsResult = JwsResult::from(
+            &self
+                .config_client
+                .jws(
+                    shared::server::config_server::requests::SignatureType::ECDSA,
+                    url.into(),
+                    Some(nonce),
+                    payload.into(),
+                    account_id.clone(),
+                )
+                .await
+                .unwrap(),
+        );
+
         let body = serde_json::to_vec(&body)?;
 
         let request = hyper::Request::builder()

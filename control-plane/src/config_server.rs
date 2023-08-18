@@ -1,3 +1,5 @@
+use crate::acme::account_details::AcmeAccountDetails;
+use crate::acme::jws::{jws, Jwk};
 use crate::clients::cert_provisioner::{
     CertProvisionerClient, GetCertTokenResponseControlPlane, GetE3TokenResponseControlPlane,
 };
@@ -13,9 +15,10 @@ use serde::de::DeserializeOwned;
 use shared::logging::TrxContext;
 use shared::server::config_server::requests::{
     ConfigServerPayload, DeleteObjectRequest, GetCertTokenResponseDataPlane,
-    GetE3TokenResponseDataPlane, GetObjectRequest, GetObjectResponse, PostTrxLogsRequest,
-    PutObjectRequest,
+    GetE3TokenResponseDataPlane, GetObjectRequest, GetObjectResponse, JwsRequest,
+    PostTrxLogsRequest, PutObjectRequest,
 };
+use shared::server::config_server::requests::{JwkResponse, JwsResponse, SignatureType};
 use shared::server::config_server::routes::ConfigServerPath;
 use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
@@ -26,14 +29,17 @@ pub struct ConfigServer<T: StorageClientInterface> {
     cert_provisioner_client: CertProvisionerClient,
     storage_client: T,
     cage_context: configuration::CageContext,
+    acme_account_details: AcmeAccountDetails,
 }
 
 impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> {
     pub fn new(cert_provisioner_client: CertProvisionerClient, storage_client: T) -> Self {
+        let acme_account_details = AcmeAccountDetails::from_env();
         Self {
             cert_provisioner_client,
             storage_client,
             cage_context: configuration::CageContext::from_env_vars(),
+            acme_account_details,
         }
     }
 
@@ -45,12 +51,13 @@ impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> 
         let cert_client = self.cert_provisioner_client.clone();
         let storage_client = self.storage_client.clone();
         let cage_context = self.cage_context.clone();
-
+        let acme_account_details = self.acme_account_details.clone();
         println!("Running config server on {}", shared::ENCLAVE_CONFIG_PORT);
         loop {
             let cert_client = cert_client.clone();
             let storage_client = storage_client.clone();
             let cage_context = cage_context.clone();
+            let acme_account_details = acme_account_details.clone();
             let connection = match enclave_conn.accept().await {
                 Ok(conn) => conn,
                 Err(e) => {
@@ -65,6 +72,7 @@ impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> 
                 let cert_client = cert_client.clone();
                 let storage_client = storage_client.clone();
                 let cage_context = cage_context.clone();
+                let acme_account_details = acme_account_details.clone();
                 let sent_response = server
                     .serve_connection(
                         connection,
@@ -72,12 +80,14 @@ impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> 
                             let cert_client = cert_client.clone();
                             let storage_client = storage_client.clone();
                             let cage_context = cage_context.clone();
+                            let acme_account_details = acme_account_details.clone();
                             async move {
                                 handle_incoming_request(
                                     req,
                                     cert_client,
                                     storage_client,
                                     cage_context,
+                                    acme_account_details,
                                 )
                                 .await
                             }
@@ -106,6 +116,7 @@ async fn handle_incoming_request<T: StorageClientInterface>(
     cert_provisioner_client: CertProvisionerClient,
     storage_client: T,
     cage_context: configuration::CageContext,
+    acme_account_details: AcmeAccountDetails,
 ) -> ServerResult<Response<Body>> {
     match ConfigServerPath::from_str(req.uri().path()) {
         Ok(ConfigServerPath::GetCertToken) => Ok(handle_token_request(
@@ -121,6 +132,10 @@ async fn handle_incoming_request<T: StorageClientInterface>(
         Ok(ConfigServerPath::PostTrxLogs) => {
             Ok(handle_post_trx_logs_request(req, cage_context).await)
         }
+        Ok(ConfigServerPath::AcmeSign) => {
+            Ok(handle_acme_signing_request(req, acme_account_details, cage_context).await)
+        }
+        Ok(ConfigServerPath::AcmeJWK) => Ok(handle_acme_jwk_request(acme_account_details).await),
         Ok(ConfigServerPath::Storage) => match *req.method() {
             Method::GET => handle_acme_storage_get_request(req, storage_client, cage_context).await,
             Method::PUT => handle_acme_storage_put_request(req, storage_client, cage_context).await,
@@ -294,6 +309,97 @@ async fn handle_acme_storage_delete_request<T: StorageClientInterface>(
             "Failed to parse delete object request from data plane".to_string(),
         )),
     }
+}
+
+async fn handle_acme_signing_request(
+    req: Request<Body>,
+    acme_account_details: AcmeAccountDetails,
+    cage_context: configuration::CageContext,
+) -> Response<Body> {
+    println!("Received signing request in config server for acme");
+    match sign_acme_payload(req, acme_account_details, cage_context).await {
+        Ok(response) => response,
+        Err(err) => {
+            println!("Failed to sign request: {}", err);
+            build_error_response("Failed to sign JWS request".to_string())
+        }
+    }
+}
+
+async fn sign_acme_payload(
+    req: Request<Body>,
+    acme_account_details: AcmeAccountDetails,
+    cage_context: configuration::CageContext,
+) -> ServerResult<Response<Body>> {
+    let parsed_result: ServerResult<JwsRequest> = parse_request(req).await;
+
+    // TODO - validate if body is for new order and only allow signature for this cage
+    // new order body looks like this: "{\"identifiers\":[{\"type\":\"dns\",\"value\":\"cage-name.app-abc.cage.evervault.com\"}]}"
+
+    match parsed_result {
+        Ok(jws_request) => {
+            let key = match jws_request.signature_type {
+                SignatureType::HMAC => acme_account_details.account_hmac,
+                SignatureType::ECDSA => Some(acme_account_details.account_ec_key),
+            };
+
+            let jws = jws(
+                &jws_request.url,
+                jws_request.nonce,
+                &jws_request.payload,
+                &key.unwrap(),
+                jws_request.account_id,
+            );
+
+            match jws {
+                Ok(jws) => {
+                    let jws_response: JwsResponse = JwsResponse::from(&jws);
+                    let body = jws_response.into_body()?;
+
+                    Response::builder()
+                        .status(200)
+                        .header("Content-Type", "application/json")
+                        .body(body)
+                        .map_err(ServerError::HyperHttp)
+                }
+                Err(err) => {
+                    println!("Failed to sign request: {}", err);
+                    Ok(build_error_response(
+                        "Failed to sign JWS request".to_string(),
+                    ))
+                }
+            }
+        }
+        Err(err) => {
+            println!("Failed to parse signing request from data plane: {}", err);
+            Ok(build_error_response(
+                "Failed to parse signing request from data plane".to_string(),
+            ))
+        }
+    }
+}
+
+async fn handle_acme_jwk_request(acme_account_details: AcmeAccountDetails) -> Response<Body> {
+    println!("Recieved jwk request in config server for acme");
+    match get_acme_jwk(acme_account_details).await {
+        Ok(response) => response,
+        Err(err) => {
+            println!("Failed to get jwk: {}", err);
+            build_error_response("Failed to get JWK".to_string())
+        }
+    }
+}
+
+async fn get_acme_jwk(acme_account_details: AcmeAccountDetails) -> ServerResult<Response<Body>> {
+    let jwk = Jwk::new(&acme_account_details.account_ec_key)?;
+    let jwk_response: JwkResponse = jwk.to_response();
+    let body = jwk_response.into_body()?;
+
+    Response::builder()
+        .status(200)
+        .header("Content-Type", "application/json")
+        .body(body)
+        .map_err(ServerError::HyperHttp)
 }
 
 fn build_success_response() -> Response<Body> {

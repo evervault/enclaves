@@ -1,7 +1,6 @@
 use crate::acme::account::Account;
 use crate::acme::error::*;
 use crate::acme::helpers::*;
-use crate::acme::jws::Jwk;
 use crate::acme::order::Order;
 use crate::acme::order::*;
 use openssl::hash::hash;
@@ -261,18 +260,12 @@ impl<T: AcmeClientInterface + Default> Challenge<T> {
         Ok((account, directory))
     }
 
-    pub fn key_authorization(&self) -> Result<Option<String>, AcmeError> {
+    pub async fn key_authorization(&self) -> Result<Option<String>, AcmeError> {
         if let Some(token) = self.token.clone() {
-            let (account, _) = self.get_account_and_directory()?;
+            let (_, directory) = self.get_account_and_directory()?;
 
-            let jwk = &Jwk::new(
-                &account
-                    .private_key
-                    .clone()
-                    .ok_or(AcmeError::FieldNotFound("private_key".into()))?,
-            )?;
-
-            let jwk_thumb: JwkThumb = jwk.into();
+            let jwk = directory.config_client.jwk().await?;
+            let jwk_thumb: JwkThumb = JwkThumb::from(&jwk);
 
             let key_authorization = format!(
                 "{}.{}",
@@ -321,7 +314,7 @@ impl<T: AcmeClientInterface + Default> Challenge<T> {
             .authenticated_request(
                 &self.url,
                 "POST",
-                Some(json!("")),
+                None,
                 &account
                     .private_key
                     .clone()
@@ -351,6 +344,15 @@ impl<T: AcmeClientInterface + Default> Challenge<T> {
         while challenge.status == ChallengeStatus::Pending
             || challenge.status == ChallengeStatus::Processing
         {
+            println!("");
+            println!("--------- Challenge Status ---------");
+            println!("Status: {:?}", challenge.status);
+            println!("Error: {:?}", challenge.error);
+            println!("Token: {:?}", challenge.token);
+            println!("URL: {:?}", challenge.url);
+            println!("------------------------------------");
+            println!("");
+            println!("Waiting for challenge to complete");
             if i >= attempts {
                 return Err(AcmeError::General(
                     "Max attempts polling challenge exceeded".to_string(),

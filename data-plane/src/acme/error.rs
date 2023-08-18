@@ -1,6 +1,8 @@
 use serde::Deserialize;
 use thiserror::Error;
 
+use crate::error;
+
 #[derive(Debug, Error)]
 pub enum AcmeError {
     #[error("IO Error — {0:?}")]
@@ -33,6 +35,8 @@ pub enum AcmeError {
     CsrError(String),
     #[error("{0:?} Field Not Found")]
     FieldNotFound(String),
+    #[error("Config Client Error {0:?}")]
+    ConfigClient(#[from] error::Error),
     #[error("ACME Error {0:?}")]
     General(String),
 }

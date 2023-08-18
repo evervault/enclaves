@@ -1,12 +1,11 @@
 use crate::acme::directory::Directory;
 use crate::acme::error::*;
 use crate::acme::helpers::*;
-use crate::acme::jws::jws;
-use crate::acme::jws::Jwk;
 use openssl::pkey::PKey;
 use openssl::pkey::Private;
 use serde::Deserialize;
 use serde_json::json;
+use shared::server::config_server::requests::SignatureType;
 use std::str::from_utf8;
 use std::sync::Arc;
 
@@ -106,17 +105,23 @@ impl<T: AcmeClientInterface + Default> AccountBuilder<T> {
         };
 
         let url = self.directory.new_account_url.clone();
+        let config_client = self.directory.config_client.clone();
 
         let external_account_binding = if let Some(eab_config) = &self.eab_config {
-            let payload = serde_json::to_string(&Jwk::new(&private_key)?)?;
+            let jwk_response = config_client.jwk().await?;
+            let payload = serde_json::to_string(&jwk_response)?;
 
-            Some(jws(
-                &url,
-                None,
-                &payload,
-                &eab_config.private_key,
-                Some(eab_config.key_id.clone()),
-            )?)
+            let jws = config_client
+                .jws(
+                    SignatureType::HMAC,
+                    url.clone(),
+                    None,
+                    payload,
+                    Some(eab_config.key_id.clone()),
+                )
+                .await?;
+
+            Some(jws)
         } else {
             None
         };
@@ -140,8 +145,9 @@ impl<T: AcmeClientInterface + Default> AccountBuilder<T> {
         let headers = res.headers().clone();
         let resp_bytes = hyper::body::to_bytes(res.into_body()).await?;
         let body_str = from_utf8(&resp_bytes).expect("Body was not valid UTF-8");
+        println!("Account Response: {}", body_str);
         let mut account: Account<_> =
-            serde_json::from_str(body_str).expect("Failed to deserialize Directory");
+            serde_json::from_str(body_str).expect("Failed to deserialize Account");
 
         let account_id = headers
             .get(hyper::header::LOCATION)

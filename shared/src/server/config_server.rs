@@ -12,6 +12,8 @@ pub mod routes {
         PostTrxLogs,
         GetE3Token,
         Storage,
+        AcmeSign,
+        AcmeJWK,
     }
 
     impl FromStr for ConfigServerPath {
@@ -23,6 +25,8 @@ pub mod routes {
                 "/e3/token" => Ok(Self::GetE3Token),
                 "/trx/logs" => Ok(Self::PostTrxLogs),
                 "/storage" => Ok(Self::Storage),
+                "/acme/sign" => Ok(Self::AcmeSign),
+                "/acme/jwk" => Ok(Self::AcmeJWK),
                 _ => Err(ServerError::InvalidPath(input.to_string())),
             }
         }
@@ -35,6 +39,8 @@ pub mod routes {
                 Self::GetE3Token => write!(f, "/e3/token"),
                 Self::PostTrxLogs => write!(f, "/trx/logs"),
                 Self::Storage => write!(f, "/storage"),
+                Self::AcmeSign => write!(f, "/acme/sign"),
+                Self::AcmeJWK => write!(f, "/acme/jwk"),
             }
         }
     }
@@ -257,4 +263,62 @@ pub mod requests {
             self.key.clone()
         }
     }
+
+    #[derive(Serialize, Deserialize, Debug, Clone)]
+    #[serde(rename_all = "lowercase")]
+    pub enum SignatureType {
+        HMAC,
+        ECDSA,
+    }
+
+    #[derive(Serialize, Deserialize, Debug, Clone)]
+    pub struct JwsRequest {
+        pub signature_type: SignatureType,
+        pub url: String,
+        pub nonce: Option<String>,
+        pub payload: String,
+        pub account_id: Option<String>,
+    }
+
+    impl JwsRequest {
+        pub fn new(
+            signature_type: SignatureType,
+            url: String,
+            nonce: Option<String>,
+            payload: String,
+            account_id: Option<String>,
+        ) -> Self {
+            Self {
+                signature_type,
+                url,
+                nonce,
+                payload,
+                account_id,
+            }
+        }
+    }
+
+    impl ConfigServerPayload for JwsRequest {}
+
+    #[derive(Serialize, Deserialize, Debug, Clone)]
+    pub struct JwsResponse {
+        pub protected: String,
+        pub payload: String,
+        pub signature: String,
+    }
+
+    impl ConfigServerPayload for JwsResponse {}
+
+    #[derive(Serialize, Deserialize, Debug, Clone)]
+    pub struct JwkResponse {
+        pub alg: String,
+        pub crv: String,
+        pub kty: String,
+        #[serde(rename = "use")]
+        pub _use: String,
+        pub x: String,
+        pub y: String,
+    }
+
+    impl ConfigServerPayload for JwkResponse {}
 }
