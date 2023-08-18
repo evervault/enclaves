@@ -71,6 +71,8 @@ pub enum Error {
     TrxContextBuilderError(#[from] TrxContextBuilderError),
     #[error("Failed to send trx log= {0}")]
     FailedToSendTrxLog(String),
+    #[error("Failed to return attestation document - {0:?}")]
+    AttestationRequestError(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

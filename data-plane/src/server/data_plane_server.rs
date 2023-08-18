@@ -3,6 +3,7 @@ use super::http::ContentEncoding;
 use super::tls::TlsServerBuilder;
 
 use crate::base_tls_client::ClientError;
+use crate::crypto::attest;
 use crate::e3client::DecryptRequest;
 use crate::e3client::{self, AuthRequest, E3Client};
 use crate::error::Error::{ApiKeyInvalid, MissingApiKey};
@@ -12,12 +13,14 @@ use crate::{CageContext, FeatureContext, FEATURE_CONTEXT};
 use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
 
 use bytes::Bytes;
+use chrono::Utc;
 use futures::StreamExt;
 
 use crate::error::Error;
 use httparse::Status;
 use hyper::http::{self, request, HeaderName, HeaderValue};
 use hyper::{Body, HeaderMap, Request, Response};
+use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use shared::logging::{RequestType, TrxContextBuilder};
 use shared::server::proxy_protocol::ProxiedConnection;
@@ -89,6 +92,23 @@ where
 
                 match req.parse(&buffer) {
                     Ok(Status::Complete(body_offset)) => {
+                        if req.path == Some("/.well-known/attestation") {
+                            let response_bytes = match handle_attestation_request(req).await {
+                                Ok(response) => response_to_bytes(response).await,
+                                Err(err) => {
+                                    eprintln!("Failed to handle attestation request - {err:?}");
+                                    shutdown_conn(&mut stream).await;
+                                    break;
+                                }
+                            };
+
+                            if let Err(err) = stream.write_all(&response_bytes).await {
+                                eprintln!("Failed to write attestation response to control plane - {err:?}");
+                                shutdown_conn(&mut stream).await;
+                            };
+                            break;
+                        }
+
                         if let Err(err) = handle_full_parsed_http_request(
                             req,
                             port,
@@ -398,6 +418,45 @@ async fn handle_http_request(
     };
 
     Ok(response)
+}
+
+#[derive(Serialize, Deserialize)]
+struct AttestationResponse {
+    attestation_doc: String,
+}
+
+struct AttestationChallenge {
+    expiry: String,
+    // TODO(Mark): pull cert from s3 and embed in AD
+    // cert: String
+}
+
+impl ToString for AttestationChallenge {
+    fn to_string(&self) -> String {
+        format!("{}", self.expiry)
+    }
+}
+
+async fn handle_attestation_request(_req: httparse::Request<'_, '_>) -> Result<Response<Body>> {
+    let challenge = AttestationChallenge {
+        expiry: Utc::now().to_string(),
+    }
+    .to_string()
+    .as_bytes()
+    .to_vec();
+
+    let attestation_doc = attest::get_attestation_doc(Some(challenge), None)
+        .map_err(|err| Error::AttestationRequestError(err.to_string()))?;
+
+    let base64_doc = base64::encode(attestation_doc);
+
+    let response = AttestationResponse {
+        attestation_doc: base64_doc,
+    };
+
+    Ok(Response::builder()
+        .status(200)
+        .body(Body::from(serde_json::to_string(&response).unwrap()))?)
 }
 
 async fn auth_request(
