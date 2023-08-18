@@ -11,16 +11,16 @@ use openssl::sign::Signer;
 use serde::Deserialize;
 use serde::Serialize;
 
-#[derive(Serialize, Deserialize, Clone, Default)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
 struct JwsHeader {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    nonce: Option<String>,
     alg: String,
-    url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    jwk: Option<Jwk>,
     #[serde(skip_serializing_if = "Option::is_none")]
     kid: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    jwk: Option<Jwk>,
+    nonce: Option<String>,
+    url: String,
 }
 
 fn extract_ec_coordinates(
@@ -35,11 +35,11 @@ fn extract_ec_coordinates(
     public_key.affine_coordinates_gfp(group, &mut x, &mut y, &mut ctx)?;
 
     let x_coord = b64(&x.to_vec());
-    let y_coord = b64(&y.to_vec());
+    let y_coord: String = b64(&y.to_vec());
     Ok((x_coord, y_coord))
 }
 
-#[derive(Serialize, Deserialize, Clone, Default)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub struct Jwk {
     alg: String,
     crv: String,
@@ -103,11 +103,11 @@ pub fn jws(
     }
 
     let protected_b64 = b64(&serde_json::to_string(&header)?.into_bytes());
-
     let signature_b64 = {
         let mut signer = Signer::new(MessageDigest::sha256(), pkey)?;
         signer.update(&format!("{}.{}", protected_b64, payload_b64).into_bytes())?;
-        b64(&signer.sign_to_vec()?)
+        let signature = signer.sign_to_vec()?;
+        b64(&signature)
     };
 
     Ok(JwsResult {
