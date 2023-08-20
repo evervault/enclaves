@@ -1,6 +1,3 @@
-use crate::acme::error::*;
-use openssl::pkey::PKey;
-use openssl::pkey::Private;
 use serde::Deserialize;
 use serde::Serialize;
 use shared::server::config_server::requests::JwkResponse;

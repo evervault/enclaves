@@ -1,5 +1,5 @@
 use crate::acme::account_details::AcmeAccountDetails;
-use crate::acme::jws::{jws, Jwk};
+use crate::acme::jws::{jws, Jwk, NewOrderPayload};
 use crate::clients::cert_provisioner::{
     CertProvisionerClient, GetCertTokenResponseControlPlane, GetE3TokenResponseControlPlane,
 };
@@ -333,14 +333,19 @@ async fn sign_acme_payload(
 ) -> ServerResult<Response<Body>> {
     let parsed_result: ServerResult<JwsRequest> = parse_request(req).await;
 
-    // TODO - validate if body is for new order and only allow signature for this cage
-    // new order body looks like this: "{\"identifiers\":[{\"type\":\"dns\",\"value\":\"cage-name.app-abc.cage.evervault.com\"}]}"
-
     match parsed_result {
         Ok(jws_request) => {
             let key = match jws_request.signature_type {
                 SignatureType::HMAC => acme_account_details.account_hmac,
                 SignatureType::ECDSA => Some(acme_account_details.account_ec_key),
+            };
+
+            if jws_request.url.contains("/newOrder") {
+                let order_payload: NewOrderPayload = serde_json::from_str(&jws_request.payload)?;
+
+                if !validate_order_identifiers(order_payload, cage_context) {
+                    return Ok(build_bad_request_response());
+                }
             };
 
             let jws = jws(
@@ -402,6 +407,21 @@ async fn get_acme_jwk(acme_account_details: AcmeAccountDetails) -> ServerResult<
         .map_err(ServerError::HyperHttp)
 }
 
+fn validate_order_identifiers(
+    payload: NewOrderPayload,
+    cage_context: configuration::CageContext,
+) -> bool {
+    let cage_domain = format!(
+        "{}.{}.{}.cage.evervault.com",
+        &cage_context.cage_name, &cage_context.app_uuid, &cage_context.team_uuid
+    );
+
+    payload
+        .identifiers
+        .into_iter()
+        .all(|identifier| identifier.value == cage_domain)
+}
+
 fn build_success_response() -> Response<Body> {
     Response::builder()
         .status(200)
@@ -443,6 +463,8 @@ async fn parse_request<T: DeserializeOwned>(req: Request<Body>) -> ServerResult<
 mod tests {
 
     use super::*;
+    use crate::acme::helpers;
+    use crate::acme::jws::Identifier;
     use crate::clients::storage::StorageClientError;
     use crate::mocks::storage_client_mock::MockStorageClientInterface;
     use mockall::predicate::eq;
@@ -667,5 +689,127 @@ mod tests {
 
         assert!(result.is_ok());
         assert!(result.unwrap().status().is_server_error());
+    }
+
+    #[tokio::test]
+    async fn test_handle_acme_signing_request_success() {
+        let cage_context = get_cage_context();
+        let acme_account_details = AcmeAccountDetails {
+            account_ec_key: helpers::gen_ec_private_key().unwrap(),
+            account_hmac: None,
+        };
+
+        let req_body = JwsRequest::new(
+            SignatureType::ECDSA,
+            "https://acme-staging-v02.api.letsencrypt.org/acme/newAccount".to_string(),
+            Some("some_nonce".to_string()),
+            "some_payload".to_string(),
+            None,
+        )
+        .into_body()
+        .unwrap();
+
+        let result = handle_acme_signing_request(
+            hyper::Request::builder()
+                .method(Method::POST)
+                .body(req_body)
+                .unwrap(),
+            acme_account_details,
+            cage_context,
+        )
+        .await;
+
+        assert!(result.status().is_success());
+    }
+
+    #[tokio::test]
+    async fn test_handle_acme_signing_request_bad_request_new_order() {
+        let cage_context = get_cage_context();
+        let acme_account_details = AcmeAccountDetails {
+            account_ec_key: helpers::gen_ec_private_key().unwrap(),
+            account_hmac: None,
+        };
+
+        let new_order_payload = NewOrderPayload {
+            identifiers: vec![Identifier {
+                type_: "dns".to_string(),
+                value: "some_other_domain.com".to_string(),
+            }],
+        };
+
+        let new_order_payload_string = serde_json::to_string(&new_order_payload).unwrap();
+
+        let req_body = JwsRequest::new(
+            SignatureType::ECDSA,
+            "https://acme-staging-v02.api.letsencrypt.org/acme/newOrder".to_string(),
+            Some("some_nonce".to_string()),
+            new_order_payload_string,
+            None,
+        )
+        .into_body()
+        .unwrap();
+
+        let result = handle_acme_signing_request(
+            hyper::Request::builder()
+                .method(Method::POST)
+                .body(req_body)
+                .unwrap(),
+            acme_account_details,
+            cage_context,
+        )
+        .await;
+
+        assert!(result.status().is_client_error());
+    }
+
+    #[test]
+    fn test_validate_new_order_valid() {
+        let cage_context = get_cage_context();
+        let payload = NewOrderPayload {
+            identifiers: vec![Identifier {
+                type_: "dns".to_string(),
+                value: format!(
+                    "{}.{}.{}.cage.evervault.com",
+                    cage_context.cage_name, cage_context.app_uuid, cage_context.team_uuid
+                ),
+            }],
+        };
+
+        assert!(validate_order_identifiers(payload, cage_context));
+    }
+
+    #[test]
+    fn test_validate_new_order_invalid() {
+        let cage_context = get_cage_context();
+        let payload = NewOrderPayload {
+            identifiers: vec![Identifier {
+                type_: "dns".to_string(),
+                value: "some_other_domain.com".to_string(),
+            }],
+        };
+
+        assert!(!validate_order_identifiers(payload, cage_context));
+    }
+
+    #[test]
+    fn test_validate_new_order_multiple_domains_invalid() {
+        let cage_context = get_cage_context();
+        let payload = NewOrderPayload {
+            identifiers: vec![
+                Identifier {
+                    type_: "dns".to_string(),
+                    value: "some_other_domain.com".to_string(),
+                },
+                Identifier {
+                    type_: "dns".to_string(),
+                    value: format!(
+                        "{}.{}.{}.cage.evervault.com",
+                        cage_context.cage_name, cage_context.app_uuid, cage_context.team_uuid
+                    ),
+                },
+            ],
+        };
+
+        assert!(!validate_order_identifiers(payload, cage_context));
     }
 }
