@@ -159,7 +159,7 @@ fn gen_csr(
     stack.push(san_extension)?;
     builder.add_extensions(&stack)?;
 
-    builder.set_pubkey(&pkey)?;
+    builder.set_pubkey(pkey)?;
     builder.sign(pkey, MessageDigest::sha256())?;
 
     Ok(builder.build())

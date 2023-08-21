@@ -13,15 +13,15 @@ use hyper::{
 use rand::{thread_rng, Rng};
 
 #[allow(dead_code)]
-#[derive(Serialize, Deserialize, Clone, Debug, Builder)]
+#[derive(Serialize, Deserialize, Clone, Debug, Builder, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct TrxContext {
     txid: String,
     ts: String,
     msg: String,
-    uri: String,
+    uri: Option<String>,
     r#type: String,
-    request_method: String,
+    request_method: Option<String>,
     #[builder(default)]
     remote_ip: Option<String>,
     #[builder(default)]
@@ -46,6 +46,7 @@ pub struct TrxContext {
     response_content_type: Option<String>,
     #[builder(default)]
     elapsed: Option<f64>,
+    request_type: String,
 }
 
 impl TrxContext {
@@ -86,8 +87,24 @@ impl std::fmt::Display for TrxContextId {
     }
 }
 
+pub enum RequestType {
+    HTTP,
+    Websocket,
+    TCP,
+}
+
+impl From<RequestType> for String {
+    fn from(val: RequestType) -> String {
+        match val {
+            RequestType::HTTP => "HTTP".to_string(),
+            RequestType::TCP => "TCP".to_string(),
+            RequestType::Websocket => "Websocket".to_string(),
+        }
+    }
+}
+
 impl TrxContextBuilder {
-    fn new() -> TrxContextBuilder {
+    fn new(request_type: RequestType) -> TrxContextBuilder {
         let timestamp = get_iso_timestamp();
         let trx_id = format!("{}", TrxContextId::new());
         let trx_type = "cage_trx".to_string();
@@ -112,6 +129,7 @@ impl TrxContextBuilder {
             response_content_type: None,
             elapsed: None,
             remote_ip: None,
+            request_type: Some(request_type.into()),
         }
     }
 
@@ -133,8 +151,9 @@ impl TrxContextBuilder {
         cage_name: &str,
         app_uuid: &str,
         team_uuid: &str,
+        request_type: RequestType,
     ) -> Self {
-        let mut trx_context = Self::new();
+        let mut trx_context = Self::new(request_type);
         trx_context.cage_uuid(cage_uuid.to_string());
         trx_context.cage_name(cage_name.to_string());
         trx_context.app_uuid(app_uuid.to_string());
@@ -155,8 +174,8 @@ impl TrxContextBuilder {
     }
 
     pub fn add_req_to_trx_context(&mut self, req: &Request<Body>, trusted_headers: &[String]) {
-        self.uri(build_log_uri(req.uri()));
-        self.request_method(req.method().to_string());
+        self.uri(Some(build_log_uri(req.uri())));
+        self.request_method(Some(req.method().to_string()));
         self.add_headers_to_request(req.headers(), trusted_headers);
 
         //Pull out content type
@@ -187,6 +206,34 @@ impl TrxContextBuilder {
                 .expect("Infallible - Failed to convert HeaderValue of ContentType to String");
             self.response_content_type(Some(content_type_str.into()));
         }
+    }
+
+    fn format_headers(headers: &[httparse::Header<'_>]) -> Option<String> {
+        let mut map = Map::new();
+        for header in headers {
+            map.insert(
+                header.name.to_string(),
+                std::str::from_utf8(header.value).ok().into(),
+            );
+        }
+        serde_json::to_string(&map).ok()
+    }
+
+    pub fn add_httparse_to_trx(
+        &mut self,
+        authorized: bool,
+        request: Option<httparse::Request<'_, '_>>,
+        remote_ip: Option<String>,
+    ) {
+        if let Some(req) = request {
+            self.uri(req.path.map(|s| s.to_string()));
+            self.request_method(req.method.map(|s| s.to_string()));
+            self.request_headers(Self::format_headers(req.headers));
+        };
+        if !authorized {
+            self.add_status_and_group(401);
+        }
+        self.remote_ip(remote_ip);
     }
 
     fn add_headers_to_request(
@@ -423,7 +470,60 @@ impl std::fmt::Display for StatusGroup {
 
 #[cfg(test)]
 mod test {
-    use super::is_trusted_header;
+    use super::{is_trusted_header, TrxContext, TrxContextBuilder};
+
+    #[test]
+    fn test_create_non_http_log() {
+        let mut headers = vec![
+            httparse::Header {
+                name: "test",
+                value: "value".as_bytes(),
+            },
+            httparse::Header {
+                name: "anotherTest",
+                value: "value".as_bytes(),
+            },
+        ];
+        let request = httparse::Request {
+            method: Some("GET"),
+            path: Some("/hello"),
+            version: None,
+            headers: &mut headers,
+        };
+
+        let mut trx = TrxContextBuilder::new(super::RequestType::Websocket);
+        trx.app_uuid("123".to_string());
+        trx.team_uuid("123".to_string());
+        trx.cage_uuid("123".to_string());
+        trx.cage_name("name".to_string());
+        trx.add_httparse_to_trx(true, Some(request), Some("1.1.1.1".to_string()));
+        let log = trx.build().unwrap();
+
+        let expected_log = TrxContext {
+            txid: trx.txid.unwrap(),
+            ts: trx.ts.unwrap(),
+            msg: "Cage Transaction Complete".to_owned(),
+            uri: Some("/hello".to_string()),
+            r#type: "cage_trx".to_string(),
+            request_method: Some("GET".to_string()),
+            remote_ip: Some("1.1.1.1".to_string()),
+            request_headers: Some("{\"anotherTest\":\"value\",\"test\":\"value\"}".to_string()),
+            user_agent: None,
+            response_headers: None,
+            response_code: None,
+            status_group: None,
+            cage_name: "name".to_string(),
+            cage_uuid: "123".to_string(),
+            app_uuid: "123".to_string(),
+            team_uuid: "123".to_string(),
+            n_decrypted_fields: None,
+            content_type: None,
+            response_content_type: None,
+            elapsed: None,
+            request_type: super::RequestType::Websocket.into(),
+        };
+        assert_eq!(log, expected_log);
+    }
 
     #[test]
     fn test_trusted_headers_matching() {

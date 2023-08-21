@@ -116,9 +116,7 @@ where
 }
 
 impl<T: AcmeClientInterface + Default> Order<T> {
-    pub fn get_account_and_directory(
-        &self,
-    ) -> Result<(Arc<Account<T>>, Arc<Directory<T>>), AcmeError> {
+    pub fn get_account_and_directory(&self) -> Result<AccountAndDirectory<T>, AcmeError> {
         let account = self
             .account
             .clone()
@@ -167,10 +165,10 @@ impl<T: AcmeClientInterface + Default> Order<T> {
     }
 }
 
+type AccountAndDirectory<T> = (Arc<Account<T>>, Arc<Directory<T>>);
+
 impl<T: AcmeClientInterface + Default> Authorization<T> {
-    pub fn get_account_and_directory(
-        &self,
-    ) -> Result<(Arc<Account<T>>, Arc<Directory<T>>), AcmeError> {
+    pub fn get_account_and_directory(&self) -> Result<AccountAndDirectory<T>, AcmeError> {
         let account = self
             .account
             .clone()
@@ -184,12 +182,9 @@ impl<T: AcmeClientInterface + Default> Authorization<T> {
     }
 
     pub fn get_challenge(&self, r#type: &str) -> Option<&Challenge<T>> {
-        for challenge in &self.challenges {
-            if challenge.r#type == r#type {
-                return Some(challenge.clone());
-            }
-        }
-        None
+        self.challenges
+            .iter()
+            .find(|&challenge| challenge.r#type == r#type)
     }
 
     pub async fn poll(self) -> Result<Authorization<T>, AcmeError> {
@@ -245,9 +240,7 @@ impl<T: AcmeClientInterface + Default> Authorization<T> {
 }
 
 impl<T: AcmeClientInterface + Default> Challenge<T> {
-    pub fn get_account_and_directory(
-        &self,
-    ) -> Result<(Arc<Account<T>>, Arc<Directory<T>>), AcmeError> {
+    pub fn get_account_and_directory(&self) -> Result<AccountAndDirectory<T>, AcmeError> {
         let account = self
             .account
             .clone()
