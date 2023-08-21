@@ -449,8 +449,10 @@ impl ToString for AttestationChallenge {
 
 #[cfg(feature = "enclave")]
 async fn handle_attestation_request(_req: httparse::Request<'_, '_>) -> Result<Response<Body>> {
+    use chrono::Duration;
+
     let challenge = AttestationChallenge {
-        expiry: Utc::now().to_string(),
+        expiry: (Utc::now() + Duration::minutes(15)).to_string(),
     }
     .to_string()
     .as_bytes()
