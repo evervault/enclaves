@@ -30,7 +30,7 @@ pub enum AuthorizationStatus {
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct Authorization<T: AcmeClientInterface + Default> {
+pub struct Authorization<T: AcmeClientInterface> {
     #[serde(skip)]
     pub account: Option<Arc<Account<T>>>,
     #[serde(skip)]
@@ -54,7 +54,7 @@ pub enum ChallengeStatus {
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct Challenge<T: AcmeClientInterface + Default> {
+pub struct Challenge<T: AcmeClientInterface> {
     #[serde(skip_serializing, skip_deserializing)]
     pub account: Option<Arc<Account<T>>>,
     pub r#type: String,
@@ -67,7 +67,7 @@ pub struct Challenge<T: AcmeClientInterface + Default> {
 
 // Need this as the derive macro doesn't support nested generics being skipped eg: Challenge skips deserializing Account<T> but Authorization
 // doesn't recoginize that Challenge<T> skips the use of T and looks to be able to Deserialise Challenge<T: AcmeClientInterface>
-fn skip_account<'de, D, T: AcmeClientInterface + Default>(
+fn skip_account<'de, D, T: AcmeClientInterface>(
     deserializer: D,
 ) -> Result<Vec<Challenge<T>>, D::Error>
 where
@@ -83,9 +83,9 @@ where
         token: Option<String>,
     }
 
-    struct ChallengesVisitor<T: AcmeClientInterface + Default>(std::marker::PhantomData<T>);
+    struct ChallengesVisitor<T: AcmeClientInterface>(std::marker::PhantomData<T>);
 
-    impl<'de, T: AcmeClientInterface + Default> Visitor<'de> for ChallengesVisitor<T> {
+    impl<'de, T: AcmeClientInterface> Visitor<'de> for ChallengesVisitor<T> {
         type Value = Vec<Challenge<T>>;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -115,7 +115,7 @@ where
     deserializer.deserialize_seq(ChallengesVisitor(std::marker::PhantomData))
 }
 
-impl<T: AcmeClientInterface + Default> Order<T> {
+impl<T: AcmeClientInterface> Order<T> {
     pub fn get_account_and_directory(&self) -> Result<AccountAndDirectory<T>, AcmeError> {
         let account = self
             .account
@@ -167,7 +167,7 @@ impl<T: AcmeClientInterface + Default> Order<T> {
 
 type AccountAndDirectory<T> = (Arc<Account<T>>, Arc<Directory<T>>);
 
-impl<T: AcmeClientInterface + Default> Authorization<T> {
+impl<T: AcmeClientInterface> Authorization<T> {
     pub fn get_account_and_directory(&self) -> Result<AccountAndDirectory<T>, AcmeError> {
         let account = self
             .account
@@ -239,7 +239,7 @@ impl<T: AcmeClientInterface + Default> Authorization<T> {
     }
 }
 
-impl<T: AcmeClientInterface + Default> Challenge<T> {
+impl<T: AcmeClientInterface> Challenge<T> {
     pub fn get_account_and_directory(&self) -> Result<AccountAndDirectory<T>, AcmeError> {
         let account = self
             .account
