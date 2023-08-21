@@ -100,8 +100,14 @@ where
                                 Ok(response) => response_to_bytes(response).await,
                                 Err(err) => {
                                     eprintln!("Failed to handle attestation request - {err:?}");
-                                    shutdown_conn(&mut stream).await;
-                                    break;
+                                    match build_attestation_err_response(err) {
+                                        Ok(response) => response_to_bytes(response).await,
+                                        Err(err) => {
+                                            eprintln!("Failed to build attesation error response - {err:?}");
+                                            shutdown_conn(&mut stream).await;
+                                            break;
+                                        }
+                                    }
                                 }
                             };
 
@@ -462,6 +468,13 @@ async fn handle_attestation_request(_req: httparse::Request<'_, '_>) -> Result<R
     Ok(Response::builder()
         .status(200)
         .body(Body::from(serde_json::to_string(&response).unwrap()))?)
+}
+
+#[cfg(feature = "enclave")]
+fn build_attestation_err_response(err: Error) -> Result<Response<Body>> {
+    Ok(Response::builder()
+        .status(500)
+        .body(Body::from(err.to_string()))?)
 }
 
 async fn auth_request(
