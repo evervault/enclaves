@@ -73,6 +73,8 @@ pub enum Error {
     FailedToSendTrxLog(String),
     #[error("Failed to return attestation document - {0:?}")]
     AttestationRequestError(String),
+    #[error("Request timed out in data plane after {0} seconds")]
+    RequestTimeout(usize),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

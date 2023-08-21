@@ -1,14 +1,19 @@
 use crate::acme::error::*;
-// use crate::acme::jws::jws;
+use crate::acme::jws::jws;
+use crate::configuration;
 use hyper::Body;
+use hyper::Response;
+use openssl::pkey::PKey;
+use openssl::pkey::Private;
 use serde::Deserialize;
-use serde_json::from_slice;
+use serde_json::Value;
+use std::str::from_utf8;
 use std::sync::Arc;
 use std::sync::Mutex;
 
 use super::client::AcmeClientInterface;
 
-#[derive(Deserialize, Debug, Default)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 #[allow(unused)]
 pub struct Directory<T: AcmeClientInterface> {
@@ -42,7 +47,7 @@ pub struct DirectoryMeta {
 }
 
 fn extract_nonce_from_response(
-    resp: hyper::Response<hyper::Body>,
+    resp: &hyper::Response<hyper::Body>,
 ) -> Result<Option<String>, AcmeError> {
     resp.headers()
         .get("replay-nonce")
@@ -55,20 +60,26 @@ fn extract_nonce_from_response(
         .transpose()
 }
 
-impl<T: AcmeClientInterface + Default> Directory<T> {
+impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
     pub async fn fetch_directory(
-        url: String,
+        path: String,
         acme_http_client: T,
     ) -> Result<Arc<Directory<T>>, AcmeError> {
+        let host = configuration::get_acme_host();
+        let url = format!("https://{}{}", host.clone(), path);
         let request = hyper::Request::builder()
             .method("GET")
             .uri(url)
+            .header(hyper::header::CONTENT_TYPE, "application/json")
+            .header(hyper::header::HOST, host)
             .body(Body::empty())?;
 
-        let resp = acme_http_client.send(request).await?;
-
+        let resp: Response<Body> = acme_http_client.send(request).await?;
         let resp_bytes = hyper::body::to_bytes(resp.into_body()).await?;
-        let mut directory: Directory<T> = from_slice(&resp_bytes)?;
+        let body_str = from_utf8(&resp_bytes)?;
+
+        let mut directory: Directory<_> =
+            serde_json::from_str(body_str).expect("Failed to deserialize Directory");
 
         directory.client = acme_http_client;
         directory.nonce = Mutex::new(None);
@@ -91,17 +102,83 @@ impl<T: AcmeClientInterface + Default> Directory<T> {
 
         let new_nonce_request = hyper::Request::builder()
             .method("GET")
+            .header(hyper::header::CONTENT_TYPE, "application/json")
+            .header(hyper::header::HOST, configuration::get_acme_host())
             .uri(&self.new_nonce_url)
             .body(Body::empty())?;
 
         let resp = self.client.send(new_nonce_request).await?;
 
-        let maybe_nonce = extract_nonce_from_response(resp)?;
+        let maybe_nonce = extract_nonce_from_response(&resp)?;
 
         maybe_nonce.ok_or(AcmeError::NoNonce)
     }
-}
 
+    async fn authenticated_request_raw(
+        &self,
+        method: &str,
+        url: &str,
+        payload: &str,
+        pkey: &PKey<Private>,
+        account_id: &Option<String>,
+    ) -> Result<hyper::Response<Body>, AcmeError> {
+        let nonce = self.get_nonce().await?;
+        let body = jws(url, Some(nonce), payload, pkey, account_id.clone())?;
+        let body = serde_json::to_vec(&body)?;
+
+        let request = hyper::Request::builder()
+            .method(method)
+            .uri(url)
+            .header(hyper::header::HOST, configuration::get_acme_host())
+            .header(hyper::header::CONTENT_TYPE, "application/jose+json")
+            .body(Body::from(body))?;
+
+        let resp = self.client.send(request).await?;
+
+        if let Some(nonce) = extract_nonce_from_response(&resp)? {
+            let mut guard = self
+                .nonce
+                .lock()
+                .map_err(|err| AcmeError::PoisonError(err.to_string()))?;
+            *guard = Some(nonce);
+        }
+
+        Ok(resp)
+    }
+
+    pub async fn authenticated_request(
+        &self,
+        url: &str,
+        method: &str,
+        payload: Option<Value>,
+        pkey: &PKey<Private>,
+        account_id: &Option<String>,
+    ) -> Result<hyper::Response<Body>, AcmeError> {
+        println!("Sending authenticated request to: {}", url);
+
+        //Handle empty body
+        let payload_parsed = match payload {
+            None => "".to_string(),
+            Some(payload) => serde_json::to_string(&payload)?,
+        };
+
+        let resp = self
+            .authenticated_request_raw(method, url, &payload_parsed, pkey, account_id)
+            .await?;
+
+        if let Some(nonce) = extract_nonce_from_response(&resp)? {
+            let mut guard: std::sync::MutexGuard<'_, Option<String>> = self
+                .nonce
+                .lock()
+                .map_err(|err| AcmeError::PoisonError(err.to_string()))?;
+            *guard = Some(nonce);
+        }
+
+        println!("Authenticated request response status: {:?}", resp.status());
+
+        Ok(resp)
+    }
+}
 #[cfg(test)]
 mod tests {
 
@@ -194,12 +271,9 @@ mod tests {
             Ok(resp)
         });
 
-        let directory = Directory::fetch_directory(
-            String::from("https://example.com/acme/directory"),
-            mock_client,
-        )
-        .await
-        .unwrap();
+        let directory = Directory::fetch_directory(String::from("/acme/directory"), mock_client)
+            .await
+            .unwrap();
 
         assert_eq!(directory.new_nonce_url, test_directory_paths.new_nonce_url);
         assert_eq!(
