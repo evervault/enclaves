@@ -28,6 +28,16 @@ pub enum OrderStatus {
     Invalid,
 }
 
+impl OrderStatus {
+    pub fn is_done(&self) -> bool {
+        matches!(self, OrderStatus::Valid | OrderStatus::Invalid)
+    }
+
+    pub fn is_pending(&self) -> bool {
+        matches!(self, OrderStatus::Pending)
+    }
+}
+
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Identifier {
@@ -63,7 +73,7 @@ pub struct OrderBuilder<T: AcmeClientInterface> {
     identifiers: Vec<Identifier>,
 }
 
-impl<T: AcmeClientInterface + Default> OrderBuilder<T> {
+impl<T: AcmeClientInterface> OrderBuilder<T> {
     pub fn new(account: Arc<Account<T>>) -> Self {
         OrderBuilder {
             account,
@@ -131,7 +141,7 @@ impl<T: AcmeClientInterface + Default> OrderBuilder<T> {
 }
 
 fn gen_csr(
-    pkey: &PKey<openssl::pkey::Private>,
+    key_pair: &PKey<openssl::pkey::Private>,
     domains: Vec<String>,
 ) -> Result<X509Req, AcmeError> {
     if domains.is_empty() {
@@ -159,13 +169,13 @@ fn gen_csr(
     stack.push(san_extension)?;
     builder.add_extensions(&stack)?;
 
-    builder.set_pubkey(pkey)?;
-    builder.sign(pkey, MessageDigest::sha256())?;
+    builder.set_pubkey(key_pair)?;
+    builder.sign(key_pair, MessageDigest::sha256())?;
 
     Ok(builder.build())
 }
 
-impl<T: AcmeClientInterface + Default> Order<T> {
+impl<T: AcmeClientInterface> Order<T> {
     pub async fn finalize(&self, pkey: PKey<Private>) -> Result<Order<T>, AcmeError> {
         let csr = gen_csr(
             &pkey,
@@ -262,7 +272,7 @@ impl<T: AcmeClientInterface + Default> Order<T> {
 
         let mut i: usize = 0;
 
-        while order.status == OrderStatus::Pending {
+        while order.status.is_pending() {
             if i >= attempts {
                 return Err(AcmeError::General(
                     "Max attempts reached for polling order.".into(),
@@ -285,10 +295,7 @@ impl<T: AcmeClientInterface + Default> Order<T> {
 
         let mut i: usize = 0;
 
-        while order.status == OrderStatus::Pending
-            || order.status == OrderStatus::Ready
-            || order.status == OrderStatus::Processing
-        {
+        while !order.status.is_done() {
             if i >= attempts {
                 return Err(AcmeError::General(
                     "Max attempts reached for polling order.".to_string(),
