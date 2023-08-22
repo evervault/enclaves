@@ -75,6 +75,8 @@ pub enum Error {
     AttestationRequestError(String),
     #[error("Request timed out in data plane after {0} seconds")]
     RequestTimeout(usize),
+    #[error("Failed to serialize attestation challenge - {0:?}")]
+    ChallengeSerializationError(#[from] bincode::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

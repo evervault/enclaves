@@ -462,17 +462,11 @@ struct AttestationResponse {
     attestation_doc: String,
 }
 
+#[derive(Serialize, Debug)]
 struct AttestationChallenge {
     expiry: String,
     // TODO(Mark): pull cert from s3 and embed in AD
-    // cert: String
-}
-
-impl ToString for AttestationChallenge {
-    fn to_string(&self) -> String {
-        // TODO(Mark): serialize the expiry and cert
-        self.expiry.clone()
-    }
+    pub_key: String,
 }
 
 #[cfg(feature = "enclave")]
@@ -480,13 +474,11 @@ async fn handle_attestation_request(_req: httparse::Request<'_, '_>) -> Result<R
     use chrono::Duration;
 
     let challenge = AttestationChallenge {
-        expiry: (Utc::now() + Duration::minutes(15)).to_string(),
-    }
-    .to_string()
-    .as_bytes()
-    .to_vec();
+        expiry: (Utc::now() + Duration::minutes(15)).to_rfc3339(),
+        pub_key: "".to_string(), //base64 encode first
+    };
 
-    let attestation_doc = attest::get_attestation_doc(Some(challenge), None)
+    let attestation_doc = attest::get_attestation_doc(Some(bincode::serialize(&challenge)?), None)
         .map_err(|err| Error::AttestationRequestError(err.to_string()))?;
 
     let base64_doc = base64::encode(attestation_doc);
