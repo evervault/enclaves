@@ -1,6 +1,6 @@
 //Simple server running on port 80 to server ACME challenges
 use crate::error::Result;
-use axum::extract::Path;
+use axum::extract::{Host, Path};
 use axum::{http::StatusCode, response::Response, routing::get, Router};
 use hyper::Body;
 use shared::storage::StorageClientInterface;
@@ -27,7 +27,9 @@ impl AcmeServer {
     ) -> Result<()> {
         let app = Router::new().route(
             CHALLENGE_PATH,
-            get(move |token| handle_get_challenge(token, storage_client)),
+            get(move |Host(host): Host, Path(token): Path<String>| {
+                handle_get_challenge(host, token, storage_client)
+            }),
         );
 
         axum::Server::bind(
@@ -42,16 +44,19 @@ impl AcmeServer {
 }
 
 async fn handle_get_challenge<T: StorageClientInterface>(
-    Path(token): Path<String>,
+    host: String,
+    token: String,
     storage_client: T,
 ) -> Response<Body> {
-    // appid/cage-name/chal
-    println!("{:?}", token);
-    // let namespace = cage_context.get_namespace_string();
-    let file_path = format!(
-        "{}/.well-known/acme-challenge/{}",
-        "app_id/cage_name", token
-    );
+    // cage_name.app_uuid.cages.evervault.com
+    let parts: Vec<&str> = host.split(".").collect();
+
+    if parts.len() != 5 {
+        eprintln!("Request was made to a hostname that does not look like a cage hostname");
+        return build_infallible_response("Bad hostname", StatusCode::BAD_REQUEST);
+    }
+
+    let file_path = format!("{}/{}/{}", parts[1], parts[0], token);
     get_challenge(file_path, storage_client).await
 }
 
