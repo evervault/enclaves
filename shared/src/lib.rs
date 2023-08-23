@@ -20,6 +20,7 @@ pub mod logging;
 pub mod rpc;
 pub mod server;
 pub mod stats;
+pub mod storage;
 pub mod utils;
 
 lazy_static::lazy_static! {
