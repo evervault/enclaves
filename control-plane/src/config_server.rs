@@ -320,7 +320,7 @@ fn build_error_response(body_msg: String) -> Response<Body> {
         .body(Body::from(body_msg))
         .expect("Infallible")
 }
-// appid/cagename/<chal>
+
 fn namespace_key(key: String, cage_context: &configuration::CageContext) -> String {
     format!(
         "{}/{}/{}/{}",
