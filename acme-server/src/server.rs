@@ -1,4 +1,3 @@
-//Simple server running on port 80 to server ACME challenges
 use crate::error::Result;
 use axum::extract::{Host, Path};
 use axum::{http::StatusCode, response::Response, routing::get, Router};
@@ -48,9 +47,9 @@ async fn handle_get_challenge<T: StorageClientInterface>(
     token: String,
     storage_client: T,
 ) -> Response<Body> {
-    // cage_name.app_uuid.cages.evervault.com
     let parts: Vec<&str> = host.split(".").collect();
 
+    // cage-name.app-uuid.cages.evervault.com
     if parts.len() != 5 {
         eprintln!("Request was made to a hostname that does not look like a cage hostname");
         return build_infallible_response("Bad hostname", StatusCode::BAD_REQUEST);
