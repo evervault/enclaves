@@ -87,8 +87,8 @@ fn build_infallible_response(msg: &str, status_code: StatusCode) -> Response<Bod
 mod tests {
 
     use super::*;
-    use crate::mocks::storage_client_mock::MockStorageClientInterface;
     use mockall::predicate::eq;
+    use shared::mocks::storage_client_mock::MockStorageClientInterface;
     use shared::storage::StorageClientError;
 
     fn get_cage_context() -> configuration::CageContext {

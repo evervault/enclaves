@@ -337,8 +337,8 @@ async fn parse_request<T: DeserializeOwned>(req: Request<Body>) -> ServerResult<
 mod tests {
 
     use super::*;
-    use crate::mocks::storage_client_mock::MockStorageClientInterface;
     use mockall::predicate::eq;
+    use shared::mocks::storage_client_mock::MockStorageClientInterface;
     use shared::storage::StorageClientError;
 
     fn get_cage_context() -> configuration::CageContext {

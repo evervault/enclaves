@@ -56,7 +56,7 @@ async fn handle_get_challenge<T: StorageClientInterface>(
         return build_infallible_response("Bad hostname", StatusCode::BAD_REQUEST);
     }
 
-    let file_path = format!("{}/{}/{}", parts[1], parts[0], token);
+    let file_path = format!("{}/{}/acme-challenges/{}", parts[1], parts[0], token);
     get_challenge(file_path, storage_client).await
 }
 
@@ -89,102 +89,84 @@ fn build_infallible_response(msg: &str, status_code: StatusCode) -> Response<Bod
         .expect("Infallible - hardcoded response")
 }
 
-// #[cfg(test)]
-// mod tests {
+#[cfg(test)]
+mod tests {
 
-//     use super::*;
-//     use crate::mocks::storage_client_mock::MockStorageClientInterface;
-//     use mockall::predicate::eq;
-//     use shared::storage::StorageClientError;
+    use super::*;
+    use mockall::predicate::eq;
+    use shared::mocks::storage_client_mock::MockStorageClientInterface;
+    use shared::storage::StorageClientError;
 
-//     fn get_cage_context() -> configuration::CageContext {
-//         configuration::CageContext::new(
-//             "cage_123".to_string(),
-//             "v1".to_string(),
-//             "test-me".to_string(),
-//             "app_123".to_string(),
-//             "team_456".to_string(),
-//         )
-//     }
+    fn get_expected_path(challenge_key: &str) -> String {
+        format!(
+            "{}/{}/acme-challenges/{}",
+            "app-123", "test-cage", challenge_key
+        )
+    }
 
-//     #[tokio::test]
-//     async fn test_get_challenge_success() {
-//         let mut mock = MockStorageClientInterface::new();
-//         let cage_context = get_cage_context();
-//         let challenge_key = "test-success";
-//         let expected_path = format!(
-//             "{}/{}/{}/.well-known/acme-challenge/{}",
-//             cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, challenge_key
-//         );
+    #[tokio::test]
+    async fn test_get_challenge_success() {
+        let mut mock = MockStorageClientInterface::new();
+        let expected_path = get_expected_path("test-success");
 
-//         mock.expect_get_object()
-//             .with(eq(expected_path.clone()))
-//             .times(1)
-//             .returning(|_| Ok(Some("Challenge-test".to_string())));
+        mock.expect_get_object()
+            .with(eq(expected_path.clone()))
+            .times(1)
+            .returning(|_| Ok(Some("Challenge-test".to_string())));
 
-//         let response = get_challenge(expected_path, mock).await;
+        let response = get_challenge(expected_path, mock).await;
 
-//         assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::OK);
 
-//         let body_bytes = hyper::body::to_bytes(response.into_body())
-//             .await
-//             .expect("Failed to convert body to bytes");
+        let body_bytes = hyper::body::to_bytes(response.into_body())
+            .await
+            .expect("Failed to convert body to bytes");
 
-//         let body_string = String::from_utf8_lossy(&body_bytes);
-//         assert_eq!(body_string, "Challenge-test");
-//     }
+        let body_string = String::from_utf8_lossy(&body_bytes);
+        assert_eq!(body_string, "Challenge-test");
+    }
 
-//     #[tokio::test]
-//     async fn test_get_challenge_not_found() {
-//         let mut mock = MockStorageClientInterface::new();
-//         let cage_context = get_cage_context();
-//         let challenge_key = "test-not-found";
-//         let expected_path = format!(
-//             "{}/{}/{}/.well-known/acme-challenge/{}",
-//             cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, challenge_key
-//         );
+    #[tokio::test]
+    async fn test_get_challenge_not_found() {
+        let mut mock = MockStorageClientInterface::new();
+        let expected_path = get_expected_path("test-not-found");
 
-//         mock.expect_get_object()
-//             .with(eq(expected_path.clone()))
-//             .times(1)
-//             .returning(|_| Ok(None));
+        mock.expect_get_object()
+            .with(eq(expected_path.clone()))
+            .times(1)
+            .returning(|_| Ok(None));
 
-//         let response = get_challenge(expected_path, mock).await;
+        let response = get_challenge(expected_path, mock).await;
 
-//         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
-//         let body_bytes = hyper::body::to_bytes(response.into_body())
-//             .await
-//             .expect("Failed to convert body to bytes");
+        let body_bytes = hyper::body::to_bytes(response.into_body())
+            .await
+            .expect("Failed to convert body to bytes");
 
-//         let body_string = String::from_utf8_lossy(&body_bytes);
-//         assert_eq!(body_string, "Not Found");
-//     }
+        let body_string = String::from_utf8_lossy(&body_bytes);
+        assert_eq!(body_string, "Not Found");
+    }
 
-//     #[tokio::test]
-//     async fn test_get_challenge_error() {
-//         let mut mock = MockStorageClientInterface::new();
-//         let cage_context = get_cage_context();
-//         let challenge_key = "test-error";
-//         let expected_path = format!(
-//             "{}/{}/{}/.well-known/acme-challenge/{}",
-//             cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, challenge_key
-//         );
+    #[tokio::test]
+    async fn test_get_challenge_error() {
+        let mut mock = MockStorageClientInterface::new();
+        let expected_path = get_expected_path("test-error");
 
-//         mock.expect_get_object()
-//             .with(eq(expected_path.clone()))
-//             .times(1)
-//             .returning(|_| Err(StorageClientError::General("ERROR TEST".to_string())));
+        mock.expect_get_object()
+            .with(eq(expected_path.clone()))
+            .times(1)
+            .returning(|_| Err(StorageClientError::General("ERROR TEST".to_string())));
 
-//         let response = get_challenge(expected_path, mock).await;
+        let response = get_challenge(expected_path, mock).await;
 
-//         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 
-//         let body_bytes = hyper::body::to_bytes(response.into_body())
-//             .await
-//             .expect("Failed to convert body to bytes");
+        let body_bytes = hyper::body::to_bytes(response.into_body())
+            .await
+            .expect("Failed to convert body to bytes");
 
-//         let body_string = String::from_utf8_lossy(&body_bytes);
-//         assert_eq!(body_string, "Error Retrieving challenge");
-//     }
-// }
+        let body_string = String::from_utf8_lossy(&body_bytes);
+        assert_eq!(body_string, "Error Retrieving challenge");
+    }
+}
