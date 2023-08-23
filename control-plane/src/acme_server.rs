@@ -6,10 +6,17 @@ use hyper::Body;
 
 use crate::clients::storage::StorageClientInterface;
 use crate::configuration;
+use crate::error::Result;
 
-const CHALLENGE_PATH: &str = "/www/.well-known/acme-challenge/:token";
+const CHALLENGE_PATH: &str = "/.well-known/acme-challenge/:token";
 
-struct AcmeServer {}
+pub struct AcmeServer {}
+
+impl Default for AcmeServer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[allow(unused)]
 impl AcmeServer {
@@ -20,7 +27,7 @@ impl AcmeServer {
     pub async fn run_server<T: StorageClientInterface + Send + Sync + Clone + 'static>(
         &self,
         storage_client: T,
-    ) {
+    ) -> Result<()> {
         let cage_context = configuration::CageContext::from_env_vars();
         let app = Router::new().route(
             CHALLENGE_PATH,
@@ -33,8 +40,8 @@ impl AcmeServer {
                 .expect("Infallible - hardcoded address"),
         )
         .serve(app.into_make_service())
-        .await
-        .unwrap();
+        .await?;
+        Ok(())
     }
 }
 
@@ -44,7 +51,7 @@ async fn handle_get_challenge<T: StorageClientInterface>(
     storage_client: T,
 ) -> Response<Body> {
     let namespace = cage_context.get_namespace_string();
-    let file_path = format!("{}/www/.well-known/acme-challenge/{}", namespace, token);
+    let file_path = format!("{}/.well-known/acme-challenge/{}", namespace, token);
     get_challenge(file_path, storage_client).await
 }
 
@@ -52,9 +59,11 @@ async fn get_challenge<T: StorageClientInterface>(
     file_path: String,
     storage_client: T,
 ) -> Response<Body> {
+    println!("Received request for challenge: {}", file_path);
     match storage_client.get_object(file_path).await {
         Ok(Some(challenge)) => Response::builder()
             .status(StatusCode::OK)
+            .header(hyper::header::CONTENT_TYPE, "application/octet-stream")
             .body(Body::from(challenge))
             .unwrap(),
         Ok(None) => build_infallible_response("Not Found", StatusCode::NOT_FOUND),
@@ -99,7 +108,7 @@ mod tests {
         let cage_context = get_cage_context();
         let challenge_key = "test-success";
         let expected_path = format!(
-            "{}/{}/{}/www/.well-known/acme-challenge/{}",
+            "{}/{}/{}/.well-known/acme-challenge/{}",
             cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, challenge_key
         );
 
@@ -126,7 +135,7 @@ mod tests {
         let cage_context = get_cage_context();
         let challenge_key = "test-not-found";
         let expected_path = format!(
-            "{}/{}/{}/www/.well-known/acme-challenge/{}",
+            "{}/{}/{}/.well-known/acme-challenge/{}",
             cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, challenge_key
         );
 
@@ -153,7 +162,7 @@ mod tests {
         let cage_context = get_cage_context();
         let challenge_key = "test-error";
         let expected_path = format!(
-            "{}/{}/{}/www/.well-known/acme-challenge/{}",
+            "{}/{}/{}/.well-known/acme-challenge/{}",
             cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, challenge_key
         );
 

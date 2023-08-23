@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use aws_config::meta::region::RegionProviderChain;
 use aws_sdk_s3 as s3;
 use s3::{
     error::SdkError,
@@ -6,6 +7,7 @@ use s3::{
         delete_object::DeleteObjectError, get_object::GetObjectError, put_object::PutObjectError,
     },
     primitives::ByteStream,
+    Client,
 };
 use thiserror::Error;
 
@@ -42,8 +44,9 @@ pub struct S3Client {
 impl S3Client {
     #[allow(unused)]
     pub async fn new(bucket: String) -> Self {
-        let config = aws_config::load_from_env().await;
-        let client = s3::Client::new(&config);
+        let region_provider = RegionProviderChain::default_provider().or_else("us-east-1");
+        let config = aws_config::from_env().region(region_provider).load().await;
+        let client = Client::new(&config);
         Self { bucket, client }
     }
 }
@@ -63,7 +66,10 @@ impl StorageClientInterface for S3Client {
             Ok(object) => object,
             Err(err) => match err.into_service_error() {
                 GetObjectError::NoSuchKey(_) => return Ok(None),
-                err => return Err(StorageClientError::GetObject(err.to_string())),
+                err => {
+                    println!("[S3 Error] Error getting object: {:?}", err);
+                    return Err(StorageClientError::GetObject(err.to_string()));
+                }
             },
         };
 

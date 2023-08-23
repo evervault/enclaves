@@ -39,6 +39,26 @@ fn extract_ec_coordinates(
     Ok((x_coord, y_coord))
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+// LEXICAL ORDER OF FIELDS MATTER!
+pub(crate) struct JwkThumb {
+    crv: String,
+    kty: String,
+    x: String,
+    y: String,
+}
+
+impl From<&Jwk> for JwkThumb {
+    fn from(jwk: &Jwk) -> Self {
+        JwkThumb {
+            crv: jwk.crv.clone(),
+            kty: jwk.kty.clone(),
+            x: jwk.x.clone(),
+            y: jwk.y.clone(),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub struct Jwk {
     alg: String,
@@ -56,9 +76,9 @@ impl Jwk {
         let ec_key = pkey.ec_key()?;
         let (x, y) = extract_ec_coordinates(&ec_key)?;
         Ok(Jwk {
+            kty: "EC".to_string(),
             alg: "ES256".to_string(),
             crv: "P-256".to_string(),
-            kty: "EC".to_string(),
             _use: "sig".to_string(),
             x,
             y,

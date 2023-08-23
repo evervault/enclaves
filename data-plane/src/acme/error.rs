@@ -1,3 +1,4 @@
+use serde::Deserialize;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -34,4 +35,14 @@ pub enum AcmeError {
     FieldNotFound(String),
     #[error("ACME Error {0:?}")]
     General(String),
+}
+
+/// This is an error as returned by the ACME server.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AcmeServerError {
+    pub r#type: Option<String>,
+    pub title: Option<String>,
+    pub status: Option<u16>,
+    pub detail: Option<String>,
 }

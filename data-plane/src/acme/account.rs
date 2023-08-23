@@ -54,7 +54,7 @@ pub struct AccountBuilder<T: AcmeClientInterface> {
     only_return_existing: Option<bool>,
 }
 
-impl<T: AcmeClientInterface + Default> AccountBuilder<T> {
+impl<T: AcmeClientInterface> AccountBuilder<T> {
     pub fn new(directory: Arc<Directory<T>>) -> Self {
         AccountBuilder {
             directory,

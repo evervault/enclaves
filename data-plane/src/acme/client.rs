@@ -12,7 +12,7 @@ use tokio_rustls::{client::TlsStream, TlsConnector};
 use crate::connection::{self, Connection};
 
 #[async_trait]
-pub trait AcmeClientInterface {
+pub trait AcmeClientInterface: Default {
     async fn send(&self, request: hyper::Request<Body>) -> Result<Response<Body>, AcmeError>;
 }
 
