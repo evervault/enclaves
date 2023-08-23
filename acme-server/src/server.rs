@@ -47,7 +47,7 @@ async fn handle_get_challenge<T: StorageClientInterface>(
     token: String,
     storage_client: T,
 ) -> Response<Body> {
-    let parts: Vec<&str> = host.split(".").collect();
+    let parts: Vec<&str> = host.split('.').collect();
 
     // cage-name.app-uuid.cages.evervault.com
     if parts.len() != 5 {
