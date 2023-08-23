@@ -1,12 +1,11 @@
 //Simple server running on port 80 to server ACME challenges
 
+use crate::configuration;
+use crate::error::Result;
 use axum::extract::Path;
 use axum::{http::StatusCode, response::Response, routing::get, Router};
 use hyper::Body;
-
-use crate::clients::storage::StorageClientInterface;
-use crate::configuration;
-use crate::error::Result;
+use shared::storage::StorageClientInterface;
 
 const CHALLENGE_PATH: &str = "/.well-known/acme-challenge/:token";
 
@@ -88,9 +87,9 @@ fn build_infallible_response(msg: &str, status_code: StatusCode) -> Response<Bod
 mod tests {
 
     use super::*;
-    use crate::clients::storage::StorageClientError;
     use crate::mocks::storage_client_mock::MockStorageClientInterface;
     use mockall::predicate::eq;
+    use shared::storage::StorageClientError;
 
     fn get_cage_context() -> configuration::CageContext {
         configuration::CageContext::new(

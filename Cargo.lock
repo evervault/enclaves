@@ -704,7 +704,6 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "aws-config",
- "aws-sdk-s3",
  "aws-sdk-sns",
  "aws-types",
  "axum",
@@ -2356,6 +2355,8 @@ name = "shared"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "aws-config",
+ "aws-sdk-s3",
  "byteorder",
  "cadence",
  "chrono",

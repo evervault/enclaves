@@ -1,7 +1,7 @@
 use crate::clients::cert_provisioner::{
     CertProvisionerClient, GetCertTokenResponseControlPlane, GetE3TokenResponseControlPlane,
 };
-use crate::clients::storage::StorageClientInterface;
+use shared::storage::StorageClientInterface;
 
 use crate::configuration;
 use crate::error::{Result as ServerResult, ServerError};
@@ -337,9 +337,9 @@ async fn parse_request<T: DeserializeOwned>(req: Request<Body>) -> ServerResult<
 mod tests {
 
     use super::*;
-    use crate::clients::storage::StorageClientError;
     use crate::mocks::storage_client_mock::MockStorageClientInterface;
     use mockall::predicate::eq;
+    use shared::storage::StorageClientError;
 
     fn get_cage_context() -> configuration::CageContext {
         configuration::CageContext::new(
