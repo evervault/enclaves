@@ -1,7 +1,9 @@
+use std::string::FromUtf8Error;
+
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::error;
+use crate::{error, base_tls_client::ClientError};
 
 #[derive(Debug, Error)]
 pub enum AcmeError {
@@ -29,6 +31,8 @@ pub enum AcmeError {
     Base64DecodeError(#[from] base64::DecodeError),
     #[error("Error interpretting utf8 sequence — {0:?}")]
     Utf8Error(#[from] std::str::Utf8Error),
+    #[error("Error interpretting utf8 sequence — {0:?}")]
+    FromUtf8Error(#[from] FromUtf8Error),
     #[error("No directory for acme account - {0:?}")]
     NoDirectory(String),
     #[error("Error creating CSR - {0:?}")]
@@ -37,6 +41,14 @@ pub enum AcmeError {
     FieldNotFound(String),
     #[error("Config Client Error {0:?}")]
     ConfigClient(#[from] error::Error),
+    #[error("E3 Client Error {0:?}")]
+    E3ClientError(#[from] ClientError),
+    #[error("Chrono DataTime Parse Error - {0:?}")]
+    ParseError(#[from] chrono::ParseError),
+    #[error("PEM Error - {0:?}")]
+    PEMError(#[from] pem::PemError),
+    #[error("Rustls Error - {0:?}")]
+    RustlsSignError(#[from] tokio_rustls::rustls::sign::SignError),
     #[error("ACME Error {0:?}")]
     General(String),
 }

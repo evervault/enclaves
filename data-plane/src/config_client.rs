@@ -127,24 +127,28 @@ impl ConfigClient {
         }
     }
 
-    pub async fn get_object(&self, key: String) -> Result<GetObjectResponse> {
+    pub async fn get_object(&self, key: String) -> Result<Option<GetObjectResponse>> {
         let payload = GetObjectRequest::new(key.clone()).into_body()?;
 
         let response = self.send(ConfigServerPath::Storage, "GET", payload).await?;
 
-        if response.status() == StatusCode::OK {
-            let result: GetObjectResponse = self.parse_response(response).await?;
-            Ok(result)
-        } else {
-            println!(
-                "Error from get object request to control plane. Key: {}, Response Code{}",
-                key,
-                response.status()
-            );
-            Err(Error::ConfigServer(
-                "Invalid Response code returned when sending getObject request to control plane"
-                    .to_string(),
-            ))
+        match response.status() {
+            StatusCode::OK => {
+                let result: GetObjectResponse = self.parse_response(response).await?;
+                Ok(Some(result))
+            },
+            StatusCode::NOT_FOUND => Ok(None),
+            _ => {
+                println!(
+                    "Error from get object request to control plane. Key: {}, Response Code {}",
+                    key,
+                    response.status()
+                );
+                Err(Error::ConfigServer(
+                    "Invalid Response code returned when sending getObject request to control plane"
+                        .to_string(),
+                ))
+            }
         }
     }
 
