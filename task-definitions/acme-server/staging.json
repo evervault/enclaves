@@ -1,0 +1,44 @@
+{
+  "$schema": "https://ecs-intellisense.s3-us-west-2.amazonaws.com/task-definition/schema.json",
+  "family": "cages",
+  "executionRoleArn": "",
+  "taskRoleArn": "",
+  "requiresCompatibilities": ["EC2"],
+  "networkMode": "awsvpc",
+  "containerDefinitions": [
+    {
+      "name": "cages-acme",
+      "memory": 1024,
+      "privileged": true,
+      "portMappings": [
+        {
+          "containerPort": 80,
+          "hostPort": 80,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "ACME_S3_BUCKET",
+          "value": "cages-acme-staging"
+        }
+      ],
+      "healthCheck": {
+        "command": ["CMD_SHELL", "curl http://localhost:80/health || exit 1"],
+        "interval": 5,
+        "timeout": 15,
+        "retries": 3,
+        "startPeriod": 30
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-create-group": "true",
+          "awslogs-group": "/ecs/cages-acme",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
