@@ -4,7 +4,6 @@ use hyper::http::StatusCode;
 use hyper::{Body, Response};
 
 use serde::de::DeserializeOwned;
-use serde_json::Value;
 use shared::logging::TrxContext;
 use shared::server::config_server::requests::{
     ConfigServerPayload, DeleteObjectRequest, GetCertTokenResponseDataPlane,
@@ -74,12 +73,6 @@ impl ConfigClient {
         });
 
         let response = request_sender.send_request(request).await?;
-        if !response.status().is_success() {
-            return Err(Error::ConfigServer(format!(
-                "Unsuccessful response from config server: {}",
-                response.status()
-            )));
-        }
 
         Ok(response)
     }
@@ -90,6 +83,14 @@ impl ConfigClient {
         let response = self
             .send(ConfigServerPath::GetE3Token, "GET", payload)
             .await?;
+
+        if !response.status().is_success() {
+            return Err(Error::ConfigServer(format!(
+                "Unsuccessful response from config server: {}",
+                response.status()
+            )));
+        }
+        
         let result: GetE3TokenResponseDataPlane = self.parse_response(response).await?;
 
         Ok(result)
@@ -101,6 +102,14 @@ impl ConfigClient {
         let response = self
             .send(ConfigServerPath::GetCertToken, "GET", payload)
             .await?;
+
+        if !response.status().is_success() {
+            return Err(Error::ConfigServer(format!(
+                "Unsuccessful response from config server: {}",
+                response.status()
+            )));
+        }
+
         let result: GetCertTokenResponseDataPlane = self.parse_response(response).await?;
 
         Ok(result)
