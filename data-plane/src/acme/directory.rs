@@ -196,7 +196,7 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
 mod tests {
 
     use super::*;
-    use crate::acme::mocks::client_mock::MockAcmeClientInterface;
+    use crate::{acme::mocks::client_mock::MockAcmeClientInterface, config_client, test};
 
     pub struct TestDirectoryPaths {
         pub new_nonce_url: String,
@@ -232,6 +232,7 @@ mod tests {
 
     fn get_test_directory<T: AcmeClientInterface>(
         client: T,
+        config_client: ConfigClient,
         nonce_value: Option<String>,
     ) -> Directory<T> {
         let test_directory_paths = TestDirectoryPaths::new();
@@ -245,6 +246,7 @@ mod tests {
 
         Directory {
             client,
+            config_client,
             nonce,
             new_nonce_url: test_directory_paths.new_nonce_url,
             new_account_url: test_directory_paths.new_account_url,
@@ -259,6 +261,7 @@ mod tests {
     #[tokio::test]
     async fn test_directory_fetch() {
         let mut mock_client = MockAcmeClientInterface::new();
+        let test_config_client = config_client::ConfigClient::new();
         let test_directory_paths = TestDirectoryPaths::new();
         mock_client.expect_send().returning(|_| {
             let resp = hyper::Response::builder()
@@ -284,9 +287,13 @@ mod tests {
             Ok(resp)
         });
 
-        let directory = Directory::fetch_directory(String::from("/acme/directory"), mock_client)
-            .await
-            .unwrap();
+        let directory = Directory::fetch_directory(
+            String::from("/acme/directory"),
+            mock_client,
+            test_config_client,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(directory.new_nonce_url, test_directory_paths.new_nonce_url);
         assert_eq!(
@@ -323,6 +330,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_nonce_first_time() {
         let mut mock_client = MockAcmeClientInterface::new();
+        let test_config_client = config_client::ConfigClient::new();
 
         mock_client.expect_send().returning(|_| {
             let resp = hyper::Response::builder()
@@ -333,7 +341,7 @@ mod tests {
             Ok(resp)
         });
 
-        let test_directory = get_test_directory(mock_client, None);
+        let test_directory = get_test_directory(mock_client, test_config_client, None);
 
         let nonce = test_directory.get_nonce().await.unwrap();
 
@@ -343,10 +351,15 @@ mod tests {
     #[tokio::test]
     async fn test_get_nonce_exists() {
         let mut mock_client = MockAcmeClientInterface::new();
+        let test_config_client = config_client::ConfigClient::new();
 
         mock_client.expect_send().times(0);
 
-        let test_directory = get_test_directory(mock_client, Some(String::from("987654321")));
+        let test_directory = get_test_directory(
+            mock_client,
+            test_config_client,
+            Some(String::from("987654321")),
+        );
 
         let nonce = test_directory.get_nonce().await.unwrap();
 

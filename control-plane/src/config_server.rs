@@ -473,8 +473,10 @@ async fn parse_request<T: DeserializeOwned>(req: Request<Body>) -> ServerResult<
 #[cfg(test)]
 mod tests {
 
-    use crate::acme::helpers;
-    use crate::acme::jws::Identifier;
+    use std::str::from_utf8;
+
+    use shared::acme::helpers;
+    use shared::acme::jws::Identifier;
 
     use super::*;
     use mockall::predicate::eq;
