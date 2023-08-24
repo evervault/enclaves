@@ -1,5 +1,3 @@
-use crate::acme::account_details::AcmeAccountDetails;
-use crate::acme::jws::{jws, Jwk, NewOrderPayload};
 use crate::clients::cert_provisioner::{
     CertProvisionerClient, GetCertTokenResponseControlPlane, GetE3TokenResponseControlPlane,
 };
@@ -12,6 +10,8 @@ use hyper::server::conn;
 use hyper::service::service_fn;
 use hyper::{Body, Method, Request, Response};
 use serde::de::DeserializeOwned;
+use shared::acme::account_details::AcmeAccountDetails;
+use shared::acme::jws::{jws, Jwk, NewOrderPayload};
 use shared::logging::TrxContext;
 use shared::server::config_server::requests::{
     ConfigServerPayload, DeleteObjectRequest, GetCertTokenResponseDataPlane,
@@ -335,9 +335,18 @@ async fn sign_acme_payload(
 
     match parsed_result {
         Ok(jws_request) => {
-            let key = match jws_request.signature_type {
-                SignatureType::HMAC => acme_account_details.account_hmac,
-                SignatureType::ECDSA => Some(acme_account_details.account_ec_key),
+            let (key, key_id) = match jws_request.signature_type {
+                SignatureType::HMAC => (
+                    acme_account_details
+                        .eab_config
+                        .clone()
+                        .map(|x| x.private_key()),
+                    acme_account_details.eab_config.map(|x| x.key_id()),
+                ),
+                SignatureType::ECDSA => (
+                    Some(acme_account_details.account_ec_key),
+                    jws_request.account_id,
+                ),
             };
 
             if jws_request.url.contains("/newOrder") {
@@ -353,7 +362,7 @@ async fn sign_acme_payload(
                 jws_request.nonce,
                 &jws_request.payload,
                 &key.unwrap(),
-                jws_request.account_id,
+                key_id,
             );
 
             match jws {
@@ -461,6 +470,9 @@ async fn parse_request<T: DeserializeOwned>(req: Request<Body>) -> ServerResult<
 
 #[cfg(test)]
 mod tests {
+
+    use crate::acme::helpers;
+    use crate::acme::jws::Identifier;
 
     use super::*;
     use mockall::predicate::eq;
@@ -694,7 +706,7 @@ mod tests {
         let cage_context = get_cage_context();
         let acme_account_details = AcmeAccountDetails {
             account_ec_key: helpers::gen_ec_private_key().unwrap(),
-            account_hmac: None,
+            eab_config: None,
         };
 
         let req_body = JwsRequest::new(
@@ -725,7 +737,7 @@ mod tests {
         let cage_context = get_cage_context();
         let acme_account_details = AcmeAccountDetails {
             account_ec_key: helpers::gen_ec_private_key().unwrap(),
-            account_hmac: None,
+            eab_config: None,
         };
 
         let new_order_payload = NewOrderPayload {

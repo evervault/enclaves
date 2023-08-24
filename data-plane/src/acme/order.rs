@@ -1,6 +1,5 @@
 use crate::acme::account::Account;
 use crate::acme::error::*;
-use crate::acme::helpers::*;
 use openssl::hash::MessageDigest;
 use openssl::pkey::PKey;
 use openssl::pkey::Private;
@@ -11,6 +10,7 @@ use openssl::x509::X509Req;
 use openssl::x509::X509;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use shared::acme::helpers::*;
 use std::str::from_utf8;
 use std::sync::Arc;
 use std::time::Duration;
@@ -111,11 +111,6 @@ impl<T: AcmeClientInterface> OrderBuilder<T> {
                 Some(json!({
                 "identifiers": self.identifiers,
                 })),
-                &self
-                    .account
-                    .private_key
-                    .clone()
-                    .ok_or(AcmeError::FieldNotFound("private_key".into()))?,
                 &Some(self.account.id.clone()),
             )
             .await?;
@@ -194,10 +189,6 @@ impl<T: AcmeClientInterface> Order<T> {
                 &self.finalize_url,
                 "POST",
                 Some(json!({ "csr": csr_b64 })),
-                &account
-                    .private_key
-                    .clone()
-                    .ok_or(AcmeError::FieldNotFound("private_key".into()))?,
                 &Some(account.id.clone()),
             )
             .await?;
@@ -220,16 +211,7 @@ impl<T: AcmeClientInterface> Order<T> {
         let (account, directory) = self.get_account_and_directory()?;
 
         let response = directory
-            .authenticated_request(
-                &certificate_url,
-                "POST",
-                None,
-                &account
-                    .private_key
-                    .clone()
-                    .ok_or(AcmeError::FieldNotFound("private_key".into()))?,
-                &Some(account.id.clone()),
-            )
+            .authenticated_request(&certificate_url, "POST", None, &Some(account.id.clone()))
             .await?;
 
         let body_bytes = hyper::body::to_bytes(response.into_body()).await?;
@@ -241,16 +223,7 @@ impl<T: AcmeClientInterface> Order<T> {
         let (account, directory) = self.get_account_and_directory()?;
 
         let response = directory
-            .authenticated_request(
-                &self.url,
-                "POST",
-                None,
-                &account
-                    .private_key
-                    .clone()
-                    .ok_or(AcmeError::FieldNotFound("private_key".into()))?,
-                &Some(account.id.clone()),
-            )
+            .authenticated_request(&self.url, "POST", None, &Some(account.id.clone()))
             .await?;
 
         let resp_bytes = hyper::body::to_bytes(response.into_body()).await?;

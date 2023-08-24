@@ -47,7 +47,7 @@ pub mod routes {
 }
 
 pub mod requests {
-    use crate::logging::TrxContext;
+    use crate::{acme::jws::JwsResult, logging::TrxContext};
 
     use super::error::ServerResult;
     use serde::{Deserialize, Serialize};
@@ -308,6 +308,16 @@ pub mod requests {
     }
 
     impl ConfigServerPayload for JwsResponse {}
+
+    impl From<&JwsResponse> for JwsResult {
+        fn from(jws: &JwsResponse) -> Self {
+            JwsResult {
+                protected: jws.protected.clone(),
+                payload: jws.payload.clone(),
+                signature: jws.signature.clone(),
+            }
+        }
+    }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct JwkResponse {

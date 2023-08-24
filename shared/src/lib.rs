@@ -16,6 +16,7 @@ pub const ENCLAVE_CID: u32 = 2021;
 #[cfg(feature = "enclave")]
 pub const PARENT_CID: u32 = 3;
 
+pub mod acme;
 pub mod logging;
 pub mod mocks;
 pub mod rpc;

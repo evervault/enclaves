@@ -4,7 +4,6 @@ use hyper::http::StatusCode;
 use hyper::{Body, Response};
 
 use serde::de::DeserializeOwned;
-use serde_json::Value;
 use shared::logging::TrxContext;
 use shared::server::config_server::requests::{
     ConfigServerPayload, DeleteObjectRequest, GetCertTokenResponseDataPlane,

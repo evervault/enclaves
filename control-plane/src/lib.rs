@@ -1,4 +1,3 @@
-pub mod acme;
 pub mod clients;
 pub mod config_server;
 pub mod configuration;

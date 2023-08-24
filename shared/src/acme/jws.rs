@@ -1,5 +1,6 @@
 use crate::acme::error::*;
 use crate::acme::helpers::*;
+use crate::server::config_server::requests::{JwkResponse, JwsResponse};
 use openssl::bn::BigNum;
 use openssl::bn::BigNumContext;
 use openssl::ec::EcKey;
@@ -10,8 +11,6 @@ use openssl::pkey::Private;
 use openssl::sign::Signer;
 use serde::Deserialize;
 use serde::Serialize;
-use shared::server::config_server::requests::JwkResponse;
-use shared::server::config_server::requests::JwsResponse;
 
 #[derive(Serialize, Deserialize, Clone, Default, Debug)]
 struct JwsHeader {
@@ -43,7 +42,7 @@ fn extract_ec_coordinates(
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 // LEXICAL ORDER OF FIELDS MATTER!
-pub(crate) struct JwkThumb {
+pub struct JwkThumb {
     crv: String,
     kty: String,
     x: String,
@@ -52,6 +51,17 @@ pub(crate) struct JwkThumb {
 
 impl From<&Jwk> for JwkThumb {
     fn from(jwk: &Jwk) -> Self {
+        JwkThumb {
+            crv: jwk.crv.clone(),
+            kty: jwk.kty.clone(),
+            x: jwk.x.clone(),
+            y: jwk.y.clone(),
+        }
+    }
+}
+
+impl From<&JwkResponse> for JwkThumb {
+    fn from(jwk: &JwkResponse) -> Self {
         JwkThumb {
             crv: jwk.crv.clone(),
             kty: jwk.kty.clone(),
@@ -101,9 +111,9 @@ impl Jwk {
 
 #[derive(Serialize, Debug, Clone)]
 pub struct JwsResult {
-    protected: String,
-    payload: String,
-    signature: String,
+    pub protected: String,
+    pub payload: String,
+    pub signature: String,
 }
 
 impl From<&JwsResult> for JwsResponse {

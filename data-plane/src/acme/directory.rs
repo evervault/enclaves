@@ -1,13 +1,11 @@
 use crate::acme::error::*;
-use crate::acme::jws::JwsResult;
 use crate::config_client::ConfigClient;
 use crate::configuration;
 use hyper::Body;
 use hyper::Response;
-use openssl::pkey::PKey;
-use openssl::pkey::Private;
 use serde::Deserialize;
 use serde_json::Value;
+use shared::acme::jws::JwsResult;
 use std::str::from_utf8;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -124,23 +122,21 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
         method: &str,
         url: &str,
         payload: &str,
-        pkey: &PKey<Private>,
         account_id: &Option<String>,
     ) -> Result<hyper::Response<Body>, AcmeError> {
         let nonce = self.get_nonce().await?;
-        let body: JwsResult = JwsResult::from(
-            &self
-                .config_client
-                .jws(
-                    shared::server::config_server::requests::SignatureType::ECDSA,
-                    url.into(),
-                    Some(nonce),
-                    payload.into(),
-                    account_id.clone(),
-                )
-                .await
-                .unwrap(),
-        );
+        let result = &self
+            .config_client
+            .jws(
+                shared::server::config_server::requests::SignatureType::ECDSA,
+                url.into(),
+                Some(nonce),
+                payload.into(),
+                account_id.clone(),
+            )
+            .await?;
+
+        let body: JwsResult = result.into();
 
         let body = serde_json::to_vec(&body)?;
 
@@ -169,7 +165,6 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
         url: &str,
         method: &str,
         payload: Option<Value>,
-        pkey: &PKey<Private>,
         account_id: &Option<String>,
     ) -> Result<hyper::Response<Body>, AcmeError> {
         println!("Sending authenticated request to: {}", url);
@@ -181,7 +176,7 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
         };
 
         let resp = self
-            .authenticated_request_raw(method, url, &payload_parsed, pkey, account_id)
+            .authenticated_request_raw(method, url, &payload_parsed, account_id)
             .await?;
 
         if let Some(nonce) = extract_nonce_from_response(&resp)? {
