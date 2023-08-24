@@ -1,3 +1,4 @@
+pub mod acme_account_details;
 pub mod clients;
 pub mod config_server;
 pub mod configuration;

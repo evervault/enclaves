@@ -1,5 +1,7 @@
-use crate::acme::helpers;
+use crate::configuration;
 use openssl::pkey::{PKey, Private};
+use shared::acme::error::AcmeError;
+use shared::acme::helpers;
 
 #[derive(Debug, Clone)]
 pub struct ExternalAccountBinding {
@@ -40,14 +42,13 @@ impl AcmeAccountDetails {
         }
     }
 
-    pub fn from_env() -> Self {
-        //TODO - Pull these from secrets manager env vars and parse;
-        let ec = helpers::gen_ec_private_key().expect("Temporary - random EC key");
-        let hmac_key =
-            helpers::hmac_from_b64_string("placeholder").expect("Temporary - placeholder HMAC key");
-        Self::new(
-            ec,
-            Some(ExternalAccountBinding::new("abc".into(), hmac_key)),
-        )
+    pub fn new_from_env() -> Result<Self, AcmeError> {
+        let ec_key = configuration::get_acme_ec_key();
+        let hmac_key_id = configuration::get_acme_hmac_key_id();
+        let hmac_key_raw = configuration::get_acme_hmac_key();
+        let hmac_key = helpers::hmac_from_b64_string(&hmac_key_raw)?;
+
+        let eab_config = ExternalAccountBinding::new(hmac_key_id, hmac_key);
+        Ok(AcmeAccountDetails::new(ec_key, Some(eab_config)))
     }
 }

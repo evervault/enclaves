@@ -3,6 +3,7 @@ use crate::clients::cert_provisioner::{
 };
 use shared::storage::StorageClientInterface;
 
+use crate::acme_account_details::AcmeAccountDetails;
 use crate::configuration;
 use crate::error::{Result as ServerResult, ServerError};
 
@@ -10,7 +11,7 @@ use hyper::server::conn;
 use hyper::service::service_fn;
 use hyper::{Body, Method, Request, Response};
 use serde::de::DeserializeOwned;
-use shared::acme::account_details::AcmeAccountDetails;
+
 use shared::acme::jws::{jws, Jwk, NewOrderPayload};
 use shared::logging::TrxContext;
 use shared::server::config_server::requests::{
@@ -34,7 +35,8 @@ pub struct ConfigServer<T: StorageClientInterface> {
 
 impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> {
     pub fn new(cert_provisioner_client: CertProvisionerClient, storage_client: T) -> Self {
-        let acme_account_details = AcmeAccountDetails::from_env();
+        let acme_account_details = AcmeAccountDetails::new_from_env()
+            .expect("Failed to get acme account details from env");
         Self {
             cert_provisioner_client,
             storage_client,
