@@ -1,8 +1,9 @@
-use control_plane::clients::{cert_provisioner, mtls_config, storage};
+use control_plane::clients::{cert_provisioner, mtls_config};
 use control_plane::stats_client::StatsClient;
 use control_plane::stats_proxy::StatsProxy;
 use control_plane::{config_server, tls_proxy};
 use shared::server::error::ServerResult;
+use shared::storage;
 use shared::{print_version, utils::pipe_streams, ENCLAVE_CONNECT_PORT};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::process::Command;

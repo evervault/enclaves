@@ -1,4 +1,4 @@
-use crate::clients::storage::{StorageClientError, StorageClientInterface};
+use crate::storage::{StorageClientError, StorageClientInterface};
 
 use async_trait::async_trait;
 use mockall::mock;

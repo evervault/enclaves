@@ -337,15 +337,6 @@ impl<T: AcmeClientInterface> Challenge<T> {
         while challenge.status == ChallengeStatus::Pending
             || challenge.status == ChallengeStatus::Processing
         {
-            println!("");
-            println!("--------- Challenge Status ---------");
-            println!("Status: {:?}", challenge.status);
-            println!("Error: {:?}", challenge.error);
-            println!("Token: {:?}", challenge.token);
-            println!("URL: {:?}", challenge.url);
-            println!("------------------------------------");
-            println!("");
-            println!("Waiting for challenge to complete");
             if i >= attempts {
                 return Err(AcmeError::General(
                     "Max attempts polling challenge exceeded".to_string(),

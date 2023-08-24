@@ -71,6 +71,8 @@ pub enum Error {
     TrxContextBuilderError(#[from] TrxContextBuilderError),
     #[error("Failed to send trx log= {0}")]
     FailedToSendTrxLog(String),
+    #[error("Failed to return attestation document - {0:?}")]
+    AttestationRequestError(String),
     #[error("Request timed out in data plane after {0} seconds")]
     RequestTimeout(usize),
 }

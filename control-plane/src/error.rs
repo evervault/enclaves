@@ -1,7 +1,8 @@
 use thiserror::Error;
 use trust_dns_resolver::error::ResolveError;
 
-use crate::{acme::error::AcmeError, clients::storage::StorageClientError};
+use crate::acme::error::AcmeError;
+use shared::storage::StorageClientError;
 
 #[derive(Error, Debug)]
 pub enum ServerError {
