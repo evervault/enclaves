@@ -1,4 +1,4 @@
-name: "Build and deploy acme server"
+name: "Build and deploy acme server staging"
 on:
   push:
     branches:
