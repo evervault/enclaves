@@ -17,6 +17,7 @@ pub const ENCLAVE_CID: u32 = 2021;
 pub const PARENT_CID: u32 = 3;
 
 pub mod logging;
+pub mod mocks;
 pub mod rpc;
 pub mod server;
 pub mod stats;

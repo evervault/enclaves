@@ -4,6 +4,7 @@ on:
       - control-plane/**
       - data-plane/**
       - shared/**
+      - acme-server
       - .github/workflows/lint.yml
 name: Lint
 jobs:
@@ -11,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - run: rustup component add clippy 
+      - run: rustup component add clippy
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: "standard-cache"
@@ -22,6 +23,6 @@ jobs:
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --features not_enclave -- -D warnings  
+          args: --features not_enclave -- -D warnings
       - name: Check formatting
         run: cargo fmt --check

@@ -3,6 +3,18 @@
 version = 3
 
 [[package]]
+name = "acme-server"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "hyper",
+ "mockall",
+ "shared",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "0.7.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2364,6 +2376,7 @@ dependencies = [
  "httparse",
  "hyper",
  "lazy_static",
+ "mockall",
  "ppp",
  "rand",
  "rmp-serde",
