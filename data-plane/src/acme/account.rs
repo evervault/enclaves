@@ -1,12 +1,12 @@
 use crate::acme::directory::Directory;
 use crate::acme::error::*;
-use crate::acme::helpers::*;
-use crate::acme::jws::jws;
-use crate::acme::jws::Jwk;
+
 use openssl::pkey::PKey;
 use openssl::pkey::Private;
 use serde::Deserialize;
 use serde_json::json;
+use shared::acme::helpers::*;
+use shared::server::config_server::requests::SignatureType;
 use std::str::from_utf8;
 use std::sync::Arc;
 
@@ -20,13 +20,6 @@ pub enum AccountStatus {
     Revoked,
 }
 
-#[derive(Debug, Clone)]
-pub struct ExternalAccountBinding {
-    key_id: String,
-    //HMAC key
-    private_key: PKey<Private>,
-}
-
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Account<T: AcmeClientInterface> {
@@ -34,8 +27,6 @@ pub struct Account<T: AcmeClientInterface> {
     pub directory: Option<Arc<Directory<T>>>,
     #[serde(skip)]
     pub private_key: Option<PKey<Private>>,
-    #[serde(skip)]
-    pub eab_config: Option<ExternalAccountBinding>,
     #[serde(skip)]
     pub id: String,
     pub status: AccountStatus,
@@ -48,7 +39,7 @@ pub struct Account<T: AcmeClientInterface> {
 pub struct AccountBuilder<T: AcmeClientInterface> {
     directory: Arc<Directory<T>>,
     private_key: Option<PKey<Private>>,
-    eab_config: Option<ExternalAccountBinding>,
+    eab_required: bool,
     contact: Option<Vec<String>>,
     terms_of_service_agreed: Option<bool>,
     only_return_existing: Option<bool>,
@@ -59,7 +50,7 @@ impl<T: AcmeClientInterface> AccountBuilder<T> {
         AccountBuilder {
             directory,
             private_key: None,
-            eab_config: None,
+            eab_required: true,
             contact: None,
             terms_of_service_agreed: None,
             only_return_existing: None,
@@ -68,18 +59,6 @@ impl<T: AcmeClientInterface> AccountBuilder<T> {
 
     pub fn private_key(&mut self, private_key: PKey<Private>) -> &mut Self {
         self.private_key = Some(private_key);
-        self
-    }
-
-    pub fn external_account_binding(
-        &mut self,
-        key_id: String,
-        private_key: PKey<Private>,
-    ) -> &mut Self {
-        self.eab_config = Some(ExternalAccountBinding {
-            key_id,
-            private_key,
-        });
         self
     }
 
@@ -106,17 +85,23 @@ impl<T: AcmeClientInterface> AccountBuilder<T> {
         };
 
         let url = self.directory.new_account_url.clone();
+        let config_client = self.directory.config_client.clone();
 
-        let external_account_binding = if let Some(eab_config) = &self.eab_config {
-            let payload = serde_json::to_string(&Jwk::new(&private_key)?)?;
+        let external_account_binding = if self.eab_required {
+            let jwk_response = config_client.jwk().await?;
+            let payload = serde_json::to_string(&jwk_response)?;
 
-            Some(jws(
-                &url,
-                None,
-                &payload,
-                &eab_config.private_key,
-                Some(eab_config.key_id.clone()),
-            )?)
+            let jws = config_client
+                .jws(
+                    SignatureType::HMAC,
+                    url.clone(),
+                    None,
+                    payload,
+                    None, //Injected in control plane
+                )
+                .await?;
+
+            Some(jws)
         } else {
             None
         };
@@ -132,7 +117,6 @@ impl<T: AcmeClientInterface> AccountBuilder<T> {
                   "onlyReturnExisting": self.only_return_existing,
                   "externalAccountBinding": external_account_binding,
                 })),
-                &private_key.clone(),
                 &None,
             )
             .await?;
@@ -140,8 +124,9 @@ impl<T: AcmeClientInterface> AccountBuilder<T> {
         let headers = res.headers().clone();
         let resp_bytes = hyper::body::to_bytes(res.into_body()).await?;
         let body_str = from_utf8(&resp_bytes).expect("Body was not valid UTF-8");
+        println!("Account Response: {}", body_str);
         let mut account: Account<_> =
-            serde_json::from_str(body_str).expect("Failed to deserialize Directory");
+            serde_json::from_str(body_str).expect("Failed to deserialize Account");
 
         let account_id = headers
             .get(hyper::header::LOCATION)
@@ -153,7 +138,6 @@ impl<T: AcmeClientInterface> AccountBuilder<T> {
 
         account.directory = Some(self.directory.clone());
         account.private_key = Some(private_key);
-        account.eab_config = self.eab_config.clone();
         account.id = account_id;
         Ok(Arc::new(account))
     }

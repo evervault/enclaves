@@ -34,6 +34,8 @@ pub enum ServerError {
     EgressError(#[from] shared::server::egress::EgressError),
     #[error("Storage Error - {0}")]
     StorageClientError(#[from] StorageClientError),
+    #[error("Acme Error - {0}")]
+    AcmeError(#[from] shared::acme::error::AcmeError),
 }
 
 pub type Result<T> = std::result::Result<T, ServerError>;

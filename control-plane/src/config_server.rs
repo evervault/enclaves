@@ -3,6 +3,7 @@ use crate::clients::cert_provisioner::{
 };
 use shared::storage::StorageClientInterface;
 
+use crate::acme_account_details::AcmeAccountDetails;
 use crate::configuration;
 use crate::error::{Result as ServerResult, ServerError};
 
@@ -10,12 +11,15 @@ use hyper::server::conn;
 use hyper::service::service_fn;
 use hyper::{Body, Method, Request, Response};
 use serde::de::DeserializeOwned;
+
+use shared::acme::jws::{jws, Jwk, NewOrderPayload};
 use shared::logging::TrxContext;
 use shared::server::config_server::requests::{
     ConfigServerPayload, DeleteObjectRequest, GetCertTokenResponseDataPlane,
-    GetE3TokenResponseDataPlane, GetObjectRequest, GetObjectResponse, PostTrxLogsRequest,
-    PutObjectRequest,
+    GetE3TokenResponseDataPlane, GetObjectRequest, GetObjectResponse, JwsRequest,
+    PostTrxLogsRequest, PutObjectRequest,
 };
+use shared::server::config_server::requests::{JwkResponse, JwsResponse, SignatureType};
 use shared::server::config_server::routes::ConfigServerPath;
 use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
@@ -26,14 +30,18 @@ pub struct ConfigServer<T: StorageClientInterface> {
     cert_provisioner_client: CertProvisionerClient,
     storage_client: T,
     cage_context: configuration::CageContext,
+    acme_account_details: AcmeAccountDetails,
 }
 
 impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> {
     pub fn new(cert_provisioner_client: CertProvisionerClient, storage_client: T) -> Self {
+        let acme_account_details = AcmeAccountDetails::new_from_env()
+            .expect("Failed to get acme account details from env");
         Self {
             cert_provisioner_client,
             storage_client,
             cage_context: configuration::CageContext::from_env_vars(),
+            acme_account_details,
         }
     }
 
@@ -45,12 +53,13 @@ impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> 
         let cert_client = self.cert_provisioner_client.clone();
         let storage_client = self.storage_client.clone();
         let cage_context = self.cage_context.clone();
-
+        let acme_account_details = self.acme_account_details.clone();
         println!("Running config server on {}", shared::ENCLAVE_CONFIG_PORT);
         loop {
             let cert_client = cert_client.clone();
             let storage_client = storage_client.clone();
             let cage_context = cage_context.clone();
+            let acme_account_details = acme_account_details.clone();
             let connection = match enclave_conn.accept().await {
                 Ok(conn) => conn,
                 Err(e) => {
@@ -65,6 +74,7 @@ impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> 
                 let cert_client = cert_client.clone();
                 let storage_client = storage_client.clone();
                 let cage_context = cage_context.clone();
+                let acme_account_details = acme_account_details.clone();
                 let sent_response = server
                     .serve_connection(
                         connection,
@@ -72,12 +82,14 @@ impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> 
                             let cert_client = cert_client.clone();
                             let storage_client = storage_client.clone();
                             let cage_context = cage_context.clone();
+                            let acme_account_details = acme_account_details.clone();
                             async move {
                                 handle_incoming_request(
                                     req,
                                     cert_client,
                                     storage_client,
                                     cage_context,
+                                    acme_account_details,
                                 )
                                 .await
                             }
@@ -106,6 +118,7 @@ async fn handle_incoming_request<T: StorageClientInterface>(
     cert_provisioner_client: CertProvisionerClient,
     storage_client: T,
     cage_context: configuration::CageContext,
+    acme_account_details: AcmeAccountDetails,
 ) -> ServerResult<Response<Body>> {
     match ConfigServerPath::from_str(req.uri().path()) {
         Ok(ConfigServerPath::GetCertToken) => Ok(handle_token_request(
@@ -121,6 +134,10 @@ async fn handle_incoming_request<T: StorageClientInterface>(
         Ok(ConfigServerPath::PostTrxLogs) => {
             Ok(handle_post_trx_logs_request(req, cage_context).await)
         }
+        Ok(ConfigServerPath::AcmeSign) => {
+            Ok(handle_acme_signing_request(req, acme_account_details, cage_context).await)
+        }
+        Ok(ConfigServerPath::AcmeJWK) => Ok(handle_acme_jwk_request(acme_account_details).await),
         Ok(ConfigServerPath::Storage) => match *req.method() {
             Method::GET => handle_acme_storage_get_request(req, storage_client, cage_context).await,
             Method::PUT => handle_acme_storage_put_request(req, storage_client, cage_context).await,
@@ -296,6 +313,126 @@ async fn handle_acme_storage_delete_request<T: StorageClientInterface>(
     }
 }
 
+async fn handle_acme_signing_request(
+    req: Request<Body>,
+    acme_account_details: AcmeAccountDetails,
+    cage_context: configuration::CageContext,
+) -> Response<Body> {
+    println!("Received signing request in config server for acme");
+    match sign_acme_payload(req, acme_account_details, cage_context).await {
+        Ok(response) => response,
+        Err(err) => {
+            println!("Failed to sign request: {}", err);
+            build_error_response("Failed to sign JWS request".to_string())
+        }
+    }
+}
+
+async fn sign_acme_payload(
+    req: Request<Body>,
+    acme_account_details: AcmeAccountDetails,
+    cage_context: configuration::CageContext,
+) -> ServerResult<Response<Body>> {
+    let parsed_result: ServerResult<JwsRequest> = parse_request(req).await;
+
+    match parsed_result {
+        Ok(jws_request) => {
+            let (key, key_id) = match jws_request.signature_type {
+                SignatureType::HMAC => (
+                    acme_account_details
+                        .eab_config
+                        .clone()
+                        .map(|x| x.private_key()),
+                    acme_account_details.eab_config.map(|x| x.key_id()),
+                ),
+                SignatureType::ECDSA => (
+                    Some(acme_account_details.account_ec_key),
+                    jws_request.account_id,
+                ),
+            };
+
+            if jws_request.url.contains("/newOrder") {
+                let order_payload: NewOrderPayload = serde_json::from_str(&jws_request.payload)?;
+
+                if !validate_order_identifiers(order_payload, cage_context) {
+                    return Ok(build_bad_request_response());
+                }
+            };
+
+            let jws = jws(
+                &jws_request.url,
+                jws_request.nonce,
+                &jws_request.payload,
+                &key.unwrap(),
+                key_id,
+            );
+
+            match jws {
+                Ok(jws) => {
+                    let jws_response: JwsResponse = JwsResponse::from(&jws);
+                    let body = jws_response.into_body()?;
+
+                    Response::builder()
+                        .status(200)
+                        .header("Content-Type", "application/json")
+                        .body(body)
+                        .map_err(ServerError::HyperHttp)
+                }
+                Err(err) => {
+                    println!("Failed to sign request: {}", err);
+                    Ok(build_error_response(
+                        "Failed to sign JWS request".to_string(),
+                    ))
+                }
+            }
+        }
+        Err(err) => {
+            println!("Failed to parse signing request from data plane: {}", err);
+            Ok(build_error_response(
+                "Failed to parse signing request from data plane".to_string(),
+            ))
+        }
+    }
+}
+
+async fn handle_acme_jwk_request(acme_account_details: AcmeAccountDetails) -> Response<Body> {
+    println!("Recieved jwk request in config server for acme");
+    match get_acme_jwk(acme_account_details).await {
+        Ok(response) => response,
+        Err(err) => {
+            println!("Failed to get jwk: {}", err);
+            build_error_response("Failed to get JWK".to_string())
+        }
+    }
+}
+
+async fn get_acme_jwk(acme_account_details: AcmeAccountDetails) -> ServerResult<Response<Body>> {
+    let jwk = Jwk::new(&acme_account_details.account_ec_key)?;
+    let jwk_response: JwkResponse = jwk.to_response();
+    let body = jwk_response.into_body()?;
+
+    Response::builder()
+        .status(200)
+        .header("Content-Type", "application/json")
+        .body(body)
+        .map_err(ServerError::HyperHttp)
+}
+
+fn validate_order_identifiers(
+    payload: NewOrderPayload,
+    cage_context: configuration::CageContext,
+) -> bool {
+    let cage_domain = format!(
+        "{}.{}.{}.cage.evervault.com",
+        &cage_context.cage_name, &cage_context.app_uuid, &cage_context.team_uuid
+    );
+
+    payload
+        .identifiers
+        .into_iter()
+        .all(|identifier| identifier.value == cage_domain)
+}
+
 fn build_success_response() -> Response<Body> {
     Response::builder()
         .status(200)
@@ -335,6 +472,9 @@ async fn parse_request<T: DeserializeOwned>(req: Request<Body>) -> ServerResult<
 
 #[cfg(test)]
 mod tests {
+
+    use shared::acme::helpers;
+    use shared::acme::jws::Identifier;
 
     use super::*;
     use mockall::predicate::eq;
@@ -561,5 +701,127 @@ mod tests {
 
         assert!(result.is_ok());
         assert!(result.unwrap().status().is_server_error());
+    }
+
+    #[tokio::test]
+    async fn test_handle_acme_signing_request_success() {
+        let cage_context = get_cage_context();
+        let acme_account_details = AcmeAccountDetails {
+            account_ec_key: helpers::gen_ec_private_key().unwrap(),
+            eab_config: None,
+        };
+
+        let req_body = JwsRequest::new(
+            SignatureType::ECDSA,
+            "https://acme-staging-v02.api.letsencrypt.org/acme/newAccount".to_string(),
+            Some("some_nonce".to_string()),
+            "some_payload".to_string(),
+            None,
+        )
+        .into_body()
+        .unwrap();
+
+        let result = handle_acme_signing_request(
+            hyper::Request::builder()
+                .method(Method::POST)
+                .body(req_body)
+                .unwrap(),
+            acme_account_details,
+            cage_context,
+        )
+        .await;
+
+        assert!(result.status().is_success());
+    }
+
+    #[tokio::test]
+    async fn test_handle_acme_signing_request_bad_request_new_order() {
+        let cage_context = get_cage_context();
+        let acme_account_details = AcmeAccountDetails {
+            account_ec_key: helpers::gen_ec_private_key().unwrap(),
+            eab_config: None,
+        };
+
+        let new_order_payload = NewOrderPayload {
+            identifiers: vec![Identifier {
+                r#type: "dns".to_string(),
+                value: "some_other_domain.com".to_string(),
+            }],
+        };
+
+        let new_order_payload_string = serde_json::to_string(&new_order_payload).unwrap();
+
+        let req_body = JwsRequest::new(
+            SignatureType::ECDSA,
+            "https://acme-staging-v02.api.letsencrypt.org/acme/newOrder".to_string(),
+            Some("some_nonce".to_string()),
+            new_order_payload_string,
+            None,
+        )
+        .into_body()
+        .unwrap();
+
+        let result = handle_acme_signing_request(
+            hyper::Request::builder()
+                .method(Method::POST)
+                .body(req_body)
+                .unwrap(),
+            acme_account_details,
+            cage_context,
+        )
+        .await;
+
+        assert!(result.status().is_client_error());
+    }
+
+    #[test]
+    fn test_validate_new_order_valid() {
+        let cage_context = get_cage_context();
+        let payload = NewOrderPayload {
+            identifiers: vec![Identifier {
+                r#type: "dns".to_string(),
+                value: format!(
+                    "{}.{}.{}.cage.evervault.com",
+                    cage_context.cage_name, cage_context.app_uuid, cage_context.team_uuid
+                ),
+            }],
+        };
+
+        assert!(validate_order_identifiers(payload, cage_context));
+    }
+
+    #[test]
+    fn test_validate_new_order_invalid() {
+        let cage_context = get_cage_context();
+        let payload = NewOrderPayload {
+            identifiers: vec![Identifier {
+                r#type: "dns".to_string(),
+                value: "some_other_domain.com".to_string(),
+            }],
+        };
+
+        assert!(!validate_order_identifiers(payload, cage_context));
+    }
+
+    #[test]
+    fn test_validate_new_order_multiple_domains_invalid() {
+        let cage_context = get_cage_context();
+        let payload = NewOrderPayload {
+            identifiers: vec![
+                Identifier {
+                    r#type: "dns".to_string(),
+                    value: "some_other_domain.com".to_string(),
+                },
+                Identifier {
+                    r#type: "dns".to_string(),
+                    value: format!(
+                        "{}.{}.{}.cage.evervault.com",
+                        cage_context.cage_name, cage_context.app_uuid, cage_context.team_uuid
+                    ),
+                },
+            ],
+        };
+
+        assert!(!validate_order_identifiers(payload, cage_context));
     }
 }

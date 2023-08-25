@@ -1,5 +1,10 @@
 use std::str::FromStr;
 
+use openssl::{
+    ec::EcKey,
+    pkey::{PKey, Private},
+};
+
 #[derive(PartialEq, Eq)]
 pub enum Environment {
     Development,
@@ -134,4 +139,23 @@ pub fn get_data_plane_version() -> Result<String, std::env::VarError> {
 
 pub fn get_acme_s3_bucket() -> String {
     std::env::var("ACME_S3_BUCKET").expect("ACME_S3_BUCKET is not set in env")
+}
+
+pub fn get_acme_ec_key() -> PKey<Private> {
+    let key_string =
+        std::env::var("ACME_ACCOUNT_EC_KEY").expect("ACME_ACCOUNT_EC_KEY is not set in env");
+
+    PKey::from_ec_key(
+        EcKey::private_key_from_pem(key_string.as_bytes())
+            .expect("ACME_ACCOUNT_EC_KEY is not a valid EC key"),
+    )
+    .expect("ACME_ACCOUNT_EC_KEY is not a valid EC key")
+}
+
+pub fn get_acme_hmac_key() -> String {
+    std::env::var("ACME_ACCOUNT_HMAC_KEY").expect("ACME_ACCOUNT_HMAC_KEY is not set in env")
+}
+
+pub fn get_acme_hmac_key_id() -> String {
+    std::env::var("ACME_ACCOUNT_HMAC_KEY_ID").expect("ACME_ACCOUNT_HMAC_KEY_ID is not set in env")
 }

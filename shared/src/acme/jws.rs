@@ -1,5 +1,6 @@
 use crate::acme::error::*;
 use crate::acme::helpers::*;
+use crate::server::config_server::requests::{JwkResponse, JwsResponse};
 use openssl::bn::BigNum;
 use openssl::bn::BigNumContext;
 use openssl::ec::EcKey;
@@ -41,7 +42,7 @@ fn extract_ec_coordinates(
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 // LEXICAL ORDER OF FIELDS MATTER!
-pub(crate) struct JwkThumb {
+pub struct JwkThumb {
     crv: String,
     kty: String,
     x: String,
@@ -50,6 +51,17 @@ pub(crate) struct JwkThumb {
 
 impl From<&Jwk> for JwkThumb {
     fn from(jwk: &Jwk) -> Self {
+        JwkThumb {
+            crv: jwk.crv.clone(),
+            kty: jwk.kty.clone(),
+            x: jwk.x.clone(),
+            y: jwk.y.clone(),
+        }
+    }
+}
+
+impl From<&JwkResponse> for JwkThumb {
+    fn from(jwk: &JwkResponse) -> Self {
         JwkThumb {
             crv: jwk.crv.clone(),
             kty: jwk.kty.clone(),
@@ -71,7 +83,6 @@ pub struct Jwk {
 }
 
 impl Jwk {
-    #[allow(unused)]
     pub fn new(pkey: &PKey<Private>) -> Result<Jwk, AcmeError> {
         let ec_key = pkey.ec_key()?;
         let (x, y) = extract_ec_coordinates(&ec_key)?;
@@ -84,16 +95,37 @@ impl Jwk {
             y,
         })
     }
+
+    pub fn to_response(&self) -> JwkResponse {
+        let jwk = self.to_owned();
+        JwkResponse {
+            alg: jwk.alg,
+            crv: jwk.crv,
+            kty: jwk.kty,
+            _use: jwk._use,
+            x: jwk.x,
+            y: jwk.y,
+        }
+    }
 }
 
 #[derive(Serialize, Debug, Clone)]
 pub struct JwsResult {
-    protected: String,
-    payload: String,
-    signature: String,
+    pub protected: String,
+    pub payload: String,
+    pub signature: String,
 }
 
-#[allow(unused)]
+impl From<&JwsResult> for JwsResponse {
+    fn from(jws: &JwsResult) -> Self {
+        JwsResponse {
+            protected: jws.protected.clone(),
+            payload: jws.payload.clone(),
+            signature: jws.signature.clone(),
+        }
+    }
+}
+
 pub fn jws(
     url: &str,
     nonce: Option<String>,
@@ -135,6 +167,18 @@ pub fn jws(
         payload: payload_b64,
         signature: signature_b64,
     })
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Identifier {
+    #[serde(rename = "type")]
+    pub r#type: String,
+    pub value: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct NewOrderPayload {
+    pub identifiers: Vec<Identifier>,
 }
 
 #[cfg(test)]

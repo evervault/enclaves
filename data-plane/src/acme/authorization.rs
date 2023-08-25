@@ -1,7 +1,5 @@
 use crate::acme::account::Account;
 use crate::acme::error::*;
-use crate::acme::helpers::*;
-use crate::acme::jws::Jwk;
 use crate::acme::order::Order;
 use crate::acme::order::*;
 use openssl::hash::hash;
@@ -10,13 +8,14 @@ use serde::de::Visitor;
 use serde::Deserialize;
 use serde::Deserializer;
 use serde_json::json;
+use shared::acme::helpers::*;
 use std::str::from_utf8;
 use std::sync::Arc;
 use std::time::Duration;
 
 use super::client::AcmeClientInterface;
 use super::directory::Directory;
-use super::jws::JwkThumb;
+use shared::acme::jws::JwkThumb;
 
 #[derive(Deserialize, Debug, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -137,16 +136,7 @@ impl<T: AcmeClientInterface> Order<T> {
 
         for authorization_url in self.authorization_urls.clone() {
             let response = directory
-                .authenticated_request(
-                    &authorization_url,
-                    "POST",
-                    None,
-                    &account
-                        .private_key
-                        .clone()
-                        .ok_or(AcmeError::FieldNotFound("private_key".into()))?,
-                    &Some(account.id.clone()),
-                )
+                .authenticated_request(&authorization_url, "POST", None, &Some(account.id.clone()))
                 .await?;
 
             let resp_bytes = hyper::body::to_bytes(response.into_body()).await?;
@@ -192,16 +182,7 @@ impl<T: AcmeClientInterface> Authorization<T> {
         let (account, directory) = self.get_account_and_directory()?;
 
         let response = directory
-            .authenticated_request(
-                &self.url,
-                "POST",
-                None,
-                &account
-                    .private_key
-                    .clone()
-                    .ok_or(AcmeError::FieldNotFound("private_key".into()))?,
-                &Some(account.id.clone()),
-            )
+            .authenticated_request(&self.url, "POST", None, &Some(account.id.clone()))
             .await?;
 
         let resp_bytes = hyper::body::to_bytes(response.into_body()).await?;
@@ -254,18 +235,12 @@ impl<T: AcmeClientInterface> Challenge<T> {
         Ok((account, directory))
     }
 
-    pub fn key_authorization(&self) -> Result<Option<String>, AcmeError> {
+    pub async fn key_authorization(&self) -> Result<Option<String>, AcmeError> {
         if let Some(token) = self.token.clone() {
-            let (account, _) = self.get_account_and_directory()?;
+            let (_, directory) = self.get_account_and_directory()?;
 
-            let jwk = &Jwk::new(
-                &account
-                    .private_key
-                    .clone()
-                    .ok_or(AcmeError::FieldNotFound("private_key".into()))?,
-            )?;
-
-            let jwk_thumb: JwkThumb = jwk.into();
+            let response = directory.config_client.jwk().await?;
+            let jwk_thumb: JwkThumb = JwkThumb::from(&response);
 
             let key_authorization = format!(
                 "{}.{}",
@@ -290,10 +265,6 @@ impl<T: AcmeClientInterface> Challenge<T> {
                 &self.url,
                 "POST",
                 Some(json!({})),
-                &account
-                    .private_key
-                    .clone()
-                    .ok_or(AcmeError::FieldNotFound("private_key".into()))?,
                 &Some(account.id.clone()),
             )
             .await?;
@@ -311,16 +282,7 @@ impl<T: AcmeClientInterface> Challenge<T> {
         let (account, directory) = self.get_account_and_directory()?;
 
         let response = directory
-            .authenticated_request(
-                &self.url,
-                "POST",
-                Some(json!("")),
-                &account
-                    .private_key
-                    .clone()
-                    .ok_or(AcmeError::FieldNotFound("private_key".into()))?,
-                &Some(account.id.clone()),
-            )
+            .authenticated_request(&self.url, "POST", None, &Some(account.id.clone()))
             .await?;
 
         let resp_bytes = hyper::body::to_bytes(response.into_body()).await?;
