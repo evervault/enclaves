@@ -5,6 +5,7 @@ use hyper::Body;
 use shared::storage::StorageClientInterface;
 
 const CHALLENGE_PATH: &str = "/.well-known/acme-challenge/:token";
+const HEALTHCHECK_PATH: &str = "/health";
 
 pub struct AcmeServer {}
 
@@ -24,12 +25,14 @@ impl AcmeServer {
         &self,
         storage_client: T,
     ) -> Result<()> {
-        let app = Router::new().route(
-            CHALLENGE_PATH,
-            get(move |Host(host): Host, Path(token): Path<String>| {
-                handle_get_challenge(host, token, storage_client)
-            }),
-        );
+        let app = Router::new()
+            .route(
+                CHALLENGE_PATH,
+                get(move |Host(host): Host, Path(token): Path<String>| {
+                    handle_get_challenge(host, token, storage_client)
+                }),
+            )
+            .route(HEALTHCHECK_PATH, get(handle_healthcheck));
 
         axum::Server::bind(
             &"0.0.0.0:80"
@@ -40,6 +43,10 @@ impl AcmeServer {
         .await?;
         Ok(())
     }
+}
+
+async fn handle_healthcheck() -> Response<Body> {
+    build_infallible_response("OK", StatusCode::OK)
 }
 
 async fn handle_get_challenge<T: StorageClientInterface>(
