@@ -172,7 +172,7 @@ pub fn jws(
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Identifier {
     #[serde(rename = "type")]
-    pub type_: String,
+    pub r#type: String,
     pub value: String,
 }
 
