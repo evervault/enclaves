@@ -4,9 +4,6 @@ use configuration::should_forward_proxy_protocol;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 
-#[cfg(test)]
-pub mod mocks;
-
 pub mod acme;
 pub mod base_tls_client;
 pub mod cache;

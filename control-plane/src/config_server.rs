@@ -460,8 +460,8 @@ fn build_error_response(body_msg: String) -> Response<Body> {
 
 fn namespace_key(key: String, cage_context: &configuration::CageContext) -> String {
     format!(
-        "{}/{}/{}/{}",
-        cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, key
+        "{}/{}/{}",
+        cage_context.app_uuid, cage_context.cage_name, key
     )
 }
 
