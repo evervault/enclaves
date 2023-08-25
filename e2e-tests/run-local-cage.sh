@@ -26,8 +26,10 @@ else
   ACME_ACCOUNT_EC_KEY=`cat ./e2e-tests/acme-key/key.pem` && export ACME_ACCOUNT_EC_KEY
   ACME_ACCOUNT_HMAC_KEY="cGxhY2Vob2xkZXI=" && export ACME_ACCOUNT_HMAC_KEY
   ACME_ACCOUNT_HMAC_KEY_ID="placeholder_id" && export ACME_ACCOUNT_HMAC_KEY_ID
-
+  ACME_S3_BUCKET="cages-acme-local && export ACME_S3_BUCKET"
 fi
+
+cargo build --release --target x86_64-unknown-linux-musl      
 
 # install the node modules for customer process and test script
 cd e2e-tests && npm install && cd ..
@@ -46,49 +48,4 @@ docker compose build --build-arg CUSTOMER_PROCESS=httpCustomerProcess.js
 
 echo "Running cage container"
 # run the container
-EV_API_KEY_AUTH=true docker compose up -d
-echo "SLEEPING 15 SECONDS to let cage initialize..."
-sleep 15
-
-docker compose logs --tail cages-cages
-
-echo "Running end-to-end tests"
-cd e2e-tests && npm run test || ($(docker compose logs --tail cages-cages) && false)
-
-echo "Running tests for health-check configurations"
-
-echo "data-plane health checks ON, control-plane ON, data-plane ON"
-npm run health-check-tests "should succeed"
-
-echo "data-plane health checks ON, control-plane ON, data-plane OFF"
-docker compose exec cages sh -c "sv down data-plane"
-npm run health-check-tests "should fail"
-
-echo "API Key Auth Tests"
-docker compose down
-EV_API_KEY_AUTH=true docker compose up -d
-sleep 10
-npm run api-key-auth-tests
-
-echo "No API Key Auth Tests"
-docker compose down
-EV_API_KEY_AUTH=false docker compose up -d
-sleep 10
-npm run no-auth-tests
-
-echo "Websocket Tests"
-export CUSTOMER_PROCESS=wsCustomerProcess.js
-docker compose down
-docker compose build --build-arg CUSTOMER_PROCESS=wsCustomerProcess.js
-docker compose up -d
-docker compose logs --tail cages-cages
-sleep 10
-npm run websocket-tests
-
-echo "Testing that Cage is serving trustable cert chain"
-echo "Q" | openssl s_client -verifyCAfile sample-ca/sample-root-ca-cert.pem -showcerts -connect 0.0.0.0:443 | grep "Verification: OK"
-
-
-echo "Tests complete"
-docker compose down
-
+EV_API_KEY_AUTH=true docker compose up

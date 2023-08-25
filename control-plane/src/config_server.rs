@@ -1,10 +1,9 @@
-use crate::acme::account_details::AcmeAccountDetails;
-use crate::acme::jws::{jws, Jwk, NewOrderPayload};
 use crate::clients::cert_provisioner::{
     CertProvisionerClient, GetCertTokenResponseControlPlane, GetE3TokenResponseControlPlane,
 };
-use crate::clients::storage::StorageClientInterface;
+use shared::storage::StorageClientInterface;
 
+use crate::acme_account_details::AcmeAccountDetails;
 use crate::configuration;
 use crate::error::{Result as ServerResult, ServerError};
 
@@ -12,6 +11,8 @@ use hyper::server::conn;
 use hyper::service::service_fn;
 use hyper::{Body, Method, Request, Response};
 use serde::de::DeserializeOwned;
+
+use shared::acme::jws::{jws, Jwk, NewOrderPayload};
 use shared::logging::TrxContext;
 use shared::server::config_server::requests::{
     ConfigServerPayload, DeleteObjectRequest, GetCertTokenResponseDataPlane,
@@ -34,7 +35,8 @@ pub struct ConfigServer<T: StorageClientInterface> {
 
 impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> {
     pub fn new(cert_provisioner_client: CertProvisionerClient, storage_client: T) -> Self {
-        let acme_account_details = AcmeAccountDetails::from_env();
+        let acme_account_details = AcmeAccountDetails::new_from_env()
+            .expect("Failed to get acme account details from env");
         Self {
             cert_provisioner_client,
             storage_client,
@@ -335,9 +337,18 @@ async fn sign_acme_payload(
 
     match parsed_result {
         Ok(jws_request) => {
-            let key = match jws_request.signature_type {
-                SignatureType::HMAC => acme_account_details.account_hmac,
-                SignatureType::ECDSA => Some(acme_account_details.account_ec_key),
+            let (key, key_id) = match jws_request.signature_type {
+                SignatureType::HMAC => (
+                    acme_account_details
+                        .eab_config
+                        .clone()
+                        .map(|x| x.private_key()),
+                    acme_account_details.eab_config.map(|x| x.key_id()),
+                ),
+                SignatureType::ECDSA => (
+                    Some(acme_account_details.account_ec_key),
+                    jws_request.account_id,
+                ),
             };
 
             if jws_request.url.contains("/newOrder") {
@@ -353,7 +364,7 @@ async fn sign_acme_payload(
                 jws_request.nonce,
                 &jws_request.payload,
                 &key.unwrap(),
-                jws_request.account_id,
+                key_id,
             );
 
             match jws {
@@ -462,12 +473,15 @@ async fn parse_request<T: DeserializeOwned>(req: Request<Body>) -> ServerResult<
 #[cfg(test)]
 mod tests {
 
+    use std::str::from_utf8;
+
+    use shared::acme::helpers;
+    use shared::acme::jws::Identifier;
+
     use super::*;
-    use crate::acme::helpers;
-    use crate::acme::jws::Identifier;
-    use crate::clients::storage::StorageClientError;
-    use crate::mocks::storage_client_mock::MockStorageClientInterface;
     use mockall::predicate::eq;
+    use shared::mocks::storage_client_mock::MockStorageClientInterface;
+    use shared::storage::StorageClientError;
 
     fn get_cage_context() -> configuration::CageContext {
         configuration::CageContext::new(
@@ -696,7 +710,7 @@ mod tests {
         let cage_context = get_cage_context();
         let acme_account_details = AcmeAccountDetails {
             account_ec_key: helpers::gen_ec_private_key().unwrap(),
-            account_hmac: None,
+            eab_config: None,
         };
 
         let req_body = JwsRequest::new(
@@ -727,7 +741,7 @@ mod tests {
         let cage_context = get_cage_context();
         let acme_account_details = AcmeAccountDetails {
             account_ec_key: helpers::gen_ec_private_key().unwrap(),
-            account_hmac: None,
+            eab_config: None,
         };
 
         let new_order_payload = NewOrderPayload {

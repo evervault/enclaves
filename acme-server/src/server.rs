@@ -1,12 +1,8 @@
-//Simple server running on port 80 to server ACME challenges
-
-use axum::extract::Path;
+use crate::error::Result;
+use axum::extract::{Host, Path};
 use axum::{http::StatusCode, response::Response, routing::get, Router};
 use hyper::Body;
-
-use crate::clients::storage::StorageClientInterface;
-use crate::configuration;
-use crate::error::Result;
+use shared::storage::StorageClientInterface;
 
 const CHALLENGE_PATH: &str = "/.well-known/acme-challenge/:token";
 
@@ -28,10 +24,11 @@ impl AcmeServer {
         &self,
         storage_client: T,
     ) -> Result<()> {
-        let cage_context = configuration::CageContext::from_env_vars();
         let app = Router::new().route(
             CHALLENGE_PATH,
-            get(move |token| handle_get_challenge(token, cage_context, storage_client)),
+            get(move |Host(host): Host, Path(token): Path<String>| {
+                handle_get_challenge(host, token, storage_client)
+            }),
         );
 
         axum::Server::bind(
@@ -46,12 +43,19 @@ impl AcmeServer {
 }
 
 async fn handle_get_challenge<T: StorageClientInterface>(
-    Path(token): Path<String>,
-    cage_context: configuration::CageContext,
+    host: String,
+    token: String,
     storage_client: T,
 ) -> Response<Body> {
-    let namespace = cage_context.get_namespace_string();
-    let file_path = format!("{}/.well-known/acme-challenge/{}", namespace, token);
+    let parts: Vec<&str> = host.split('.').collect();
+
+    // cage-name.app-uuid.cages.evervault.com
+    if parts.len() != 5 {
+        eprintln!("Request was made to a hostname that does not look like a cage hostname");
+        return build_infallible_response("Bad hostname", StatusCode::BAD_REQUEST);
+    }
+
+    let file_path = format!("{}/{}/acme-challenges/{}", parts[1], parts[0], token);
     get_challenge(file_path, storage_client).await
 }
 
@@ -88,29 +92,21 @@ fn build_infallible_response(msg: &str, status_code: StatusCode) -> Response<Bod
 mod tests {
 
     use super::*;
-    use crate::clients::storage::StorageClientError;
-    use crate::mocks::storage_client_mock::MockStorageClientInterface;
     use mockall::predicate::eq;
+    use shared::mocks::storage_client_mock::MockStorageClientInterface;
+    use shared::storage::StorageClientError;
 
-    fn get_cage_context() -> configuration::CageContext {
-        configuration::CageContext::new(
-            "cage_123".to_string(),
-            "v1".to_string(),
-            "test-me".to_string(),
-            "app_123".to_string(),
-            "team_456".to_string(),
+    fn get_expected_path(challenge_key: &str) -> String {
+        format!(
+            "{}/{}/acme-challenges/{}",
+            "app-123", "test-cage", challenge_key
         )
     }
 
     #[tokio::test]
     async fn test_get_challenge_success() {
         let mut mock = MockStorageClientInterface::new();
-        let cage_context = get_cage_context();
-        let challenge_key = "test-success";
-        let expected_path = format!(
-            "{}/{}/{}/.well-known/acme-challenge/{}",
-            cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, challenge_key
-        );
+        let expected_path = get_expected_path("test-success");
 
         mock.expect_get_object()
             .with(eq(expected_path.clone()))
@@ -132,12 +128,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_challenge_not_found() {
         let mut mock = MockStorageClientInterface::new();
-        let cage_context = get_cage_context();
-        let challenge_key = "test-not-found";
-        let expected_path = format!(
-            "{}/{}/{}/.well-known/acme-challenge/{}",
-            cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, challenge_key
-        );
+        let expected_path = get_expected_path("test-not-found");
 
         mock.expect_get_object()
             .with(eq(expected_path.clone()))
@@ -159,12 +150,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_challenge_error() {
         let mut mock = MockStorageClientInterface::new();
-        let cage_context = get_cage_context();
-        let challenge_key = "test-error";
-        let expected_path = format!(
-            "{}/{}/{}/.well-known/acme-challenge/{}",
-            cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, challenge_key
-        );
+        let expected_path = get_expected_path("test-error");
 
         mock.expect_get_object()
             .with(eq(expected_path.clone()))

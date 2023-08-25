@@ -27,6 +27,12 @@ tokio-rustls = { version = "0.23.4", features = ["dangerous_configuration"] }
 sys-info = "0.9.1"
 cadence = "0.29.0"
 httparse = "1.8.0"
+aws-sdk-s3 = "0.28.0"
+aws-config = "0.55.0"
+mockall = "0.11.4"
+openssl = { version = "0.10.48", features = ["vendored"] }
+base64 = "0.13.0"
+
 
 [dev-dependencies]
 tokio-test = "0.4.2"

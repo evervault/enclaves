@@ -23,6 +23,9 @@ else
   MOCK_CERT_PROVISIONER_SERVER_KEY=`cat certs/localhost.key` && export MOCK_CERT_PROVISIONER_SERVER_KEY
   MOCK_CERT_PROVISIONER_ROOT_CERT=`cat certs/ca.crt` && export MOCK_CERT_PROVISIONER_ROOT_CERT
   MOCK_CERT_PROVISIONER_SERVER_CERT=`cat certs/localhost.crt` && export MOCK_CERT_PROVISIONER_SERVER_CERT
+  ACME_ACCOUNT_EC_KEY=`cat ./e2e-tests/acme-key/key.pem` && export ACME_ACCOUNT_EC_KEY
+  ACME_ACCOUNT_HMAC_KEY="cGxhY2Vob2xkZXI=" && export ACME_ACCOUNT_HMAC_KEY
+  ACME_ACCOUNT_HMAC_KEY_ID="placeholder_id" && export ACME_ACCOUNT_HMAC_KEY_ID
 fi
 
 # install the node modules for customer process and test script

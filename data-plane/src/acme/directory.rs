@@ -1,13 +1,11 @@
 use crate::acme::error::*;
-use crate::acme::jws::JwsResult;
 use crate::config_client::ConfigClient;
 use crate::configuration;
 use hyper::Body;
 use hyper::Response;
-use openssl::pkey::PKey;
-use openssl::pkey::Private;
 use serde::Deserialize;
 use serde_json::Value;
+use shared::acme::jws::JwsResult;
 use std::str::from_utf8;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -124,23 +122,21 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
         method: &str,
         url: &str,
         payload: &str,
-        pkey: &PKey<Private>,
         account_id: &Option<String>,
     ) -> Result<hyper::Response<Body>, AcmeError> {
         let nonce = self.get_nonce().await?;
-        let body: JwsResult = JwsResult::from(
-            &self
-                .config_client
-                .jws(
-                    shared::server::config_server::requests::SignatureType::ECDSA,
-                    url.into(),
-                    Some(nonce),
-                    payload.into(),
-                    account_id.clone(),
-                )
-                .await
-                .unwrap(),
-        );
+        let result = &self
+            .config_client
+            .jws(
+                shared::server::config_server::requests::SignatureType::ECDSA,
+                url.into(),
+                Some(nonce),
+                payload.into(),
+                account_id.clone(),
+            )
+            .await?;
+
+        let body: JwsResult = result.into();
 
         let body = serde_json::to_vec(&body)?;
 
@@ -169,7 +165,6 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
         url: &str,
         method: &str,
         payload: Option<Value>,
-        pkey: &PKey<Private>,
         account_id: &Option<String>,
     ) -> Result<hyper::Response<Body>, AcmeError> {
         println!("Sending authenticated request to: {}", url);
@@ -181,7 +176,7 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
         };
 
         let resp = self
-            .authenticated_request_raw(method, url, &payload_parsed, pkey, account_id)
+            .authenticated_request_raw(method, url, &payload_parsed, account_id)
             .await?;
 
         if let Some(nonce) = extract_nonce_from_response(&resp)? {
@@ -201,7 +196,7 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
 mod tests {
 
     use super::*;
-    use crate::acme::mocks::client_mock::MockAcmeClientInterface;
+    use crate::{acme::mocks::client_mock::MockAcmeClientInterface, config_client, test};
 
     pub struct TestDirectoryPaths {
         pub new_nonce_url: String,
@@ -237,6 +232,7 @@ mod tests {
 
     fn get_test_directory<T: AcmeClientInterface>(
         client: T,
+        config_client: ConfigClient,
         nonce_value: Option<String>,
     ) -> Directory<T> {
         let test_directory_paths = TestDirectoryPaths::new();
@@ -250,6 +246,7 @@ mod tests {
 
         Directory {
             client,
+            config_client,
             nonce,
             new_nonce_url: test_directory_paths.new_nonce_url,
             new_account_url: test_directory_paths.new_account_url,
@@ -264,6 +261,7 @@ mod tests {
     #[tokio::test]
     async fn test_directory_fetch() {
         let mut mock_client = MockAcmeClientInterface::new();
+        let test_config_client = config_client::ConfigClient::new();
         let test_directory_paths = TestDirectoryPaths::new();
         mock_client.expect_send().returning(|_| {
             let resp = hyper::Response::builder()
@@ -289,9 +287,13 @@ mod tests {
             Ok(resp)
         });
 
-        let directory = Directory::fetch_directory(String::from("/acme/directory"), mock_client)
-            .await
-            .unwrap();
+        let directory = Directory::fetch_directory(
+            String::from("/acme/directory"),
+            mock_client,
+            test_config_client,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(directory.new_nonce_url, test_directory_paths.new_nonce_url);
         assert_eq!(
@@ -328,6 +330,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_nonce_first_time() {
         let mut mock_client = MockAcmeClientInterface::new();
+        let test_config_client = config_client::ConfigClient::new();
 
         mock_client.expect_send().returning(|_| {
             let resp = hyper::Response::builder()
@@ -338,7 +341,7 @@ mod tests {
             Ok(resp)
         });
 
-        let test_directory = get_test_directory(mock_client, None);
+        let test_directory = get_test_directory(mock_client, test_config_client, None);
 
         let nonce = test_directory.get_nonce().await.unwrap();
 
@@ -348,10 +351,15 @@ mod tests {
     #[tokio::test]
     async fn test_get_nonce_exists() {
         let mut mock_client = MockAcmeClientInterface::new();
+        let test_config_client = config_client::ConfigClient::new();
 
         mock_client.expect_send().times(0);
 
-        let test_directory = get_test_directory(mock_client, Some(String::from("987654321")));
+        let test_directory = get_test_directory(
+            mock_client,
+            test_config_client,
+            Some(String::from("987654321")),
+        );
 
         let nonce = test_directory.get_nonce().await.unwrap();
 

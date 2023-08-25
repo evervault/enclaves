@@ -1,0 +1,23 @@
+on:
+  push:
+    paths:
+      - acme-server/**
+      - shared/**
+      - .github/workflows/test-acme-server.yml
+name: Test Acme Server
+jobs:
+  test_acme_server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "standard-cache"
+      - name: Compile project
+        run: cargo build -p acme-server
+      - name: Test project
+        run: cargo test -p acme-server
