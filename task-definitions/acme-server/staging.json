@@ -3,13 +3,16 @@
   "family": "cages",
   "executionRoleArn": "",
   "taskRoleArn": "",
-  "requiresCompatibilities": ["EC2"],
+  "requiresCompatibilities": [
+    "EC2"
+  ],
   "networkMode": "awsvpc",
   "containerDefinitions": [
     {
       "name": "cages-acme",
       "memory": 1024,
       "privileged": true,
+      "image": "arn:aws:ecr:us-east-1:972197321295:repository/evervault/acme-server",
       "portMappings": [
         {
           "containerPort": 80,
@@ -24,7 +27,10 @@
         }
       ],
       "healthCheck": {
-        "command": ["CMD_SHELL", "curl http://localhost:80/health || exit 1"],
+        "command": [
+          "CMD_SHELL",
+          "curl http://localhost:80/health || exit 1"
+        ],
         "interval": 5,
         "timeout": 15,
         "retries": 3,
