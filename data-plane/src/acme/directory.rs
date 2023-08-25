@@ -196,7 +196,7 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
 mod tests {
 
     use super::*;
-    use crate::{acme::mocks::client_mock::MockAcmeClientInterface, config_client, test};
+    use crate::{acme::mocks::client_mock::MockAcmeClientInterface, config_client};
 
     pub struct TestDirectoryPaths {
         pub new_nonce_url: String,

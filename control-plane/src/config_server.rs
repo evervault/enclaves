@@ -473,8 +473,6 @@ async fn parse_request<T: DeserializeOwned>(req: Request<Body>) -> ServerResult<
 #[cfg(test)]
 mod tests {
 
-    use std::str::from_utf8;
-
     use shared::acme::helpers;
     use shared::acme::jws::Identifier;
 
@@ -746,7 +744,7 @@ mod tests {
 
         let new_order_payload = NewOrderPayload {
             identifiers: vec![Identifier {
-                type_: "dns".to_string(),
+                r#type: "dns".to_string(),
                 value: "some_other_domain.com".to_string(),
             }],
         };
@@ -781,7 +779,7 @@ mod tests {
         let cage_context = get_cage_context();
         let payload = NewOrderPayload {
             identifiers: vec![Identifier {
-                type_: "dns".to_string(),
+                r#type: "dns".to_string(),
                 value: format!(
                     "{}.{}.{}.cage.evervault.com",
                     cage_context.cage_name, cage_context.app_uuid, cage_context.team_uuid
@@ -797,7 +795,7 @@ mod tests {
         let cage_context = get_cage_context();
         let payload = NewOrderPayload {
             identifiers: vec![Identifier {
-                type_: "dns".to_string(),
+                r#type: "dns".to_string(),
                 value: "some_other_domain.com".to_string(),
             }],
         };
@@ -811,11 +809,11 @@ mod tests {
         let payload = NewOrderPayload {
             identifiers: vec![
                 Identifier {
-                    type_: "dns".to_string(),
+                    r#type: "dns".to_string(),
                     value: "some_other_domain.com".to_string(),
                 },
                 Identifier {
-                    type_: "dns".to_string(),
+                    r#type: "dns".to_string(),
                     value: format!(
                         "{}.{}.{}.cage.evervault.com",
                         cage_context.cage_name, cage_context.app_uuid, cage_context.team_uuid
