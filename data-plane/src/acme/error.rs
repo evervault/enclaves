@@ -3,7 +3,7 @@ use std::string::FromUtf8Error;
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::{error, base_tls_client::ClientError};
+use crate::{base_tls_client::ClientError, error};
 
 #[derive(Debug, Error)]
 pub enum AcmeError {

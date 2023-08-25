@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc, serde::ts_seconds, Duration};
+use chrono::{serde::ts_seconds, DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -13,7 +13,7 @@ pub struct StorageLock {
     pub name: String,
     pub uuid: String,
     #[serde(with = "ts_seconds")]
-    expiry_time: DateTime<Utc>
+    expiry_time: DateTime<Utc>,
 }
 
 impl StorageLock {
@@ -23,7 +23,7 @@ impl StorageLock {
             config_client: ConfigClient::new(),
             name,
             uuid,
-            expiry_time: Utc::now() + Duration::seconds(30)
+            expiry_time: Utc::now() + Duration::seconds(30),
         }
     }
     pub fn new_with_config_client(name: String, config_client: ConfigClient) -> Self {
@@ -32,23 +32,23 @@ impl StorageLock {
             config_client,
             name,
             uuid,
-            expiry_time: Utc::now() + Duration::seconds(30)
+            expiry_time: Utc::now() + Duration::seconds(30),
         }
     }
 
     pub async fn read_from_storage(name: String) -> Result<Option<Self>, AcmeError> {
         let config_client = ConfigClient::new();
         let get_lock_response = config_client.get_object(format!("{}.lock", name)).await?;
-        match get_lock_response{
+        match get_lock_response {
             Some(response) => {
                 let mut lock: StorageLock = serde_json::from_str(&response.body())?;
                 lock.config_client = config_client;
                 Ok(Some(lock))
-            },
-            None => Ok(None)
+            }
+            None => Ok(None),
         }
     }
-    
+
     fn lock_key_name(&self) -> String {
         format!("{}.lock", self.name)
     }
@@ -63,18 +63,21 @@ impl StorageLock {
 
     pub async fn write_lock(&self) -> Result<(), AcmeError> {
         let lock = serde_json::to_string(self)?;
-        self.config_client.put_object(self.lock_key_name(), lock).await?;
+        self.config_client
+            .put_object(self.lock_key_name(), lock)
+            .await?;
         Ok(())
     }
 
     pub async fn is_persisted(&self) -> Result<bool, AcmeError> {
-        let persisted_lock_maybe_response = self.config_client.get_object(self.lock_key_name()).await?;
+        let persisted_lock_maybe_response =
+            self.config_client.get_object(self.lock_key_name()).await?;
         match persisted_lock_maybe_response {
             Some(response) => {
                 let lock: Self = serde_json::from_str(&response.body())?;
                 Ok(lock.has_uuid(self.uuid.clone()))
-            },
-            None => Ok(false)
+            }
+            None => Ok(false),
         }
     }
 
@@ -85,7 +88,9 @@ impl StorageLock {
     }
 
     pub async fn delete(&self) -> Result<(), AcmeError> {
-        self.config_client.delete_object(self.lock_key_name()).await?;
+        self.config_client
+            .delete_object(self.lock_key_name())
+            .await?;
         Ok(())
     }
 }

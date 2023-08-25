@@ -90,7 +90,7 @@ impl ConfigClient {
                 response.status()
             )));
         }
-        
+
         let result: GetE3TokenResponseDataPlane = self.parse_response(response).await?;
 
         Ok(result)
@@ -145,7 +145,7 @@ impl ConfigClient {
             StatusCode::OK => {
                 let result: GetObjectResponse = self.parse_response(response).await?;
                 Ok(Some(result))
-            },
+            }
             StatusCode::NOT_FOUND => Ok(None),
             _ => {
                 println!(
