@@ -1,8 +1,8 @@
 {
   "$schema": "https://ecs-intellisense.s3-us-west-2.amazonaws.com/task-definition/schema.json",
   "family": "cages",
-  "executionRoleArn": "",
-  "taskRoleArn": "",
+  "executionRoleArn": "arn:aws:iam::us-east-1:role/cageEcsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::us-east-1:role/cageEcsTaskExecutionRole",
   "requiresCompatibilities": [
     "EC2"
   ],
