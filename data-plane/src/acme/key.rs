@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::{
-    config_client::ConfigClient,
+    config_client::{ConfigClient, StorageConfigClientInterface},
     e3client::{CryptoRequest, CryptoResponse, E3Client},
 };
 

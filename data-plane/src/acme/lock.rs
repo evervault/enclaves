@@ -2,7 +2,7 @@ use chrono::{serde::ts_seconds, DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::config_client::ConfigClient;
+use crate::config_client::{ConfigClient, StorageConfigClientInterface};
 
 use super::error::AcmeError;
 
