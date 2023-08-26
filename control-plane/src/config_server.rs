@@ -227,7 +227,10 @@ async fn handle_acme_storage_get_request<T: StorageClientInterface>(
     match parsed_result {
         Ok(request_body) => {
             let namespaced_key = namespace_key(request_body.key(), &cage_context);
-            println!("Received get request in config server for {}", namespaced_key);
+            println!(
+                "Received get request in config server for {}",
+                namespaced_key
+            );
             let object = match storage_client.get_object(namespaced_key).await {
                 Ok(object) => match object {
                     Some(object) => object,
@@ -266,7 +269,10 @@ async fn handle_acme_storage_put_request<T: StorageClientInterface>(
     match parsed_result {
         Ok(request_body) => {
             let namespaced_key = namespace_key(request_body.key(), &cage_context);
-            println!("Received post request in config server for {}", namespaced_key);
+            println!(
+                "Received post request in config server for {}",
+                namespaced_key
+            );
             match storage_client
                 .put_object(namespaced_key, request_body.object())
                 .await
@@ -295,7 +301,10 @@ async fn handle_acme_storage_delete_request<T: StorageClientInterface>(
     match parsed_result {
         Ok(request_body) => {
             let namespaced_key = namespace_key(request_body.key(), &cage_context);
-            println!("Received delete request in config server for {}", namespaced_key);
+            println!(
+                "Received delete request in config server for {}",
+                namespaced_key
+            );
             match storage_client.delete_object(namespaced_key).await {
                 Ok(_) => Ok(build_success_response()),
                 Err(err) => {

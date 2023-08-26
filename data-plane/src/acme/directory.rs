@@ -167,7 +167,6 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
         payload: Option<Value>,
         account_id: &Option<String>,
     ) -> Result<hyper::Response<Body>, AcmeError> {
-
         //Handle empty body
         let payload_parsed = match payload {
             None => "".to_string(),

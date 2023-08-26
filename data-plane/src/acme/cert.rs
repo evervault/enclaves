@@ -192,10 +192,7 @@ impl AcmeCertificateRetreiver {
         );
         if certificate_lock.write_and_check_persisted().await? {
             let raw_acme_certificate = self
-                .order_certificate(
-                    "placeholder.cert.com".into(),
-                    key.clone(),
-                )
+                .order_certificate("placeholder.cert.com".into(), key.clone())
                 .await?; //TODO - actually create certificate
 
             let encrypted_raw_certificate =
@@ -269,7 +266,7 @@ impl AcmeCertificateRetreiver {
             let token = challenge.clone().token.ok_or(AcmeError::FieldNotFound(
                 "Token not found in challenge returned".into(),
             ))?;
-            
+
             let path = format!("acme-challenges/{}", token);
 
             let token_value =
