@@ -1,5 +1,5 @@
+use crate::dns;
 use crate::error::Result;
-use crate::internal_dns;
 use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
 use std::net::SocketAddr;
@@ -32,9 +32,14 @@ pub struct TlsProxy {
 }
 
 impl TlsProxy {
-    pub fn new(target_host: String, target_port: u16, vsock_port: u16) -> Self {
+    pub fn new(target_host: String, target_port: u16, vsock_port: u16, internal_dns: bool) -> Self {
+        let dns_ip = match internal_dns {
+            true => std::net::IpAddr::V4(std::net::Ipv4Addr::new(169, 254, 169, 253)),
+            false => std::net::IpAddr::V4(std::net::Ipv4Addr::new(8, 8, 8, 8)),
+        };
+
         let dns_resolver =
-            internal_dns::get_internal_dns_resolver().expect("Couldn't get internal DNS resolver");
+            dns::get_dns_resolver(dns_ip).expect("Couldn't get internal DNS resolver");
         let target = TlsTargetDetails::new(target_host, target_port);
         Self {
             dns_resolver,
@@ -114,7 +119,7 @@ impl TlsProxy {
     async fn get_ip_target_host(&self) -> Result<Option<SocketAddr>> {
         let target = self.target.clone();
         let target_host_dns_name = format!("{}.", target.host);
-        internal_dns::get_ip_for_host_with_dns_resolver(
+        dns::get_ip_for_host_with_dns_resolver(
             &self.dns_resolver,
             target_host_dns_name.as_str(),
             target.port,
@@ -124,6 +129,6 @@ impl TlsProxy {
 
     #[cfg(not(feature = "enclave"))]
     async fn get_ip_target_host(&self) -> Result<Option<SocketAddr>> {
-        internal_dns::get_ip_for_localhost(self.target.port)
+        dns::get_ip_for_localhost(self.target.port)
     }
 }

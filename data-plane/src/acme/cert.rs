@@ -1,6 +1,9 @@
-use std::{sync::Arc, time::Duration, str::from_utf8};
+use std::{str::from_utf8, sync::Arc, time::Duration};
 
-use openssl::{pkey::{PKey, Private}, x509::X509};
+use openssl::{
+    pkey::{PKey, Private},
+    x509::X509,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio_rustls::rustls::{
@@ -43,9 +46,8 @@ impl RawAcmeCertificate {
     }
 
     fn convert_to_pemfile(certificates: Vec<X509>) -> Result<String, AcmeError> {
-
         let mut pem_strings: Vec<String> = Vec::new();
-        
+
         for x509 in certificates {
             let pem = x509.to_pem()?;
             let pem_string = from_utf8(&pem)?.to_string();
@@ -53,7 +55,7 @@ impl RawAcmeCertificate {
         }
 
         let combined_pem: String = pem_strings.join("\n");
-    
+
         Ok(combined_pem)
     }
 
@@ -189,7 +191,12 @@ impl AcmeCertificateRetreiver {
             self.config_client.clone(),
         );
         if certificate_lock.write_and_check_persisted().await? {
-            let raw_acme_certificate = self.order_certificate("6b59-2a09-bac5-36c1-d2-00-15-20b.ngrok-free.app".into(), key.clone()).await?; //TODO - actually create certificate
+            let raw_acme_certificate = self
+                .order_certificate(
+                    "placeholder.cert.com".into(),
+                    key.clone(),
+                )
+                .await?; //TODO - actually create certificate
 
             let encrypted_raw_certificate =
                 Self::encrypt_certificate(self.e3_client.clone(), raw_acme_certificate.clone())
@@ -253,14 +260,17 @@ impl AcmeCertificateRetreiver {
         let authorizations = order.authorizations().await?;
 
         for auth in authorizations {
-            let challenge = auth.get_challenge("http-01").ok_or(AcmeError::FieldNotFound(
-                "Challenge not found in authorization".into(),
-            ))?;
+            let challenge = auth
+                .get_challenge("http-01")
+                .ok_or(AcmeError::FieldNotFound(
+                    "Challenge not found in authorization".into(),
+                ))?;
 
             let token = challenge.clone().token.ok_or(AcmeError::FieldNotFound(
                 "Token not found in challenge returned".into(),
             ))?;
-            let path = format!("/acme-challenges/{}", token);
+            
+            let path = format!("acme-challenges/{}", token);
 
             let token_value =
                 challenge
@@ -270,25 +280,24 @@ impl AcmeCertificateRetreiver {
                         "Token not found in challenge returned".into(),
                     ))?;
 
-            self
-                .config_client
+            self.config_client
                 .put_object(path.clone(), token_value)
                 .await?;
 
             let challenge_validated = challenge.validate().await?;
 
             challenge_validated
-                .wait_done(Duration::from_secs(10), 3)
+                .wait_done(Duration::from_secs(5), 5)
                 .await?;
 
-            auth.wait_done(Duration::from_secs(5), 3).await?;
+            auth.wait_done(Duration::from_secs(5), 5).await?;
         }
 
-        let order_ready = order.wait_ready(Duration::from_secs(10), 20).await?;
+        let order_ready = order.wait_ready(Duration::from_secs(5), 5).await?;
         let order_finalized = order_ready.finalize(key).await?;
 
         let order_complete = order_finalized
-            .wait_done(Duration::from_secs(5), 3)
+            .wait_done(Duration::from_secs(5), 5)
             .await
             .unwrap();
 
@@ -300,7 +309,6 @@ impl AcmeCertificateRetreiver {
             ))?;
 
         RawAcmeCertificate::from_x509s(cert_chain)
-
     }
 
     async fn decrypt_certificate(

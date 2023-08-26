@@ -1,8 +1,8 @@
+use crate::dns;
 use crate::error::Result;
-use crate::internal_dns;
 use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
-use std::net::SocketAddr;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 #[cfg(not(feature = "enclave"))]
 use tokio::io::AsyncWriteExt;
 use trust_dns_resolver::name_server::{GenericConnection, GenericConnectionProvider, TokioRuntime};
@@ -23,7 +23,8 @@ impl std::default::Default for E3Proxy {
 
 impl E3Proxy {
     pub fn new() -> Self {
-        let dns_resolver = internal_dns::get_internal_dns_resolver()
+        let aws_internal_dns_ip = IpAddr::V4(Ipv4Addr::new(169, 254, 169, 253));
+        let dns_resolver = dns::get_dns_resolver(aws_internal_dns_ip)
             .expect("Failed to create internal dns resolver");
         Self { dns_resolver }
     }
@@ -91,17 +92,13 @@ impl E3Proxy {
 
     #[cfg(feature = "enclave")]
     async fn get_ip_for_e3(&self) -> Result<Option<SocketAddr>> {
-        internal_dns::get_ip_for_host_with_dns_resolver(
-            &self.dns_resolver,
-            "e3.cages-e3.internal.",
-            443,
-        )
-        .await
+        dns::get_ip_for_host_with_dns_resolver(&self.dns_resolver, "e3.cages-e3.internal.", 443)
+            .await
     }
 
     // supporting local env
     #[cfg(not(feature = "enclave"))]
     async fn get_ip_for_e3(&self) -> Result<Option<SocketAddr>> {
-        internal_dns::get_ip_for_localhost(7676)
+        dns::get_ip_for_localhost(7676)
     }
 }

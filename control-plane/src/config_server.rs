@@ -223,11 +223,11 @@ async fn handle_acme_storage_get_request<T: StorageClientInterface>(
     storage_client: T,
     cage_context: configuration::CageContext,
 ) -> ServerResult<Response<Body>> {
-    println!("Recieved get request in config server for acme storage");
     let parsed_result: ServerResult<GetObjectRequest> = parse_request(req).await;
     match parsed_result {
         Ok(request_body) => {
             let namespaced_key = namespace_key(request_body.key(), &cage_context);
+            println!("Received get request in config server for {}", namespaced_key);
             let object = match storage_client.get_object(namespaced_key).await {
                 Ok(object) => match object {
                     Some(object) => object,
@@ -262,12 +262,11 @@ async fn handle_acme_storage_put_request<T: StorageClientInterface>(
     storage_client: T,
     cage_context: configuration::CageContext,
 ) -> ServerResult<Response<Body>> {
-    println!("Recieved post request in config server for acme storage");
     let parsed_result: ServerResult<PutObjectRequest> = parse_request(req).await;
     match parsed_result {
         Ok(request_body) => {
             let namespaced_key = namespace_key(request_body.key(), &cage_context);
-
+            println!("Received post request in config server for {}", namespaced_key);
             match storage_client
                 .put_object(namespaced_key, request_body.object())
                 .await
@@ -296,7 +295,7 @@ async fn handle_acme_storage_delete_request<T: StorageClientInterface>(
     match parsed_result {
         Ok(request_body) => {
             let namespaced_key = namespace_key(request_body.key(), &cage_context);
-
+            println!("Received delete request in config server for {}", namespaced_key);
             match storage_client.delete_object(namespaced_key).await {
                 Ok(_) => Ok(build_success_response()),
                 Err(err) => {
@@ -318,7 +317,7 @@ async fn handle_acme_signing_request(
     acme_account_details: AcmeAccountDetails,
     cage_context: configuration::CageContext,
 ) -> Response<Body> {
-    println!("Received signing request in config server for acme");
+    println!("Received ACME signing request in config server");
     match sign_acme_payload(req, acme_account_details, cage_context).await {
         Ok(response) => response,
         Err(err) => {
@@ -354,7 +353,7 @@ async fn sign_acme_payload(
             if jws_request.url.contains("/newOrder") {
                 let order_payload: NewOrderPayload = serde_json::from_str(&jws_request.payload)?;
 
-                if !validate_order_identifiers(order_payload, cage_context) {
+                if !valid_order_identifiers(order_payload, cage_context) {
                     return Ok(build_bad_request_response());
                 }
             };
@@ -396,7 +395,7 @@ async fn sign_acme_payload(
 }
 
 async fn handle_acme_jwk_request(acme_account_details: AcmeAccountDetails) -> Response<Body> {
-    println!("Recieved jwk request in config server for acme");
+    println!("Recieved ACME JWK request in config server");
     match get_acme_jwk(acme_account_details).await {
         Ok(response) => response,
         Err(err) => {
@@ -418,13 +417,20 @@ async fn get_acme_jwk(acme_account_details: AcmeAccountDetails) -> ServerResult<
         .map_err(ServerError::HyperHttp)
 }
 
-fn validate_order_identifiers(
+fn valid_order_identifiers(
     payload: NewOrderPayload,
     cage_context: configuration::CageContext,
 ) -> bool {
+    let underscored_app_uuid = cage_context.app_uuid.replace('-', "_");
+
+    #[cfg(not(staging))]
+    let cage_base_domain = "cage.evervault.com";
+    #[cfg(staging)]
+    let cage_base_domain = "cage.evervault.dev";
+
     let cage_domain = format!(
-        "{}.{}.{}.cage.evervault.com",
-        &cage_context.cage_name, &cage_context.app_uuid, &cage_context.team_uuid
+        "{}.{}.{}",
+        &cage_context.cage_name, &underscored_app_uuid, cage_base_domain
     );
 
     payload
@@ -459,9 +465,11 @@ fn build_error_response(body_msg: String) -> Response<Body> {
 }
 
 fn namespace_key(key: String, cage_context: &configuration::CageContext) -> String {
+    let underscored_app_uuid = cage_context.app_uuid.replace('-', "_");
+
     format!(
         "{}/{}/{}",
-        cage_context.app_uuid, cage_context.cage_name, key
+        underscored_app_uuid, cage_context.cage_name, key
     )
 }
 

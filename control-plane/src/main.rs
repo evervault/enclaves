@@ -38,12 +38,14 @@ async fn main() -> Result<()> {
         configuration::get_cert_provisoner_host(),
         3000,
         shared::ENCLAVE_CERT_PORT,
+        true,
     );
 
     let acme_proxy = tls_proxy::TlsProxy::new(
         configuration::get_acme_host(),
         443,
         shared::ENCLAVE_ACME_PORT,
+        false,
     );
 
     StatsClient::init();
