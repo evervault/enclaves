@@ -1,8 +1,12 @@
 use crate::error;
 #[cfg(feature = "enclave")]
 use rand::prelude::IteratorRandom;
+#[cfg(not(feature = "enclave"))]
 use rand::seq::IteratorRandom;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+#[cfg(not(feature = "enclave"))]
+use std::net::Ipv4Addr;
+
+use std::net::{IpAddr, SocketAddr};
 use trust_dns_resolver::config::ResolverOpts;
 use trust_dns_resolver::config::{NameServerConfigGroup, ResolverConfig};
 use trust_dns_resolver::name_server::{GenericConnection, GenericConnectionProvider, TokioRuntime};
