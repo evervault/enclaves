@@ -798,13 +798,13 @@ mod tests {
             identifiers: vec![Identifier {
                 r#type: "dns".to_string(),
                 value: format!(
-                    "{}.{}.{}.cage.evervault.com",
-                    cage_context.cage_name, cage_context.app_uuid, cage_context.team_uuid
+                    "{}.{}.cage.evervault.com",
+                    cage_context.cage_name, cage_context.app_uuid.replace('-', "_")
                 ),
             }],
         };
 
-        assert!(validate_order_identifiers(payload, cage_context));
+        assert!(valid_order_identifiers(payload, cage_context));
     }
 
     #[test]
@@ -817,7 +817,7 @@ mod tests {
             }],
         };
 
-        assert!(!validate_order_identifiers(payload, cage_context));
+        assert!(!valid_order_identifiers(payload, cage_context));
     }
 
     #[test]
@@ -832,13 +832,13 @@ mod tests {
                 Identifier {
                     r#type: "dns".to_string(),
                     value: format!(
-                        "{}.{}.{}.cage.evervault.com",
-                        cage_context.cage_name, cage_context.app_uuid, cage_context.team_uuid
+                        "{}.{}.cage.evervault.com",
+                        cage_context.cage_name, cage_context.app_uuid.replace('-', "_")
                     ),
                 },
             ],
         };
 
-        assert!(!validate_order_identifiers(payload, cage_context));
+        assert!(!valid_order_identifiers(payload, cage_context));
     }
 }
