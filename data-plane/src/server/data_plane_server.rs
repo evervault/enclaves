@@ -9,7 +9,7 @@ use crate::e3client::DecryptRequest;
 use crate::e3client::{self, AuthRequest, E3Client};
 use crate::error::Error::{ApiKeyInvalid, MissingApiKey};
 use crate::error::{AuthError, Result};
-use crate::{CageContext, FeatureContext, FEATURE_CONTEXT} 
+use crate::{CageContext, FeatureContext, FEATURE_CONTEXT};
 
 #[cfg(feature = "enclave")]
 use crate::acme;
@@ -44,9 +44,12 @@ where
     TlsError: From<<L as Listener>::Error>,
     <L as Listener>::Connection: ProxiedConnection + 'static,
 {
-
     #[cfg(feature = "enclave")]
-    let trusted_cert: Option<CertifiedKey> = Some(acme::get_trusted_cert().await.expect("Failed to get trusted cert"));
+    let trusted_cert: Option<CertifiedKey> = Some(
+        acme::get_trusted_cert()
+            .await
+            .expect("Failed to get trusted cert"),
+    );
     #[cfg(not(feature = "enclave"))] // Don't order trusted certs locally
     let trusted_cert: Option<CertifiedKey> = None;
 

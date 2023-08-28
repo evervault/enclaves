@@ -321,7 +321,11 @@ impl AttestableCertResolver {
             .map(|(_expiry, cert)| Arc::new(cert))?;
             Some(certified_key)
         } else if self.trusted_cert.is_some() && Self::is_trusted_cert_domain(server_name) {
-            let trusted_cert = self.trusted_cert.clone().expect("Infallible - Checked in if condition earlier").clone();
+            let trusted_cert = self
+                .trusted_cert
+                .clone()
+                .expect("Infallible - Checked in if condition earlier")
+                .clone();
             Some(Arc::new(trusted_cert))
         } else {
             // no nonce given - serve base cert
