@@ -799,7 +799,8 @@ mod tests {
                 r#type: "dns".to_string(),
                 value: format!(
                     "{}.{}.cage.evervault.com",
-                    cage_context.cage_name, cage_context.app_uuid.replace('-', "_")
+                    cage_context.cage_name,
+                    cage_context.app_uuid.replace('-', "_")
                 ),
             }],
         };
@@ -833,7 +834,8 @@ mod tests {
                     r#type: "dns".to_string(),
                     value: format!(
                         "{}.{}.cage.evervault.com",
-                        cage_context.cage_name, cage_context.app_uuid.replace('-', "_")
+                        cage_context.cage_name,
+                        cage_context.app_uuid.replace('-', "_")
                     ),
                 },
             ],
