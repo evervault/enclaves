@@ -91,10 +91,15 @@ pub struct AttestableCertResolver {
     internal_pk: PKey<Private>,
     // if we don't receive a nonce, we should return a generic, attestable cert
     base_cert_container: CertContainer,
+    trusted_cert: CertifiedKey,
 }
 
 impl AttestableCertResolver {
-    pub fn new(internal_ca: X509, internal_pk: PKey<Private>) -> ServerResult<Self> {
+    pub fn new(
+        internal_ca: X509,
+        internal_pk: PKey<Private>,
+        trusted_cert: CertifiedKey,
+    ) -> ServerResult<Self> {
         let cage_context = CageContext::get()?;
         let hostnames = cage_context.get_cert_names();
         let (created_at, cert_and_key) = Self::generate_self_signed_cert(
@@ -109,6 +114,7 @@ impl AttestableCertResolver {
             internal_ca,
             internal_pk,
             base_cert_container: CertContainer::new(created_at, cert_and_key),
+            trusted_cert,
         })
     }
 
@@ -121,6 +127,21 @@ impl AttestableCertResolver {
             }
         } else {
             None
+        }
+    }
+
+    //[cage-name].[cage-uuid].cage.evervault.[com|dev]
+    pub(crate) fn is_trusted_cert_domain(received_servername: Option<&str>) -> bool {
+        match received_servername {
+            Some(servername) => {
+                let split_hostname: Vec<&str> = servername.split('.').collect();
+
+                split_hostname
+                    .get(3)
+                    .map(|third_subdomain| third_subdomain == &"cage")
+                    .unwrap_or(false)
+            }
+            None => false,
         }
     }
 
@@ -298,6 +319,9 @@ impl AttestableCertResolver {
             .ok()
             .map(|(_expiry, cert)| Arc::new(cert))?;
             Some(certified_key)
+        } else if Self::is_trusted_cert_domain(server_name) {
+            let trusted_cert = self.trusted_cert.clone();
+            Some(Arc::new(trusted_cert))
         } else {
             // no nonce given - serve base cert
             self.base_cert_container.resolve_cert(|| {
@@ -376,6 +400,17 @@ mod tests {
         let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name);
         let server_name = Some(ctx.get_cert_name());
         test_cert_with_hostname(server_name);
+    }
+
+    #[test]
+    fn test_checking_for_trusted_hostname_true() {
+        let hostname = Some("wicked_cage.app_123543.cage.evervault.com");
+        assert!(AttestableCertResolver::is_trusted_cert_domain(hostname));
+    }
+
+    fn test_checking_for_trusted_hostname_false() {
+        let hostname = Some("wicked_cage.app_123543.cages.evervault.com");
+        assert!(!AttestableCertResolver::is_trusted_cert_domain(hostname));
     }
 
     #[test]
