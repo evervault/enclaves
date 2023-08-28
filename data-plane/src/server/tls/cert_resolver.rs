@@ -91,14 +91,14 @@ pub struct AttestableCertResolver {
     internal_pk: PKey<Private>,
     // if we don't receive a nonce, we should return a generic, attestable cert
     base_cert_container: CertContainer,
-    trusted_cert: CertifiedKey,
+    trusted_cert: Option<CertifiedKey>,
 }
 
 impl AttestableCertResolver {
     pub fn new(
         internal_ca: X509,
         internal_pk: PKey<Private>,
-        trusted_cert: CertifiedKey,
+        trusted_cert: Option<CertifiedKey>,
     ) -> ServerResult<Self> {
         let cage_context = CageContext::get()?;
         let hostnames = cage_context.get_cert_names();
@@ -320,8 +320,8 @@ impl AttestableCertResolver {
             .ok()
             .map(|(_expiry, cert)| Arc::new(cert))?;
             Some(certified_key)
-        } else if Self::is_trusted_cert_domain(server_name) {
-            let trusted_cert = self.trusted_cert.clone();
+        } else if self.trusted_cert.is_some() && Self::is_trusted_cert_domain(server_name) {
+            let trusted_cert = self.trusted_cert.clone().expect("Infallible - Checked in if condition earlier").clone();
             Some(Arc::new(trusted_cert))
         } else {
             // no nonce given - serve base cert

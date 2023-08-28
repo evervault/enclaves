@@ -2,17 +2,17 @@ use super::error::TlsError;
 use super::http::ContentEncoding;
 use super::tls::TlsServerBuilder;
 
-use crate::acme::cert::AcmeCertificateRetreiver;
-use crate::acme::key::AcmeKeyRetreiver;
 use crate::base_tls_client::ClientError;
-use crate::config_client::ConfigClient;
 #[cfg(feature = "enclave")]
 use crate::crypto::attest;
 use crate::e3client::DecryptRequest;
 use crate::e3client::{self, AuthRequest, E3Client};
 use crate::error::Error::{ApiKeyInvalid, MissingApiKey};
 use crate::error::{AuthError, Result};
-use crate::{CageContext, FeatureContext, FEATURE_CONTEXT};
+use crate::{CageContext, FeatureContext, FEATURE_CONTEXT} 
+
+#[cfg(feature = "enclave")]
+use crate::acme;
 
 use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
 
@@ -20,7 +20,6 @@ use bytes::Bytes;
 #[cfg(feature = "enclave")]
 use chrono::Utc;
 use futures::StreamExt;
-use openssl::pkey::PKey;
 use tokio_rustls::rustls::sign::CertifiedKey;
 
 use crate::error::Error;
@@ -45,18 +44,11 @@ where
     TlsError: From<<L as Listener>::Error>,
     <L as Listener>::Connection: ProxiedConnection + 'static,
 {
-    let config_client: ConfigClient = ConfigClient::new();
-    let e3client: E3Client = E3Client::new();
 
-    let trusted_key_pair: PKey<openssl::pkey::Private> =
-        AcmeKeyRetreiver::new(config_client.clone(), e3client.clone())
-            .get_or_create_cage_key_pair()
-            .await
-            .expect("Failed to get key pair for trusted cert");
-    let trusted_cert: CertifiedKey = AcmeCertificateRetreiver::new(config_client, e3client)
-        .get_or_create_cage_certificate(trusted_key_pair)
-        .await
-        .expect("Failed to get trusted cert");
+    #[cfg(feature = "enclave")]
+    let trusted_cert: Option<CertifiedKey> = Some(acme::get_trusted_cert().await.expect("Failed to get trusted cert"));
+    #[cfg(not(feature = "enclave"))] // Don't order trusted certs locally
+    let trusted_cert: Option<CertifiedKey> = None;
 
     let mut server = TlsServerBuilder::new()
         .with_server(tcp_server)

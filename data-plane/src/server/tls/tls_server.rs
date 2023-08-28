@@ -70,7 +70,7 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
 
     pub async fn with_attestable_cert(
         self,
-        trusted_cert: CertifiedKey,
+        trusted_cert: Option<CertifiedKey>,
     ) -> ServerResult<TlsServer<S>> {
         println!("Creating TLSServer with attestable cert");
         let (ca_cert, ca_private_key) = Self::get_ca_with_retry().await;
