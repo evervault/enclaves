@@ -430,13 +430,13 @@ fn valid_order_identifiers(
     payload: NewOrderPayload,
     cage_context: configuration::CageContext,
 ) -> bool {
-    let underscored_app_uuid = cage_context.app_uuid.replace('-', "_");
-
     let cage_base_domain = configuration::get_trusted_cert_base_domain();
 
     let cage_domain = format!(
         "{}.{}.{}",
-        &cage_context.cage_name, &underscored_app_uuid, cage_base_domain
+        &cage_context.cage_name,
+        &cage_context.hyphenated_app_uuid(),
+        cage_base_domain
     );
 
     payload
@@ -516,7 +516,7 @@ mod tests {
 
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.underscored_app_uuid(),
+            cage_context.hyphenated_app_uuid(),
             cage_context.cage_name,
             key
         );
@@ -548,7 +548,7 @@ mod tests {
 
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.underscored_app_uuid(),
+            cage_context.hyphenated_app_uuid(),
             cage_context.cage_name,
             key
         );
@@ -587,7 +587,7 @@ mod tests {
 
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.underscored_app_uuid(),
+            cage_context.hyphenated_app_uuid(),
             cage_context.cage_name,
             key
         );
@@ -622,7 +622,7 @@ mod tests {
 
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.underscored_app_uuid(),
+            cage_context.hyphenated_app_uuid(),
             cage_context.cage_name,
             key
         );
@@ -658,7 +658,7 @@ mod tests {
 
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.underscored_app_uuid(),
+            cage_context.hyphenated_app_uuid(),
             cage_context.cage_name,
             key
         );
@@ -691,7 +691,7 @@ mod tests {
 
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.underscored_app_uuid(),
+            cage_context.hyphenated_app_uuid(),
             cage_context.cage_name,
             key
         );

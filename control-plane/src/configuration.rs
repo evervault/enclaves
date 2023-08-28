@@ -77,12 +77,12 @@ impl CageContext {
         }
     }
 
-    pub fn underscored_app_uuid(&self) -> String {
-        self.app_uuid.replace('-', "_")
+    pub fn hyphenated_app_uuid(&self) -> String {
+        self.app_uuid.replace('_', "-")
     }
 
     pub fn get_namespace_string(self) -> String {
-        format!("{}/{}", self.underscored_app_uuid(), self.cage_name)
+        format!("{}/{}", self.hyphenated_app_uuid(), self.cage_name)
     }
 }
 
