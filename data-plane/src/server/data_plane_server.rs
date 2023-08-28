@@ -2,7 +2,10 @@ use super::error::TlsError;
 use super::http::ContentEncoding;
 use super::tls::TlsServerBuilder;
 
+use crate::acme::cert::AcmeCertificateRetreiver;
+use crate::acme::key::AcmeKeyRetreiver;
 use crate::base_tls_client::ClientError;
+use crate::config_client::ConfigClient;
 #[cfg(feature = "enclave")]
 use crate::crypto::attest;
 use crate::e3client::DecryptRequest;
@@ -17,6 +20,8 @@ use bytes::Bytes;
 #[cfg(feature = "enclave")]
 use chrono::Utc;
 use futures::StreamExt;
+use openssl::pkey::PKey;
+use tokio_rustls::rustls::sign::CertifiedKey;
 
 use crate::error::Error;
 use httparse::Status;
@@ -40,9 +45,22 @@ where
     TlsError: From<<L as Listener>::Error>,
     <L as Listener>::Connection: ProxiedConnection + 'static,
 {
+    let config_client: ConfigClient = ConfigClient::new();
+    let e3client: E3Client = E3Client::new();
+
+    let trusted_key_pair: PKey<openssl::pkey::Private> =
+        AcmeKeyRetreiver::new(config_client.clone(), e3client.clone())
+            .get_or_create_cage_key_pair()
+            .await
+            .expect("Failed to get key pair for trusted cert");
+    let trusted_cert: CertifiedKey = AcmeCertificateRetreiver::new(config_client, e3client)
+        .get_or_create_cage_certificate(trusted_key_pair)
+        .await
+        .expect("Failed to get trusted cert");
+
     let mut server = TlsServerBuilder::new()
         .with_server(tcp_server)
-        .with_attestable_cert()
+        .with_attestable_cert(trusted_cert)
         .await
         .expect("Failed to create tls server");
     let e3_client = Arc::new(E3Client::new());
