@@ -432,10 +432,7 @@ fn valid_order_identifiers(
 ) -> bool {
     let underscored_app_uuid = cage_context.app_uuid.replace('-', "_");
 
-    #[cfg(not(staging))]
-    let cage_base_domain = "cage.evervault.com";
-    #[cfg(staging)]
-    let cage_base_domain = "cage.evervault.dev";
+    let cage_base_domain = configuration::get_trusted_cert_base_domain();
 
     let cage_domain = format!(
         "{}.{}.{}",
@@ -474,11 +471,9 @@ fn build_error_response(body_msg: String) -> Response<Body> {
 }
 
 fn namespace_key(key: String, cage_context: &configuration::CageContext) -> String {
-    let underscored_app_uuid = cage_context.app_uuid.replace('-', "_");
-
     format!(
-        "{}/{}/{}",
-        underscored_app_uuid, cage_context.cage_name, key
+        "{}/{}",
+        cage_context.clone().get_namespace_string(), key
     )
 }
 
@@ -523,11 +518,8 @@ mod tests {
         let cage_context = get_cage_context();
 
         let expected_key = format!(
-            "{}/{}/{}/{}",
-            cage_context.team_uuid,
-            cage_context.app_uuid,
-            cage_context.cage_uuid,
-            key.clone()
+            "{}/{}/{}",
+            cage_context.underscored_app_uuid(), cage_context.cage_name, key
         );
 
         mock_storage_client
@@ -556,11 +548,8 @@ mod tests {
         let cage_context = get_cage_context();
 
         let expected_key = format!(
-            "{}/{}/{}/{}",
-            cage_context.team_uuid,
-            cage_context.app_uuid,
-            cage_context.cage_uuid,
-            key.clone()
+            "{}/{}/{}",
+            cage_context.underscored_app_uuid(), cage_context.cage_name, key
         );
 
         mock_storage_client
@@ -596,8 +585,8 @@ mod tests {
         let cage_context = get_cage_context();
 
         let expected_key = format!(
-            "{}/{}/{}/{}",
-            cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, key
+            "{}/{}/{}",
+            cage_context.underscored_app_uuid(), cage_context.cage_name, key
         );
 
         mock_storage_client
@@ -627,10 +616,10 @@ mod tests {
             .unwrap();
 
         let cage_context = get_cage_context();
-
+       
         let expected_key = format!(
-            "{}/{}/{}/{}",
-            cage_context.team_uuid, cage_context.app_uuid, cage_context.cage_uuid, key
+            "{}/{}/{}",
+            cage_context.underscored_app_uuid(), cage_context.cage_name, key
         );
 
         mock_storage_client
@@ -663,11 +652,8 @@ mod tests {
         let cage_context = get_cage_context();
 
         let expected_key = format!(
-            "{}/{}/{}/{}",
-            cage_context.team_uuid,
-            cage_context.app_uuid,
-            cage_context.cage_uuid,
-            key.clone()
+            "{}/{}/{}",
+            cage_context.underscored_app_uuid(), cage_context.cage_name, key
         );
 
         mock_storage_client
@@ -697,11 +683,8 @@ mod tests {
         let cage_context = get_cage_context();
 
         let expected_key = format!(
-            "{}/{}/{}/{}",
-            cage_context.team_uuid,
-            cage_context.app_uuid,
-            cage_context.cage_uuid,
-            key.clone()
+            "{}/{}/{}",
+            cage_context.underscored_app_uuid(), cage_context.cage_name, key
         );
 
         mock_storage_client
