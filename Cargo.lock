@@ -695,6 +695,7 @@ dependencies = [
  "js-sys",
  "num-integer",
  "num-traits 0.2.15",
+ "serde",
  "time 0.1.45",
  "wasm-bindgen",
  "winapi",
@@ -975,6 +976,7 @@ dependencies = [
  "tokio-test",
  "tokio-util 0.6.10",
  "tokio-vsock",
+ "uuid",
  "webpki-roots",
 ]
 
@@ -2874,6 +2876,15 @@ name = "urlencoding"
 version = "2.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8db7427f936968176eaa7cdf81b7f98b980b18495ec28f1b5791ac3bfe3eea9"
+
+[[package]]
+name = "uuid"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "79daa5ed5740825c40b389c5e50312b9c86df53fccd33f281df655642b43869d"
+dependencies = [
+ "getrandom",
+]
 
 [[package]]
 name = "vcpkg"
