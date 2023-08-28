@@ -471,10 +471,7 @@ fn build_error_response(body_msg: String) -> Response<Body> {
 }
 
 fn namespace_key(key: String, cage_context: &configuration::CageContext) -> String {
-    format!(
-        "{}/{}",
-        cage_context.clone().get_namespace_string(), key
-    )
+    format!("{}/{}", cage_context.clone().get_namespace_string(), key)
 }
 
 async fn parse_request<T: DeserializeOwned>(req: Request<Body>) -> ServerResult<T> {
@@ -519,7 +516,9 @@ mod tests {
 
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.underscored_app_uuid(), cage_context.cage_name, key
+            cage_context.underscored_app_uuid(),
+            cage_context.cage_name,
+            key
         );
 
         mock_storage_client
@@ -549,7 +548,9 @@ mod tests {
 
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.underscored_app_uuid(), cage_context.cage_name, key
+            cage_context.underscored_app_uuid(),
+            cage_context.cage_name,
+            key
         );
 
         mock_storage_client
@@ -586,7 +587,9 @@ mod tests {
 
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.underscored_app_uuid(), cage_context.cage_name, key
+            cage_context.underscored_app_uuid(),
+            cage_context.cage_name,
+            key
         );
 
         mock_storage_client
@@ -616,10 +619,12 @@ mod tests {
             .unwrap();
 
         let cage_context = get_cage_context();
-       
+
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.underscored_app_uuid(), cage_context.cage_name, key
+            cage_context.underscored_app_uuid(),
+            cage_context.cage_name,
+            key
         );
 
         mock_storage_client
@@ -653,7 +658,9 @@ mod tests {
 
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.underscored_app_uuid(), cage_context.cage_name, key
+            cage_context.underscored_app_uuid(),
+            cage_context.cage_name,
+            key
         );
 
         mock_storage_client
@@ -684,7 +691,9 @@ mod tests {
 
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.underscored_app_uuid(), cage_context.cage_name, key
+            cage_context.underscored_app_uuid(),
+            cage_context.cage_name,
+            key
         );
 
         mock_storage_client

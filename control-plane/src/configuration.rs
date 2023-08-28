@@ -165,7 +165,6 @@ pub fn get_acme_hmac_key_id() -> String {
 }
 
 pub fn get_trusted_cert_base_domain() -> String {
-    
     #[cfg(not(staging))]
     let cage_base_domain = "cage.evervault.com";
     #[cfg(staging)]
