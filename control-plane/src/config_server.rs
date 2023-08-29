@@ -792,7 +792,7 @@ mod tests {
                 value: format!(
                     "{}.{}.cage.evervault.com",
                     cage_context.cage_name,
-                    cage_context.app_uuid.replace('-', "_")
+                    cage_context.app_uuid.replace('_', "-")
                 ),
             }],
         };
@@ -827,7 +827,7 @@ mod tests {
                     value: format!(
                         "{}.{}.cage.evervault.com",
                         cage_context.cage_name,
-                        cage_context.app_uuid.replace('-', "_")
+                        cage_context.app_uuid.replace('_', "-")
                     ),
                 },
             ],
