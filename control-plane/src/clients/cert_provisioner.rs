@@ -49,7 +49,7 @@ fn get_mtls_connector(
     let (client_cert_chain, client_key) = client_key_pair;
     let mtls_connector_config = base_config_builder
         .with_root_certificates(root_store)
-        .with_single_cert(client_cert_chain, client_key)
+        .with_client_auth_cert(client_cert_chain, client_key)
         .expect("Failed to add client cert for making connector to cert provisioner");
 
     tokio_rustls::TlsConnector::from(std::sync::Arc::new(mtls_connector_config))
