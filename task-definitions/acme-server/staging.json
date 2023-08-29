@@ -1,5 +1,4 @@
 {
-  "$schema": "https://ecs-intellisense.s3-us-west-2.amazonaws.com/task-definition/schema.json",
   "family": "cages",
   "executionRoleArn": "arn:aws:iam::us-east-1:role/cageEcsTaskExecutionRole",
   "taskRoleArn": "arn:aws:iam::us-east-1:role/cageEcsTaskExecutionRole",
@@ -9,10 +8,10 @@
   "networkMode": "awsvpc",
   "containerDefinitions": [
     {
-      "name": "cages-acme",
+      "name": "acme-server",
       "memory": 1024,
       "privileged": true,
-      "image": "arn:aws:ecr:us-east-1:972197321295:repository/evervault/acme-server",
+      "image": "arn:aws:ecr:us-east-1:972197321295:repository/evervault/acme-server:latest",
       "portMappings": [
         {
           "containerPort": 80,
@@ -23,7 +22,7 @@
       "environment": [
         {
           "name": "ACME_S3_BUCKET",
-          "value": "cages-acme-staging"
+          "value": "cages-acme-bucket-staging"
         }
       ],
       "healthCheck": {
@@ -40,7 +39,7 @@
         "logDriver": "awslogs",
         "options": {
           "awslogs-create-group": "true",
-          "awslogs-group": "/ecs/cages-acme",
+          "awslogs-group": "/ecs/cages-acme-server",
           "awslogs-region": "us-east-1",
           "awslogs-stream-prefix": "ecs"
         }
