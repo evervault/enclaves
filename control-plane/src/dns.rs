@@ -15,7 +15,26 @@ use trust_dns_resolver::AsyncResolver;
 pub type AsyncDnsResolver =
     AsyncResolver<GenericConnection, GenericConnectionProvider<TokioRuntime>>;
 
-pub fn get_dns_resolver(
+pub struct InternalAsyncDnsResolver {}
+pub struct ExternalAsyncDnsResolver {}
+
+impl InternalAsyncDnsResolver {
+    pub fn new_resolver() -> Result<AsyncDnsResolver, trust_dns_resolver::error::ResolveError> {
+        let dns_ip = IpAddr::V4(Ipv4Addr::new(169, 254, 169, 253));
+        let dns_resolver = get_dns_resolver(dns_ip)?;
+        Ok(dns_resolver)
+    }
+}
+
+impl ExternalAsyncDnsResolver {
+    pub fn new_resolver() -> Result<AsyncDnsResolver, trust_dns_resolver::error::ResolveError> {
+        let dns_ip = IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8));
+        let dns_resolver = get_dns_resolver(dns_ip)?;
+        Ok(dns_resolver)
+    }
+}
+
+fn get_dns_resolver(
     dns_ip: IpAddr,
 ) -> Result<AsyncDnsResolver, trust_dns_resolver::error::ResolveError> {
     AsyncResolver::tokio(

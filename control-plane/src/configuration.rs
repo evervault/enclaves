@@ -81,7 +81,7 @@ impl CageContext {
         self.app_uuid.replace('_', "-")
     }
 
-    pub fn get_namespace_string(self) -> String {
+    pub fn get_namespace_string(&self) -> String {
         format!("{}/{}", self.hyphenated_app_uuid(), self.cage_name)
     }
 }

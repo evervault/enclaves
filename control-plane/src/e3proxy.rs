@@ -1,8 +1,8 @@
-use crate::dns;
+use crate::dns::{self, InternalAsyncDnsResolver};
 use crate::error::Result;
 use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::SocketAddr;
 #[cfg(not(feature = "enclave"))]
 use tokio::io::AsyncWriteExt;
 use trust_dns_resolver::name_server::{GenericConnection, GenericConnectionProvider, TokioRuntime};
@@ -23,8 +23,7 @@ impl std::default::Default for E3Proxy {
 
 impl E3Proxy {
     pub fn new() -> Self {
-        let aws_internal_dns_ip = IpAddr::V4(Ipv4Addr::new(169, 254, 169, 253));
-        let dns_resolver = dns::get_dns_resolver(aws_internal_dns_ip)
+        let dns_resolver = InternalAsyncDnsResolver::new_resolver()
             .expect("Failed to create internal dns resolver");
         Self { dns_resolver }
     }
