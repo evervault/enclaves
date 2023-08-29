@@ -3,9 +3,8 @@ use crate::error;
 use rand::prelude::IteratorRandom;
 #[cfg(not(feature = "enclave"))]
 use rand::seq::IteratorRandom;
-#[cfg(not(feature = "enclave"))]
-use std::net::Ipv4Addr;
 
+use std::net::Ipv4Addr;
 use std::net::{IpAddr, SocketAddr};
 use trust_dns_resolver::config::ResolverOpts;
 use trust_dns_resolver::config::{NameServerConfigGroup, ResolverConfig};
