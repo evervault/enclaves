@@ -471,7 +471,7 @@ fn build_error_response(body_msg: String) -> Response<Body> {
 }
 
 fn namespace_key(key: String, cage_context: &configuration::CageContext) -> String {
-    format!("{}/{}", cage_context.clone().get_namespace_string(), key)
+    format!("{}/{}", cage_context.get_namespace_string(), key)
 }
 
 async fn parse_request<T: DeserializeOwned>(req: Request<Body>) -> ServerResult<T> {
