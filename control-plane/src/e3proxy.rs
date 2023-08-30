@@ -2,7 +2,7 @@ use crate::dns::{self, InternalAsyncDnsResolver};
 use crate::error::Result;
 use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::SocketAddr;
 #[cfg(not(feature = "enclave"))]
 use tokio::io::AsyncWriteExt;
 use trust_dns_resolver::name_server::{GenericConnection, GenericConnectionProvider, TokioRuntime};
