@@ -35,7 +35,7 @@ impl AcmeServer {
             .route(HEALTHCHECK_PATH, get(handle_healthcheck));
 
         axum::Server::bind(
-            &"0.0.0.0:80"
+            &"0.0.0.0:8080"
                 .parse()
                 .expect("Infallible - hardcoded address"),
         )

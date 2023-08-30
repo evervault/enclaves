@@ -1,9 +1,9 @@
 {
-  "family": "cages",
-  "executionRoleArn": "arn:aws:iam::us-east-1:role/cageEcsTaskExecutionRole",
-  "taskRoleArn": "arn:aws:iam::us-east-1:role/cageEcsTaskExecutionRole",
+  "family": "acme-server",
+  "executionRoleArn": "",
+  "taskRoleArn": "", //placholders for now, setting manually in dashboard.
   "requiresCompatibilities": [
-    "EC2"
+    "FARGATE"
   ],
   "networkMode": "awsvpc",
   "containerDefinitions": [
