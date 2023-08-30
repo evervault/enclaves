@@ -75,7 +75,7 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
             super::cert_resolver::AttestableCertResolver::new(ca_cert, ca_private_key)?;
         let mut tls_config =
             Self::get_base_config().with_cert_resolver(Arc::new(attestable_cert_resolver));
-        tls_config.alpn_protocols = vec![b"http/1.1".to_vec(),b"h2".to_vec()];
+        tls_config.alpn_protocols = vec![b"http/1.1".to_vec(), b"h2".to_vec()];
         Ok(TlsServer::new(tls_config, self.tcp_server))
     }
 
