@@ -12,6 +12,8 @@ use shared::server::config_server::requests::{
     JwkResponse, JwsRequest, JwsResponse, PostTrxLogsRequest, PutObjectRequest, SignatureType,
 };
 use shared::server::config_server::routes::ConfigServerPath;
+use tokio_retry::strategy::{jitter, ExponentialBackoff};
+use tokio_retry::Retry;
 
 use crate::connection;
 use crate::error::{self, Error};
@@ -205,6 +207,100 @@ impl ConfigClient {
                 "Error parsing response from config server. Error: {err:?}"
             ))
         })
+    }
+
+    async fn base_get_object(&self, key: String) -> Result<Option<GetObjectResponse>> {
+        let payload = GetObjectRequest::new(key.clone()).into_body()?;
+        let response = self.send(ConfigServerPath::Storage, "GET", payload).await?;
+
+        match response.status() {
+            StatusCode::OK => {
+                let result: GetObjectResponse = self.parse_response(response).await?;
+                Ok(Some(result))
+            }
+            StatusCode::NOT_FOUND => Ok(None),
+            _ => {
+                println!(
+                    "Error from get object request to control plane. Key: {}, Response Code {}",
+                    key,
+                    response.status()
+                );
+                Err(Error::ConfigServer(
+                    "Invalid Response code returned when sending getObject request to control plane"
+                        .to_string(),
+                ))
+            }
+        }
+    }
+
+    async fn base_put_object(&self, key: String, object: String) -> Result<()> {
+        let payload = PutObjectRequest::new(key.clone(), object).into_body()?;
+        let response = self.send(ConfigServerPath::Storage, "PUT", payload).await?;
+
+        if response.status() == StatusCode::OK {
+            Ok(())
+        } else {
+            println!(
+                "Error sending put object request to control plane. Key: {}, Response Code{}",
+                key,
+                response.status()
+            );
+            Err(Error::ConfigServer(
+                "Invalid Response code returned when sending putObject request to control plane "
+                    .to_string(),
+            ))
+        }
+    }
+
+    async fn base_delete_object(&self, key: String) -> Result<()> {
+        let payload = DeleteObjectRequest::new(key.clone()).into_body()?;
+        let response = self
+            .send(ConfigServerPath::Storage, "DELETE", payload)
+            .await?;
+
+        if response.status() == StatusCode::OK {
+            Ok(())
+        } else {
+            println!(
+                "Error sending delete object request to control plane. Key: {}, Response Code{}",
+                key,
+                response.status()
+            );
+            Err(Error::ConfigServer(
+                "Invalid Response code returned when sending deleteObject request to control plane"
+                    .to_string(),
+            ))
+        }
+    }
+}
+
+#[async_trait]
+impl StorageConfigClientInterface for ConfigClient {
+    async fn get_object(&self, key: String) -> Result<Option<GetObjectResponse>> {
+        let retry_strategy = ExponentialBackoff::from_millis(500).map(jitter).take(2);
+
+        Retry::spawn(retry_strategy, || async {
+            self.base_get_object(key.clone()).await
+        })
+        .await
+    }
+
+    async fn put_object(&self, key: String, object: String) -> Result<()> {
+        let retry_strategy = ExponentialBackoff::from_millis(500).map(jitter).take(2);
+
+        Retry::spawn(retry_strategy, || async {
+            self.base_put_object(key.clone(), object.clone()).await
+        })
+        .await
+    }
+
+    async fn delete_object(&self, key: String) -> Result<()> {
+        let retry_strategy = ExponentialBackoff::from_millis(500).map(jitter).take(2);
+
+        Retry::spawn(retry_strategy, || async {
+            self.base_delete_object(key.clone()).await
+        })
+        .await
     }
 }
 

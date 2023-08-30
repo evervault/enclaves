@@ -430,13 +430,13 @@ fn valid_order_identifiers(
     payload: NewOrderPayload,
     cage_context: configuration::CageContext,
 ) -> bool {
-    let underscored_app_uuid = cage_context.app_uuid.replace('-', "_");
-
     let cage_base_domain = configuration::get_trusted_cert_base_domain();
 
     let cage_domain = format!(
         "{}.{}.{}",
-        &cage_context.cage_name, &underscored_app_uuid, cage_base_domain
+        &cage_context.cage_name,
+        &cage_context.hyphenated_app_uuid(),
+        cage_base_domain
     );
 
     payload
@@ -471,7 +471,7 @@ fn build_error_response(body_msg: String) -> Response<Body> {
 }
 
 fn namespace_key(key: String, cage_context: &configuration::CageContext) -> String {
-    format!("{}/{}", cage_context.clone().get_namespace_string(), key)
+    format!("{}/{}", cage_context.get_namespace_string(), key)
 }
 
 async fn parse_request<T: DeserializeOwned>(req: Request<Body>) -> ServerResult<T> {
@@ -516,7 +516,7 @@ mod tests {
 
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.underscored_app_uuid(),
+            cage_context.hyphenated_app_uuid(),
             cage_context.cage_name,
             key
         );
@@ -548,7 +548,7 @@ mod tests {
 
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.underscored_app_uuid(),
+            cage_context.hyphenated_app_uuid(),
             cage_context.cage_name,
             key
         );
@@ -587,7 +587,7 @@ mod tests {
 
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.underscored_app_uuid(),
+            cage_context.hyphenated_app_uuid(),
             cage_context.cage_name,
             key
         );
@@ -622,7 +622,7 @@ mod tests {
 
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.underscored_app_uuid(),
+            cage_context.hyphenated_app_uuid(),
             cage_context.cage_name,
             key
         );
@@ -658,7 +658,7 @@ mod tests {
 
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.underscored_app_uuid(),
+            cage_context.hyphenated_app_uuid(),
             cage_context.cage_name,
             key
         );
@@ -691,7 +691,7 @@ mod tests {
 
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.underscored_app_uuid(),
+            cage_context.hyphenated_app_uuid(),
             cage_context.cage_name,
             key
         );
@@ -792,7 +792,7 @@ mod tests {
                 value: format!(
                     "{}.{}.cage.evervault.com",
                     cage_context.cage_name,
-                    cage_context.app_uuid.replace('-', "_")
+                    cage_context.app_uuid.replace('_', "-")
                 ),
             }],
         };
@@ -827,7 +827,7 @@ mod tests {
                     value: format!(
                         "{}.{}.cage.evervault.com",
                         cage_context.cage_name,
-                        cage_context.app_uuid.replace('-', "_")
+                        cage_context.app_uuid.replace('_', "-")
                     ),
                 },
             ],

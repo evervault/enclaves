@@ -32,14 +32,12 @@ pub struct TlsProxy {
 }
 
 impl TlsProxy {
-    pub fn new(target_host: String, target_port: u16, vsock_port: u16, internal_dns: bool) -> Self {
-        let dns_ip = match internal_dns {
-            true => std::net::IpAddr::V4(std::net::Ipv4Addr::new(169, 254, 169, 253)),
-            false => std::net::IpAddr::V4(std::net::Ipv4Addr::new(8, 8, 8, 8)),
-        };
-
-        let dns_resolver =
-            dns::get_dns_resolver(dns_ip).expect("Couldn't get internal DNS resolver");
+    pub fn new(
+        target_host: String,
+        target_port: u16,
+        vsock_port: u16,
+        dns_resolver: AsyncDnsResolver,
+    ) -> Self {
         let target = TlsTargetDetails::new(target_host, target_port);
         Self {
             dns_resolver,

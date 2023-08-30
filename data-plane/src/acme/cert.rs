@@ -125,44 +125,24 @@ impl AcmeCertificateRetreiver {
                 ));
             }
 
-            match RawAcmeCertificate::from_storage(self.config_client.clone()).await? {
-                Some(raw_acme_certificate) => {
-                    println!("[ACME] Certificate found in storage");
-                    //Certificate already exists, decrypt it
-                    let decrypted_certificate =
-                        Self::decrypt_certificate(self.e3_client.clone(), raw_acme_certificate)
-                            .await?;
-                    persisted_certificate =
-                        Some(decrypted_certificate.to_certified_key(key.clone())?);
-                }
-                None => {
-                    println!("[ACME] Certificate not found in storage, checking for lock");
-                    let existing_lock =
-                        StorageLock::read_from_storage(CERTIFICATE_LOCK_NAME.into()).await?;
-                    match existing_lock {
-                        Some(lock) => {
-                            println!("[ACME] Lock found, checking if expired");
-                            if lock.is_expired() {
-                                println!("[ACME] Lock expired, creating new lock, creating Certificate, encrypting Certificate, persisting Certificate, deleting lock");
-                                //Lock is expired - create new lock, create Certificate - encrypt Certificate - persist Certificate - delete lock
-                                let unencrypted_certificate_maybe = self
-                                    .create_certificate_and_persist_with_lock(key.clone())
-                                    .await?;
-                                persisted_certificate = unencrypted_certificate_maybe;
-                            }
-                            println!("[ACME] Lock not expired, waiting for Certificate to be created by other instance or waiting for lock to expire");
-                            //Do nothing if Lock is not expired
-                            //wait for certificate to be created by other instance or wait for lock to expire
-                        }
-                        None => {
-                            println!("[ACME] Lock not found, creating lock, creating Certificate, encrypting Certificate, persisting Certificate, deleting lock");
-                            //Lock doesn't exist - create lock - create Certificate - encrypt Certificate - persist Certificate - delete lock
-                            let unencrypted_certificate_maybe = self
-                                .create_certificate_and_persist_with_lock(key.clone())
-                                .await?;
-                            persisted_certificate = unencrypted_certificate_maybe;
-                        }
-                    }
+            if let Some(decrypted_certificate) =
+                self.fetch_and_decrypt_certificate(key.clone()).await?
+            {
+                persisted_certificate = Some(decrypted_certificate);
+            } else {
+                println!("[ACME] Certificate not found in storage, checking for lock");
+                if Self::order_lock_exists_and_is_valid().await? {
+                    println!("[ACME] Lock is valid, waiting for Certificate to be created by other instance or waiting for lock to expire");
+                    //Do nothing if Lock is not expired - wait for certificate to be created by other instance or wait for lock to expire
+                } else {
+                    println!(
+                        "[ACME] No valid lock on ACME ordering, creating lock and certificate."
+                    );
+                    //No Lock on order - create lock - create Certificate - encrypt Certificate - persist Certificate - delete lock
+                    let decrypted_certificate_maybe = self
+                        .create_certificate_and_persist_with_lock(key.clone())
+                        .await?;
+                    persisted_certificate = decrypted_certificate_maybe;
                 }
             };
 
@@ -179,6 +159,32 @@ impl AcmeCertificateRetreiver {
             Err(AcmeError::General(
                 "[ACME] Certificate not found after polling".into(),
             ))
+        }
+    }
+
+    async fn fetch_and_decrypt_certificate(
+        &self,
+        key: PKey<Private>,
+    ) -> Result<Option<CertifiedKey>, AcmeError> {
+        if let Some(raw_acme_certificate) =
+            RawAcmeCertificate::from_storage(self.config_client.clone()).await?
+        {
+            println!("[ACME] Certificate found in storage");
+            //Certificate already exists, decrypt it
+            let decrypted_certificate =
+                Self::decrypt_certificate(self.e3_client.clone(), raw_acme_certificate).await?;
+            Some(decrypted_certificate.to_certified_key(key)).transpose()
+        } else {
+            println!("[ACME] Certificate not found in storage");
+            Ok(None)
+        }
+    }
+
+    async fn order_lock_exists_and_is_valid() -> Result<bool, AcmeError> {
+        let order_lock_maybe = StorageLock::read_from_storage(CERTIFICATE_LOCK_NAME.into()).await?;
+        match order_lock_maybe {
+            Some(lock) => Ok(!lock.is_expired()),
+            None => Ok(false),
         }
     }
 
