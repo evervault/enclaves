@@ -5,7 +5,6 @@ use openssl::pkey::PKey;
 use openssl::pkey::Private;
 use serde::Deserialize;
 use serde_json::json;
-use shared::acme::helpers::*;
 use shared::server::config_server::requests::SignatureType;
 use std::str::from_utf8;
 use std::sync::Arc;
@@ -38,7 +37,6 @@ pub struct Account<T: AcmeClientInterface> {
 #[allow(unused)]
 pub struct AccountBuilder<T: AcmeClientInterface> {
     directory: Arc<Directory<T>>,
-    private_key: Option<PKey<Private>>,
     eab_required: bool,
     contact: Option<Vec<String>>,
     terms_of_service_agreed: Option<bool>,
@@ -49,17 +47,11 @@ impl<T: AcmeClientInterface> AccountBuilder<T> {
     pub fn new(directory: Arc<Directory<T>>) -> Self {
         AccountBuilder {
             directory,
-            private_key: None,
             eab_required: true,
             contact: None,
             terms_of_service_agreed: None,
             only_return_existing: None,
         }
-    }
-
-    pub fn private_key(&mut self, private_key: PKey<Private>) -> &mut Self {
-        self.private_key = Some(private_key);
-        self
     }
 
     pub fn contact(&mut self, contact: Vec<String>) -> &mut Self {
@@ -78,12 +70,6 @@ impl<T: AcmeClientInterface> AccountBuilder<T> {
     }
 
     pub async fn build(&mut self) -> Result<Arc<Account<T>>, AcmeError> {
-        let private_key = if let Some(private_key) = self.private_key.clone() {
-            private_key
-        } else {
-            gen_ec_private_key()?
-        };
-
         let url = self.directory.new_account_url.clone();
         let config_client = self.directory.config_client.clone();
 
@@ -123,10 +109,8 @@ impl<T: AcmeClientInterface> AccountBuilder<T> {
 
         let headers = res.headers().clone();
         let resp_bytes = hyper::body::to_bytes(res.into_body()).await?;
-        let body_str = from_utf8(&resp_bytes).expect("Body was not valid UTF-8");
-        println!("Account Response: {}", body_str);
-        let mut account: Account<_> =
-            serde_json::from_str(body_str).expect("Failed to deserialize Account");
+        let body_str = from_utf8(&resp_bytes)?;
+        let mut account: Account<_> = serde_json::from_str(body_str)?;
 
         let account_id = headers
             .get(hyper::header::LOCATION)
@@ -137,7 +121,6 @@ impl<T: AcmeClientInterface> AccountBuilder<T> {
             .to_string();
 
         account.directory = Some(self.directory.clone());
-        account.private_key = Some(private_key);
         account.id = account_id;
         Ok(Arc::new(account))
     }

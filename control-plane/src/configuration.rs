@@ -77,8 +77,12 @@ impl CageContext {
         }
     }
 
-    pub fn get_namespace_string(self) -> String {
-        format!("{}/{}/{}", self.team_uuid, self.app_uuid, self.cage_uuid)
+    pub fn hyphenated_app_uuid(&self) -> String {
+        self.app_uuid.replace('_', "-")
+    }
+
+    pub fn get_namespace_string(&self) -> String {
+        format!("{}/{}", self.hyphenated_app_uuid(), self.cage_name)
     }
 }
 
@@ -158,4 +162,13 @@ pub fn get_acme_hmac_key() -> String {
 
 pub fn get_acme_hmac_key_id() -> String {
     std::env::var("ACME_ACCOUNT_HMAC_KEY_ID").expect("ACME_ACCOUNT_HMAC_KEY_ID is not set in env")
+}
+
+pub fn get_trusted_cert_base_domain() -> String {
+    #[cfg(not(staging))]
+    let cage_base_domain = "cage.evervault.com";
+    #[cfg(staging)]
+    let cage_base_domain = "cage.evervault.dev";
+
+    cage_base_domain.into()
 }

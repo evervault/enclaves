@@ -1,4 +1,5 @@
 use control_plane::clients::{cert_provisioner, mtls_config};
+use control_plane::dns::{ExternalAsyncDnsResolver, InternalAsyncDnsResolver};
 use control_plane::stats_client::StatsClient;
 use control_plane::stats_proxy::StatsProxy;
 use control_plane::{config_server, tls_proxy};
@@ -38,12 +39,14 @@ async fn main() -> Result<()> {
         configuration::get_cert_provisoner_host(),
         3000,
         shared::ENCLAVE_CERT_PORT,
+        InternalAsyncDnsResolver::new_resolver().expect("Failed to create internal dns resolver"),
     );
 
     let acme_proxy = tls_proxy::TlsProxy::new(
         configuration::get_acme_host(),
         443,
         shared::ENCLAVE_ACME_PORT,
+        ExternalAsyncDnsResolver::new_resolver().expect("Failed to create external dns resolver"),
     );
 
     StatsClient::init();

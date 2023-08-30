@@ -205,7 +205,7 @@ impl<T: AcmeClientInterface> Authorization<T> {
         let mut i: usize = 0;
 
         while authorization.status == AuthorizationStatus::Pending {
-            println!("[ATTEMPT {}] - Waiting for authorization to complete", i);
+            println!("[ACME] - Waiting for authorization to complete");
             if i >= attempts {
                 return Err(AcmeError::General(
                     "Max attempts reached for checking authorization is complete".to_string(),

@@ -167,8 +167,6 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
         payload: Option<Value>,
         account_id: &Option<String>,
     ) -> Result<hyper::Response<Body>, AcmeError> {
-        println!("Sending authenticated request to: {}", url);
-
         //Handle empty body
         let payload_parsed = match payload {
             None => "".to_string(),
@@ -186,8 +184,6 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
                 .map_err(|err| AcmeError::PoisonError(err.to_string()))?;
             *guard = Some(nonce);
         }
-
-        println!("Authenticated request response status: {:?}", resp.status());
 
         Ok(resp)
     }
