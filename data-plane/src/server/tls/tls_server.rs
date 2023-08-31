@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use tokio_rustls::rustls::server::WantsServerCert;
+use tokio_rustls::rustls::sign::CertifiedKey;
 use tokio_rustls::rustls::ConfigBuilder;
 use tokio_rustls::rustls::ServerConfig;
 use tokio_rustls::server::TlsStream;
@@ -67,12 +68,18 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
             .with_no_client_auth()
     }
 
-    pub async fn with_attestable_cert(self) -> ServerResult<TlsServer<S>> {
+    pub async fn with_attestable_cert(
+        self,
+        trusted_cert: Option<CertifiedKey>,
+    ) -> ServerResult<TlsServer<S>> {
         println!("Creating TLSServer with attestable cert");
         let (ca_cert, ca_private_key) = Self::get_ca_with_retry().await;
         println!("Received intermediate CA from cert provisioner. Using it with TLS Server.");
-        let attestable_cert_resolver =
-            super::cert_resolver::AttestableCertResolver::new(ca_cert, ca_private_key)?;
+        let attestable_cert_resolver = super::cert_resolver::AttestableCertResolver::new(
+            ca_cert,
+            ca_private_key,
+            trusted_cert,
+        )?;
         let tls_config =
             Self::get_base_config().with_cert_resolver(Arc::new(attestable_cert_resolver));
         Ok(TlsServer::new(tls_config, self.tcp_server))

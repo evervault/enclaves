@@ -91,10 +91,15 @@ pub struct AttestableCertResolver {
     internal_pk: PKey<Private>,
     // if we don't receive a nonce, we should return a generic, attestable cert
     base_cert_container: CertContainer,
+    trusted_cert: Option<CertifiedKey>,
 }
 
 impl AttestableCertResolver {
-    pub fn new(internal_ca: X509, internal_pk: PKey<Private>) -> ServerResult<Self> {
+    pub fn new(
+        internal_ca: X509,
+        internal_pk: PKey<Private>,
+        trusted_cert: Option<CertifiedKey>,
+    ) -> ServerResult<Self> {
         let cage_context = CageContext::get()?;
         let hostnames = cage_context.get_cert_names();
         let (created_at, cert_and_key) = Self::generate_self_signed_cert(
@@ -109,6 +114,7 @@ impl AttestableCertResolver {
             internal_ca,
             internal_pk,
             base_cert_container: CertContainer::new(created_at, cert_and_key),
+            trusted_cert,
         })
     }
 
@@ -121,6 +127,22 @@ impl AttestableCertResolver {
             }
         } else {
             None
+        }
+    }
+
+    //[cage-name].[cage-uuid].cage.evervault.[com|dev]
+    pub(crate) fn is_trusted_cert_domain(received_servername: Option<&str>) -> bool {
+        match received_servername {
+            Some(servername) => {
+                let split_hostname: Vec<&str> = servername.split('.').collect();
+                let subdomains_total = split_hostname.len();
+
+                split_hostname
+                    .get(subdomains_total - 3) //Second from the end
+                    .map(|specific_subdomain| specific_subdomain == &"cage")
+                    .unwrap_or(false)
+            }
+            None => false,
         }
     }
 
@@ -298,6 +320,13 @@ impl AttestableCertResolver {
             .ok()
             .map(|(_expiry, cert)| Arc::new(cert))?;
             Some(certified_key)
+        } else if self.trusted_cert.is_some() && Self::is_trusted_cert_domain(server_name) {
+            let trusted_cert = self
+                .trusted_cert
+                .clone()
+                .expect("Infallible - Checked in if condition earlier");
+
+            Some(Arc::new(trusted_cert))
         } else {
             // no nonce given - serve base cert
             self.base_cert_container.resolve_cert(|| {
@@ -345,7 +374,8 @@ mod tests {
 
     fn test_cert_with_hostname(server_name: Option<String>) {
         let (cert, key) = generate_ca().unwrap();
-        let resolver = AttestableCertResolver::new(cert, key).unwrap();
+        let test_trustable_cert = generate_end_cert();
+        let resolver = AttestableCertResolver::new(cert, key, Some(test_trustable_cert)).unwrap();
         let first_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();
@@ -399,7 +429,8 @@ mod tests {
         CageContext::set(ctx.clone());
         let server_name = Some(ctx.get_cert_name());
         let (cert, key) = generate_ca().unwrap();
-        let resolver = AttestableCertResolver::new(cert, key).unwrap();
+        let test_trustable_cert = generate_end_cert();
+        let resolver = AttestableCertResolver::new(cert, key, Some(test_trustable_cert)).unwrap();
         let first_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();
@@ -454,7 +485,8 @@ mod tests {
 
         let server_name = Some(hostname.clone());
         let (cert, key) = generate_ca().unwrap();
-        let resolver = AttestableCertResolver::new(cert, key).unwrap();
+        let test_trustable_cert = generate_end_cert();
+        let resolver = AttestableCertResolver::new(cert, key, Some(test_trustable_cert)).unwrap();
         let first_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();
@@ -485,7 +517,8 @@ mod tests {
 
         let server_name = Some(hostname.clone());
         let (cert, key) = generate_ca().unwrap();
-        let resolver = AttestableCertResolver::new(cert, key).unwrap();
+        let test_trustable_cert = generate_end_cert();
+        let resolver = AttestableCertResolver::new(cert, key, Some(test_trustable_cert)).unwrap();
         let first_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();
@@ -500,6 +533,72 @@ mod tests {
             given_host == hostname
         });
         assert!(final_name_entry.is_some());
+    }
+
+    fn test_trusted_cert_with_hostname(
+        server_name: Option<String>,
+        should_return_trusted_cert: bool,
+    ) {
+        let (cert, key) = generate_ca().unwrap();
+        let test_trustable_cert = generate_end_cert();
+        let resolver =
+            AttestableCertResolver::new(cert, key, Some(test_trustable_cert.clone())).unwrap();
+        let returned_cert = resolver
+            .resolve_cert_using_sni(server_name.as_deref())
+            .unwrap();
+
+        let returned_x509 = parse_x509_from_rustls_certified_key(&returned_cert);
+        let expected_x509 = parse_x509_from_rustls_certified_key(&test_trustable_cert);
+
+        if should_return_trusted_cert {
+            assert_eq!(get_digest!(&returned_x509), get_digest!(&expected_x509));
+        } else {
+            assert_ne!(get_digest!(&returned_x509), get_digest!(&expected_x509));
+        }
+    }
+
+    #[test]
+    fn test_trusted_cert_used_with_trusted_hostname() {
+        let server_name = Some("wicked_cage.app_123543.cage.evervault.com".to_string());
+        test_trusted_cert_with_hostname(server_name, true);
+    }
+
+    #[test]
+    fn test_trusted_cert_used_with_other_hostname() {
+        let server_name = Some("wicked_cage.app_123543.cages.evervault.com".to_string());
+        test_trusted_cert_with_hostname(server_name, false);
+    }
+
+    #[test]
+    fn test_trusted_cert_not_set_in_resolver() {
+        let (cert, key) = generate_ca().unwrap();
+        let resolver = AttestableCertResolver::new(cert, key, None).unwrap();
+
+        //Should return default cert when trusted cert not set.
+        let first_cert = resolver
+            .resolve_cert_using_sni(Some("wicked_cage.app_123543.cage.evervault.com"))
+            .unwrap();
+
+        let second_cert = resolver
+            .resolve_cert_using_sni(Some("wicked_cage.app_123543.cage.evervault.com"))
+            .unwrap();
+
+        let first_x509 = parse_x509_from_rustls_certified_key(&first_cert);
+        let second_x509 = parse_x509_from_rustls_certified_key(&second_cert);
+
+        assert_eq!(get_digest!(&first_x509), get_digest!(&second_x509));
+    }
+
+    #[test]
+    fn test_checking_for_trusted_hostname_true() {
+        let hostname = Some("wicked_cage.app_123543.cage.evervault.com");
+        assert!(AttestableCertResolver::is_trusted_cert_domain(hostname));
+    }
+
+    #[test]
+    fn test_checking_for_trusted_hostname_false() {
+        let hostname = Some("wicked_cage.app_123543.cages.evervault.com");
+        assert!(!AttestableCertResolver::is_trusted_cert_domain(hostname));
     }
 
     pub fn generate_ca() -> Result<(X509, PKey<Private>), ErrorStack> {
@@ -547,5 +646,50 @@ mod tests {
         cert_builder.sign(&key_pair, MessageDigest::sha256())?;
         let cert = cert_builder.build();
         Ok((cert, key_pair))
+    }
+
+    pub fn generate_cert() -> Result<(X509, PKey<Private>), ErrorStack> {
+        let ec_group = EcGroup::from_curve_name(Nid::SECP384R1)?;
+        let ec_key = EcKey::generate(ec_group.as_ref())?;
+        let key_pair = PKey::from_ec_key(ec_key)?;
+
+        let mut x509_name = X509NameBuilder::new()?;
+        x509_name.append_entry_by_text("C", "IE")?;
+        x509_name.append_entry_by_text("ST", "DUB")?;
+        x509_name.append_entry_by_text("O", "Evervault")?;
+        x509_name.append_entry_by_text("CN", "test_cage.app123654.cage.evervault.dev")?;
+        let x509_name = x509_name.build();
+
+        let mut cert_builder = X509::builder()?;
+        cert_builder.set_version(2)?;
+        let serial_number = {
+            let mut serial = BigNum::new()?;
+            serial.rand(159, MsbOption::MAYBE_ZERO, false)?;
+            serial.to_asn1_integer()?
+        };
+
+        cert_builder.set_serial_number(&serial_number)?;
+        cert_builder.set_subject_name(&x509_name)?;
+        cert_builder.set_issuer_name(&x509_name)?;
+        cert_builder.set_pubkey(&key_pair)?;
+        let not_before = Asn1Time::days_from_now(0)?;
+        cert_builder.set_not_before(&not_before)?;
+        let not_after = Asn1Time::days_from_now(365)?;
+        cert_builder.set_not_after(&not_after)?;
+
+        cert_builder.sign(&key_pair, MessageDigest::sha256())?;
+        let cert = cert_builder.build();
+
+        Ok((cert, key_pair))
+    }
+
+    pub fn generate_end_cert() -> CertifiedKey {
+        let (cert, key) = generate_cert().unwrap();
+        let der_encoded_private_key = key.private_key_to_der().unwrap();
+        let ecdsa_private_key = sign::any_ecdsa_type(&PrivateKey(der_encoded_private_key)).unwrap();
+        let pem_encoded_cert: Vec<u8> = cert.to_pem().unwrap();
+        let parsed_pem = pem::parse(&pem_encoded_cert).unwrap();
+        let cert_chain: Vec<Certificate> = vec![Certificate(parsed_pem.contents)];
+        CertifiedKey::new(cert_chain, ecdsa_private_key)
     }
 }

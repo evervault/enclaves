@@ -81,6 +81,10 @@ impl CageContext {
         &self.app_uuid
     }
 
+    pub fn hyphenated_app_uuid(&self) -> String {
+        self.app_uuid.replace('_', "-")
+    }
+
     pub fn team_uuid(&self) -> &str {
         &self.team_uuid
     }
@@ -111,6 +115,24 @@ impl CageContext {
         format!(
             "{}.{}.cages.evervault.com",
             &self.cage_name, hyphenated_app_uuid
+        )
+    }
+
+    #[cfg(not(staging))]
+    pub fn get_trusted_cert_name(&self) -> String {
+        format!(
+            "{}.{}.cage.evervault.com",
+            &self.cage_name,
+            &self.hyphenated_app_uuid()
+        )
+    }
+
+    #[cfg(staging)]
+    pub fn get_trusted_cert_name(&self) -> String {
+        format!(
+            "{}.{}.cage.evervault.dev",
+            &self.cage_name,
+            &self.hyphenated_app_uuid()
         )
     }
 
