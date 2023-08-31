@@ -16,6 +16,9 @@ use tokio_rustls::TlsAcceptor;
 
 use super::inter_ca_retreiver;
 
+#[cfg(feature = "enclave")]
+use crate::acme;
+
 use crate::server::error::ServerResult;
 use crate::server::error::TlsError;
 use rand::Rng;
@@ -68,13 +71,21 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
             .with_no_client_auth()
     }
 
-    pub async fn with_attestable_cert(
-        self,
-        trusted_cert: Option<CertifiedKey>,
-    ) -> ServerResult<TlsServer<S>> {
+    pub async fn with_attestable_cert(self) -> ServerResult<TlsServer<S>> {
         println!("Creating TLSServer with attestable cert");
         let (ca_cert, ca_private_key) = Self::get_ca_with_retry().await;
         println!("Received intermediate CA from cert provisioner. Using it with TLS Server.");
+
+        #[cfg(feature = "enclave")]
+        let trusted_cert: Option<CertifiedKey> = Some(
+            acme::get_trusted_cert()
+                .await
+                .expect("Failed to get trusted cert"),
+        );
+
+        #[cfg(not(feature = "enclave"))] // Don't order trusted certs locally
+        let trusted_cert: Option<CertifiedKey> = None;
+
         let attestable_cert_resolver = super::cert_resolver::AttestableCertResolver::new(
             ca_cert,
             ca_private_key,
