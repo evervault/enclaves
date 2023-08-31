@@ -83,7 +83,7 @@ impl RawAcmeCertificate {
         Ok(CertifiedKey::new(vec![certificate], signing_key))
     }
 
-    pub async fn persist(&self, config_client: ConfigClient) -> Result<(), AcmeError> {
+    pub async fn persist(&self, config_client: &ConfigClient) -> Result<(), AcmeError> {
         config_client
             .put_object(CERTIFICATE_OBJECT_KEY.into(), self.certificate.clone())
             .await?;
@@ -142,7 +142,7 @@ impl AcmeCertificateRetreiver {
                     );
                     //No Lock on order - create lock - create Certificate - encrypt Certificate - persist Certificate - delete lock
                     let decrypted_certificate_maybe = self
-                        .create_certificate_and_persist_with_lock(key.clone(), cage_context.clone())
+                        .create_certificate_and_persist_with_lock(key.clone(), &cage_context)
                         .await?;
                     persisted_certificate = decrypted_certificate_maybe;
                 }
@@ -193,7 +193,7 @@ impl AcmeCertificateRetreiver {
     async fn create_certificate_and_persist_with_lock(
         &mut self,
         key: PKey<Private>,
-        cage_context: CageContext,
+        cage_context: &CageContext,
     ) -> Result<Option<CertifiedKey>, AcmeError> {
         let certificate_lock = StorageLock::new_with_config_client(
             CERTIFICATE_LOCK_NAME.into(),
@@ -204,11 +204,10 @@ impl AcmeCertificateRetreiver {
             let raw_acme_certificate = self.order_certificate(cert_domain, key.clone()).await?;
 
             let encrypted_raw_certificate =
-                Self::encrypt_certificate(self.e3_client.clone(), raw_acme_certificate.clone())
-                    .await?;
+                Self::encrypt_certificate(&self.e3_client, &raw_acme_certificate).await?;
 
             encrypted_raw_certificate
-                .persist(self.config_client.clone())
+                .persist(&self.config_client)
                 .await?;
 
             certificate_lock.delete().await?;
@@ -332,8 +331,8 @@ impl AcmeCertificateRetreiver {
     }
 
     async fn encrypt_certificate(
-        e3_client: E3Client,
-        raw_acme_certificate: RawAcmeCertificate,
+        e3_client: &E3Client,
+        raw_acme_certificate: &RawAcmeCertificate,
     ) -> Result<RawAcmeCertificate, AcmeError> {
         let e3_response: CryptoResponse = e3_client
             .encrypt(CryptoRequest {
