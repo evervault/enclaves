@@ -486,8 +486,8 @@ mod tests {
     use shared::acme::jws::Identifier;
 
     use super::*;
-    use mockall::predicate::eq;
     use crate::mocks::storage_client_mock::MockStorageClientInterface;
+    use mockall::predicate::eq;
     use storage_client_interface::StorageClientError;
 
     fn get_cage_context() -> configuration::CageContext {

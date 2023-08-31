@@ -20,7 +20,6 @@ use bytes::Bytes;
 #[cfg(feature = "enclave")]
 use chrono::Utc;
 use futures::StreamExt;
-use tokio_rustls::rustls::sign::CertifiedKey;
 
 use crate::error::Error;
 use httparse::Status;
@@ -44,18 +43,9 @@ where
     TlsError: From<<L as Listener>::Error>,
     <L as Listener>::Connection: ProxiedConnection + 'static,
 {
-    #[cfg(feature = "enclave")]
-    let trusted_cert: Option<CertifiedKey> = Some(
-        acme::get_trusted_cert()
-            .await
-            .expect("Failed to get trusted cert"),
-    );
-    #[cfg(not(feature = "enclave"))] // Don't order trusted certs locally
-    let trusted_cert: Option<CertifiedKey> = None;
-
     let mut server = TlsServerBuilder::new()
         .with_server(tcp_server)
-        .with_attestable_cert(trusted_cert)
+        .with_attestable_cert()
         .await
         .expect("Failed to create tls server");
     let e3_client = Arc::new(E3Client::new());

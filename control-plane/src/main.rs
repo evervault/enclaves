@@ -4,10 +4,10 @@ use control_plane::stats_client::StatsClient;
 use control_plane::stats_proxy::StatsProxy;
 use control_plane::{config_server, tls_proxy};
 use shared::server::error::ServerResult;
-use storage_client_interface::s3;
 use shared::{print_version, utils::pipe_streams, ENCLAVE_CONNECT_PORT};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::process::Command;
+use storage_client_interface::s3;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::time::{sleep, Duration};
 
