@@ -1,7 +1,7 @@
 use openssl::pkey::PKey;
 use tokio_rustls::rustls::sign::CertifiedKey;
 
-use crate::{config_client::ConfigClient, e3client::E3Client};
+use crate::{config_client::ConfigClient, e3client::E3Client, CageContext};
 
 use self::{cert::AcmeCertificateRetreiver, error::AcmeError, key::AcmeKeyRetreiver};
 
@@ -21,6 +21,7 @@ pub mod mocks;
 pub async fn get_trusted_cert() -> Result<CertifiedKey, AcmeError> {
     let config_client = ConfigClient::new();
     let e3_client = E3Client::new();
+    let cage_context = CageContext::get()?;
 
     let trusted_key_pair: PKey<openssl::pkey::Private> =
         AcmeKeyRetreiver::new(config_client.clone(), e3_client.clone())
@@ -29,6 +30,6 @@ pub async fn get_trusted_cert() -> Result<CertifiedKey, AcmeError> {
             .expect("Failed to get key pair for trusted cert");
 
     AcmeCertificateRetreiver::new(config_client, e3_client)
-        .get_or_create_cage_certificate(trusted_key_pair)
+        .get_or_create_cage_certificate(trusted_key_pair, cage_context)
         .await
 }

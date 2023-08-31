@@ -15,6 +15,7 @@ use crate::{
     config_client::{ConfigClient, StorageConfigClientInterface},
     configuration,
     e3client::{CryptoRequest, CryptoResponse, E3Client},
+    CageContext,
 };
 
 use super::{
@@ -109,6 +110,7 @@ impl AcmeCertificateRetreiver {
     pub async fn get_or_create_cage_certificate(
         &mut self,
         key: PKey<Private>,
+        cage_context: CageContext,
     ) -> Result<CertifiedKey, AcmeError> {
         println!("[ACME] Starting polling for ACME certificate");
         let mut persisted_certificate: Option<CertifiedKey> = None;
@@ -140,7 +142,7 @@ impl AcmeCertificateRetreiver {
                     );
                     //No Lock on order - create lock - create Certificate - encrypt Certificate - persist Certificate - delete lock
                     let decrypted_certificate_maybe = self
-                        .create_certificate_and_persist_with_lock(key.clone())
+                        .create_certificate_and_persist_with_lock(key.clone(), cage_context.clone())
                         .await?;
                     persisted_certificate = decrypted_certificate_maybe;
                 }
@@ -191,15 +193,15 @@ impl AcmeCertificateRetreiver {
     async fn create_certificate_and_persist_with_lock(
         &mut self,
         key: PKey<Private>,
+        cage_context: CageContext,
     ) -> Result<Option<CertifiedKey>, AcmeError> {
         let certificate_lock = StorageLock::new_with_config_client(
             CERTIFICATE_LOCK_NAME.into(),
             self.config_client.clone(),
         );
         if certificate_lock.write_and_check_persisted().await? {
-            let raw_acme_certificate = self
-                .order_certificate("placeholder.cert.com".into(), key.clone())
-                .await?; //TODO - actually create certificate
+            let cert_domain = cage_context.get_trusted_cert_name();
+            let raw_acme_certificate = self.order_certificate(cert_domain, key.clone()).await?;
 
             let encrypted_raw_certificate =
                 Self::encrypt_certificate(self.e3_client.clone(), raw_acme_certificate.clone())

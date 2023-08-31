@@ -3,7 +3,7 @@ use std::string::FromUtf8Error;
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::{base_tls_client::ClientError, error};
+use crate::{base_tls_client::ClientError, error, CageContextError};
 
 #[derive(Debug, Error)]
 pub enum AcmeError {
@@ -49,6 +49,8 @@ pub enum AcmeError {
     PEMError(#[from] pem::PemError),
     #[error("Rustls Error - {0:?}")]
     RustlsSignError(#[from] tokio_rustls::rustls::sign::SignError),
+    #[error("Cage Context Error - {0:?}")]
+    CageContextError(#[from] CageContextError),
     #[error("ACME Error {0:?}")]
     AcmeError(#[from] shared::acme::error::AcmeError),
     #[error("ACME Error {0:?}")]
