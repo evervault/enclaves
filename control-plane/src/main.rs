@@ -4,7 +4,7 @@ use control_plane::stats_client::StatsClient;
 use control_plane::stats_proxy::StatsProxy;
 use control_plane::{config_server, tls_proxy};
 use shared::server::error::ServerResult;
-use shared::storage;
+use storage_client_interface::s3;
 use shared::{print_version, utils::pipe_streams, ENCLAVE_CONNECT_PORT};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::process::Command;
@@ -61,7 +61,7 @@ async fn main() -> Result<()> {
         mtls_config.root_cert(),
     );
 
-    let acme_s3_client = storage::s3::S3Client::new(configuration::get_acme_s3_bucket()).await;
+    let acme_s3_client = s3::StorageClient::new(configuration::get_acme_s3_bucket()).await;
 
     let config_server = config_server::ConfigServer::new(cert_provisioner_client, acme_s3_client);
 

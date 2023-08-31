@@ -14,3 +14,6 @@ pub mod health;
 pub mod stats_client;
 pub mod stats_proxy;
 pub mod tls_proxy;
+
+#[cfg(test)]
+pub mod mocks;

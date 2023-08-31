@@ -1,3 +1,3 @@
 [workspace]
-members = ["control-plane","data-plane", "shared", "acme-server"]
+members = ["control-plane","data-plane", "shared"]
 exclude = ["./e2e-tests/mock-crypto"]

@@ -1,7 +1,7 @@
 use crate::clients::cert_provisioner::{
     CertProvisionerClient, GetCertTokenResponseControlPlane, GetE3TokenResponseControlPlane,
 };
-use shared::storage::StorageClientInterface;
+use storage_client_interface::StorageClientInterface;
 
 use crate::acme_account_details::AcmeAccountDetails;
 use crate::configuration;
@@ -487,8 +487,8 @@ mod tests {
 
     use super::*;
     use mockall::predicate::eq;
-    use shared::mocks::storage_client_mock::MockStorageClientInterface;
-    use shared::storage::StorageClientError;
+    use crate::mocks::storage_client_mock::MockStorageClientInterface;
+    use storage_client_interface::StorageClientError;
 
     fn get_cage_context() -> configuration::CageContext {
         configuration::CageContext::new(
