@@ -11,9 +11,6 @@ use crate::error::Error::{ApiKeyInvalid, MissingApiKey};
 use crate::error::{AuthError, Result};
 use crate::{CageContext, FeatureContext, FEATURE_CONTEXT};
 
-#[cfg(feature = "enclave")]
-use crate::acme;
-
 use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
 
 use bytes::Bytes;
