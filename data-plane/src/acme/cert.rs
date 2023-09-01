@@ -77,7 +77,7 @@ impl RawAcmeCertificate {
         let der_encoded_private_key = private_key.private_key_to_der()?;
         let ecdsa_private_key = sign::any_ecdsa_type(&PrivateKey(der_encoded_private_key))?;
 
-        let certs = X509::stack_from_pem(&self.certificate.as_bytes())?;
+        let certs = X509::stack_from_pem(self.certificate.as_bytes())?;
 
         let mut pem_certs = Vec::new();
         for cert in certs.iter() {
