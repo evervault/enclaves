@@ -73,14 +73,26 @@ impl RawAcmeCertificate {
         Ok(parsed_response)
     }
 
-    pub fn to_certified_key(&self, key: PKey<Private>) -> Result<CertifiedKey, AcmeError> {
-        let der_key: Vec<u8> = key.private_key_to_der()?;
-        let signing_key = sign::any_ecdsa_type(&PrivateKey(der_key))?;
+    fn to_certified_key(&self, private_key: PKey<Private>) -> Result<CertifiedKey, AcmeError> {
+        let der_encoded_private_key = private_key.private_key_to_der()?;
+        let ecdsa_private_key = sign::any_ecdsa_type(&PrivateKey(der_encoded_private_key))?;
 
-        let certificate_bytes = self.certificate.as_bytes();
-        let certificate = Certificate(certificate_bytes.to_vec());
+        let certs = X509::stack_from_pem(self.certificate.as_bytes())?;
 
-        Ok(CertifiedKey::new(vec![certificate], signing_key))
+        let mut pem_certs = Vec::new();
+        for cert in certs.iter() {
+            let pem_encoded_cert: Vec<u8> = cert.to_pem()?;
+            pem_certs.push(pem_encoded_cert);
+        }
+
+        let combined_pem_encoded_certs: Vec<u8> = pem_certs.concat();
+        let parsed_pems = pem::parse_many(combined_pem_encoded_certs)?;
+        let cert_chain: Vec<Certificate> = parsed_pems
+            .into_iter()
+            .map(|p| Certificate(p.contents))
+            .collect();
+        let cert_and_key = CertifiedKey::new(cert_chain, ecdsa_private_key);
+        Ok(cert_and_key)
     }
 
     pub async fn persist(&self, config_client: &ConfigClient) -> Result<(), AcmeError> {
@@ -174,7 +186,7 @@ impl AcmeCertificateRetreiver {
             println!("[ACME] Certificate found in storage");
             //Certificate already exists, decrypt it
             let decrypted_certificate =
-                Self::decrypt_certificate(self.e3_client.clone(), raw_acme_certificate).await?;
+                Self::decrypt_certificate(&self.e3_client, &raw_acme_certificate).await?;
             Some(decrypted_certificate.to_certified_key(key)).transpose()
         } else {
             println!("[ACME] Certificate not found in storage");
@@ -224,9 +236,8 @@ impl AcmeCertificateRetreiver {
         let acme_client = AcmeClient::new(server_name);
         let path = configuration::get_acme_base_path();
 
-        let directory = Directory::fetch_directory(path, acme_client, self.config_client.clone())
-            .await
-            .unwrap();
+        let directory =
+            Directory::fetch_directory(path, acme_client, self.config_client.clone()).await?;
 
         let acme_account = AccountBuilder::new(directory)
             .contact(vec![String::from("mailto:engineering@evervault.com")])
@@ -318,8 +329,8 @@ impl AcmeCertificateRetreiver {
     }
 
     async fn decrypt_certificate(
-        e3_client: E3Client,
-        encrypted_raw_acme_certificate: RawAcmeCertificate,
+        e3_client: &E3Client,
+        encrypted_raw_acme_certificate: &RawAcmeCertificate,
     ) -> Result<RawAcmeCertificate, AcmeError> {
         let e3_response: CryptoResponse = e3_client
             .decrypt(CryptoRequest {
