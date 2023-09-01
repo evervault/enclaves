@@ -323,9 +323,7 @@ impl AcmeCertificateRetreiver {
                 "Certificate not found in completed order".into(),
             ))?;
 
-        let raw = RawAcmeCertificate::from_x509s(cert_chain);
-        println!("Raw certificate: {:?}", raw);
-        raw
+        RawAcmeCertificate::from_x509s(cert_chain)
     }
 
     async fn decrypt_certificate(
