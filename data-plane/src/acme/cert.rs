@@ -312,6 +312,8 @@ impl AcmeCertificateRetreiver {
                 "Certificate not found in completed order".into(),
             ))?;
 
+        println!("Certificate received from ACME provider: {:?}", cert_chain);
+
         RawAcmeCertificate::from_x509s(cert_chain)
     }
 
