@@ -98,12 +98,21 @@ impl Environment {
             let value = &format!("export {}={}  ", env.name, env.secret);
             env_string.push_str(value)
         });
+
+        file.write_all(env_string.as_bytes())?;
+        Ok(())
+    }
+
+    pub fn write_startup_complete_env_vars() -> Result<(), EnvError> {
+        let mut existing_file = File::open("/etc/customer-env")?;
+        let mut env_string = "".to_owned();
+
         // Set var to let customer process know the env is ready and it can start up
         env_string.push_str("export EV_CAGE_INITIALIZED=true");
         // Backwards compatibility for customers that are still using old versions of the CLI - remove after full launch
         env_string.push_str("export EV_API_KEY=placeholder");
 
-        file.write_all(env_string.as_bytes())?;
+        existing_file.write_all(env_string.as_bytes())?;
         Ok(())
     }
 }
