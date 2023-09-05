@@ -1,4 +1,7 @@
-use std::{fs::File, io::Write};
+use std::{
+    fs::{File, OpenOptions},
+    io::Write,
+};
 
 #[cfg(not(feature = "tls_termination"))]
 use crate::cert_provisioner_client::CertProvisionerClient;
@@ -104,15 +107,14 @@ impl Environment {
     }
 
     pub fn write_startup_complete_env_vars() -> Result<(), EnvError> {
-        let mut existing_file = File::open("/etc/customer-env")?;
-        let mut env_string = "".to_owned();
+        let mut file = OpenOptions::new()
+            .write(true)
+            .append(true)
+            .open("/etc/customer-env")?;
 
-        // Set var to let customer process know the env is ready and it can start up
-        env_string.push_str("export EV_CAGE_INITIALIZED=true");
-        // Backwards compatibility for customers that are still using old versions of the CLI - remove after full launch
-        env_string.push_str("export EV_API_KEY=placeholder");
+        write!(file, "export EV_CAGE_INITIALIZED=true  ")?;
+        write!(file, "export EV_API_KEY=placeholder")?;
 
-        existing_file.write_all(env_string.as_bytes())?;
         Ok(())
     }
 }
