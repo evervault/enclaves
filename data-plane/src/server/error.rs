@@ -22,6 +22,7 @@ pub enum TlsError {
     CageContextError(#[from] CageContextError),
     SystemTimeError(#[from] SystemTimeError),
     TryFromIntError(#[from] TryFromIntError),
+    EnvError(#[from] crate::env::EnvError),
 }
 
 impl std::fmt::Display for TlsError {

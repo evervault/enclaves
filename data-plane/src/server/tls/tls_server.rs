@@ -19,6 +19,7 @@ use super::inter_ca_retreiver;
 #[cfg(feature = "enclave")]
 use crate::acme;
 
+use crate::env::Environment;
 use crate::server::error::ServerResult;
 use crate::server::error::TlsError;
 use rand::Rng;
@@ -85,6 +86,9 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
 
         #[cfg(not(feature = "enclave"))] // Don't order trusted certs locally
         let trusted_cert: Option<CertifiedKey> = None;
+
+        //Once intermediate cert and trusted cert retrieved, write cage initialised vars
+        Environment::write_startup_complete_env_vars()?;
 
         let attestable_cert_resolver = super::cert_resolver::AttestableCertResolver::new(
             ca_cert,
