@@ -32,5 +32,5 @@ pub async fn get_trusted_cert() -> Result<(Vec<u8>, CertifiedKey), AcmeError> {
     let cert = AcmeCertificateRetreiver::new(config_client, e3_client)
         .get_or_create_cage_certificate(trusted_key_pair.clone(), cage_context)
         .await?;
-    Ok((trusted_key_pair.raw_public_key()?, cert))
+    Ok((trusted_key_pair.public_key_to_der()?, cert))
 }
