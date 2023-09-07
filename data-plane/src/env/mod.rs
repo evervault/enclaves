@@ -96,7 +96,8 @@ impl Environment {
     fn write_env_file(self, secrets: Vec<Secret>) -> Result<(), EnvError> {
         let mut file = File::create("/etc/customer-env")?;
 
-        let env_string = secrets.iter()
+        let env_string = secrets
+            .iter()
             .filter(|env| env.name != "EV_CAGE_INITIALIZED")
             .map(|env| format!("export {}={}", env.name, env.secret))
             .collect::<Vec<_>>()
