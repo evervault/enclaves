@@ -67,7 +67,7 @@ pub struct WantsCert<S: Listener> {
 }
 
 #[cfg(feature = "enclave")]
-pub static TRUSTED_CERT: OnceCell<Vec<u8>> = OnceCell::new();
+pub static TRUSTED_PUB_CERT: OnceCell<Vec<u8>> = OnceCell::new();
 
 impl<S: Listener + Send + Sync> WantsCert<S> {
     /// Get sane defaults for TLS Server config
@@ -129,7 +129,7 @@ async fn enclave_trusted_cert() -> Option<CertifiedKey> {
     let (pub_key, trusted_cert) = acme::get_trusted_cert()
         .await
         .expect("Failed to get trusted cert");
-    let _ = TRUSTED_CERT.set(pub_key);
+    let _ = TRUSTED_PUB_CERT.set(pub_key);
     Some(trusted_cert)
 }
 

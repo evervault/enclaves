@@ -10,7 +10,7 @@ use crate::e3client::{self, AuthRequest, E3Client};
 use crate::error::Error::{ApiKeyInvalid, MissingApiKey};
 use crate::error::{AuthError, Result};
 #[cfg(feature = "enclave")]
-use crate::server::tls::TRUSTED_CERT;
+use crate::server::tls::TRUSTED_PUB_CERT;
 use crate::{CageContext, FeatureContext, FEATURE_CONTEXT};
 
 use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
@@ -464,7 +464,7 @@ struct AttestationResponse {
 
 #[cfg(feature = "enclave")]
 async fn handle_attestation_request(_req: httparse::Request<'_, '_>) -> Result<Response<Body>> {
-    let challenge = TRUSTED_CERT.get();
+    let challenge = TRUSTED_PUB_CERT.get();
 
     let attestation_doc = attest::get_attestation_doc(challenge.cloned(), None)
         .map_err(|err| Error::AttestationRequestError(err.to_string()))?;
