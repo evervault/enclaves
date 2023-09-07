@@ -99,9 +99,9 @@ impl Environment {
         let env_string = secrets
             .iter()
             .filter(|env| env.name != "EV_CAGE_INITIALIZED")
-            .map(|env| format!("export {}={}", env.name, env.secret))
+            .map(|env| format!("export {}={}  ", env.name, env.secret))
             .collect::<Vec<_>>()
-            .join("  ");
+            .join("");
 
         file.write_all(env_string.as_bytes())?;
         Ok(())
