@@ -90,6 +90,10 @@ impl Environment {
         CageContext::set(cert_response.clone().context.into());
 
         self.init(cert_response.clone().secrets).await?;
+
+        //Write vars to indicate cage is initialised
+        Self::write_startup_complete_env_vars();
+
         Ok(())
     }
 
