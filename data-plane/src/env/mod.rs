@@ -95,12 +95,12 @@ impl Environment {
 
     fn write_env_file(self, secrets: Vec<Secret>) -> Result<(), EnvError> {
         let mut file = File::create("/etc/customer-env")?;
-        let mut env_string: String = "".to_owned();
 
-        secrets.iter().for_each(|env| {
-            let value = &format!("export {}={}  ", env.name, env.secret);
-            env_string.push_str(value)
-        });
+        let env_string = secrets.iter()
+            .filter(|env| env.name != "EV_CAGE_INITIALIZED")
+            .map(|env| format!("export {}={}", env.name, env.secret))
+            .collect::<Vec<_>>()
+            .join("  ");
 
         file.write_all(env_string.as_bytes())?;
         Ok(())
