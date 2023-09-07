@@ -18,7 +18,7 @@ pub mod order;
 #[cfg(test)]
 pub mod mocks;
 
-pub async fn get_trusted_cert() -> Result<CertifiedKey, AcmeError> {
+pub async fn get_trusted_cert() -> Result<(Vec<u8>, CertifiedKey), AcmeError> {
     let config_client = ConfigClient::new();
     let e3_client = E3Client::new();
     let cage_context = CageContext::get()?;
@@ -29,7 +29,8 @@ pub async fn get_trusted_cert() -> Result<CertifiedKey, AcmeError> {
             .await
             .expect("Failed to get key pair for trusted cert");
 
-    AcmeCertificateRetreiver::new(config_client, e3_client)
-        .get_or_create_cage_certificate(trusted_key_pair, cage_context)
-        .await
+    let cert = AcmeCertificateRetreiver::new(config_client, e3_client)
+        .get_or_create_cage_certificate(trusted_key_pair.clone(), cage_context)
+        .await?;
+    Ok((trusted_key_pair.raw_public_key()?, cert))
 }

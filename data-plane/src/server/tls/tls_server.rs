@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+
 #[cfg(feature = "enclave")]
 use once_cell::sync::OnceCell;
 use openssl::pkey::PKey;
@@ -125,13 +126,10 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
 
 #[cfg(feature = "enclave")]
 async fn enclave_trusted_cert() -> Option<CertifiedKey> {
-    let trusted_cert = acme::get_trusted_cert()
+    let (pub_key, trusted_cert) = acme::get_trusted_cert()
         .await
         .expect("Failed to get trusted cert");
-    trusted_cert
-        .cert
-        .first()
-        .map(|cer| TRUSTED_CERT.set(cer.0.clone()));
+    let _ = TRUSTED_CERT.set(pub_key);
     Some(trusted_cert)
 }
 
