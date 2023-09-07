@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+#[cfg(feature = "enclave")]
 use once_cell::sync::OnceCell;
 use openssl::pkey::PKey;
 use openssl::pkey::Private;
