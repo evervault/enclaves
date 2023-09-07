@@ -9,13 +9,13 @@ use crate::e3client::DecryptRequest;
 use crate::e3client::{self, AuthRequest, E3Client};
 use crate::error::Error::{ApiKeyInvalid, MissingApiKey};
 use crate::error::{AuthError, Result};
+#[cfg(feature = "enclave")]
+use crate::server::tls::TRUSTED_PUB_CERT;
 use crate::{CageContext, FeatureContext, FEATURE_CONTEXT};
 
 use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
 
 use bytes::Bytes;
-#[cfg(feature = "enclave")]
-use chrono::Utc;
 use futures::StreamExt;
 
 use crate::error::Error;
@@ -462,31 +462,11 @@ struct AttestationResponse {
     attestation_doc: String,
 }
 
-struct AttestationChallenge {
-    expiry: String,
-    // TODO(Mark): pull cert from s3 and embed in AD
-    // cert: String
-}
-
-impl ToString for AttestationChallenge {
-    fn to_string(&self) -> String {
-        // TODO(Mark): serialize the expiry and cert
-        self.expiry.clone()
-    }
-}
-
 #[cfg(feature = "enclave")]
 async fn handle_attestation_request(_req: httparse::Request<'_, '_>) -> Result<Response<Body>> {
-    use chrono::Duration;
+    let challenge = TRUSTED_PUB_CERT.get();
 
-    let challenge = AttestationChallenge {
-        expiry: (Utc::now() + Duration::minutes(15)).to_string(),
-    }
-    .to_string()
-    .as_bytes()
-    .to_vec();
-
-    let attestation_doc = attest::get_attestation_doc(Some(challenge), None)
+    let attestation_doc = attest::get_attestation_doc(challenge.cloned(), None)
         .map_err(|err| Error::AttestationRequestError(err.to_string()))?;
 
     let base64_doc = base64::encode(attestation_doc);
