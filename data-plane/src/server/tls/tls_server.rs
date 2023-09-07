@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use once_cell::sync::OnceCell;
 use openssl::pkey::PKey;
 use openssl::pkey::Private;
 use openssl::x509::X509;
@@ -63,6 +64,8 @@ pub struct WantsCert<S: Listener> {
     tcp_server: S,
 }
 
+pub static TRUSTED_CERT: OnceCell<Vec<u8>> = OnceCell::new();
+
 impl<S: Listener + Send + Sync> WantsCert<S> {
     /// Get sane defaults for TLS Server config
     fn get_base_config() -> ConfigBuilder<ServerConfig, WantsServerCert> {
@@ -77,11 +80,7 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
         println!("Received intermediate CA from cert provisioner. Using it with TLS Server.");
 
         #[cfg(feature = "enclave")]
-        let trusted_cert: Option<CertifiedKey> = Some(
-            acme::get_trusted_cert()
-                .await
-                .expect("Failed to get trusted cert"),
-        );
+        let trusted_cert: Option<CertifiedKey> = enclave_trusted_cert().await;
 
         #[cfg(not(feature = "enclave"))] // Don't order trusted certs locally
         let trusted_cert: Option<CertifiedKey> = None;
@@ -120,6 +119,18 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
             }
         }
     }
+}
+
+#[cfg(feature = "enclave")]
+async fn enclave_trusted_cert() -> Option<CertifiedKey> {
+    let trusted_cert = acme::get_trusted_cert()
+        .await
+        .expect("Failed to get trusted cert");
+    trusted_cert
+        .cert
+        .first()
+        .map(|cer| TRUSTED_CERT.set(cer.0.clone()));
+    Some(trusted_cert)
 }
 
 #[async_trait]

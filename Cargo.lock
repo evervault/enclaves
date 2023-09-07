@@ -2798,9 +2798,9 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "storage-client-interface"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15b08a105d82187d3aedb4229ba193dfa34ff8519ec6d979985a367c9598d0a9"
+checksum = "d9a0c730d9a59eb3f2e9c8bf399fa90176e248367193bbb215aeba999fc88f93"
 dependencies = [
  "async-trait",
  "aws-config 0.56.1",
