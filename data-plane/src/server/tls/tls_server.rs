@@ -64,6 +64,7 @@ pub struct WantsCert<S: Listener> {
     tcp_server: S,
 }
 
+#[cfg(feature = "enclave")]
 pub static TRUSTED_CERT: OnceCell<Vec<u8>> = OnceCell::new();
 
 impl<S: Listener + Send + Sync> WantsCert<S> {

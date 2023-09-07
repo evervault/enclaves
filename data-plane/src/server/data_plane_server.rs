@@ -9,6 +9,7 @@ use crate::e3client::DecryptRequest;
 use crate::e3client::{self, AuthRequest, E3Client};
 use crate::error::Error::{ApiKeyInvalid, MissingApiKey};
 use crate::error::{AuthError, Result};
+#[cfg(feature = "enclave")]
 use crate::server::tls::TRUSTED_CERT;
 use crate::{CageContext, FeatureContext, FEATURE_CONTEXT};
 
