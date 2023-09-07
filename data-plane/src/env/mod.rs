@@ -90,17 +90,22 @@ impl Environment {
         CageContext::set(cert_response.clone().context.into());
 
         self.init(cert_response.clone().secrets).await?;
+
+        //Write vars to indicate cage is initialised
+        Self::write_startup_complete_env_vars();
+
         Ok(())
     }
 
     fn write_env_file(self, secrets: Vec<Secret>) -> Result<(), EnvError> {
         let mut file = File::create("/etc/customer-env")?;
-        let mut env_string: String = "".to_owned();
 
-        secrets.iter().for_each(|env| {
-            let value = &format!("export {}={}  ", env.name, env.secret);
-            env_string.push_str(value)
-        });
+        let env_string = secrets
+            .iter()
+            .filter(|env| env.name != "EV_CAGE_INITIALIZED")
+            .map(|env| format!("export {}={}  ", env.name, env.secret))
+            .collect::<Vec<String>>()
+            .join("");
 
         file.write_all(env_string.as_bytes())?;
         Ok(())
@@ -113,7 +118,7 @@ impl Environment {
             .open("/etc/customer-env")?;
 
         write!(file, "export EV_CAGE_INITIALIZED=true  ")?;
-        write!(file, "export EV_API_KEY=placeholder")?;
+        write!(file, "export EV_API_KEY=placeholder  ")?;
 
         Ok(())
     }
