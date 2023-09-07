@@ -100,7 +100,7 @@ impl Environment {
             .iter()
             .filter(|env| env.name != "EV_CAGE_INITIALIZED")
             .map(|env| format!("export {}={}  ", env.name, env.secret))
-            .collect::<Vec<_>>()
+            .collect::<Vec<String>>()
             .join("");
 
         file.write_all(env_string.as_bytes())?;
@@ -114,7 +114,7 @@ impl Environment {
             .open("/etc/customer-env")?;
 
         write!(file, "export EV_CAGE_INITIALIZED=true  ")?;
-        write!(file, "export EV_API_KEY=placeholder")?;
+        write!(file, "export EV_API_KEY=placeholder  ")?;
 
         Ok(())
     }
