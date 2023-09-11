@@ -1,8 +1,9 @@
 use std::{str::from_utf8, sync::Arc, time::Duration};
 
 use openssl::{
+    asn1::Asn1Time,
     pkey::{PKey, Private},
-    x509::X509, asn1::Asn1Time,
+    x509::X509,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -82,26 +83,30 @@ impl RawAcmeCertificate {
     pub fn should_renew_cert(x509s: Vec<X509>) -> Result<bool, AcmeError> {
         let thirty_days = Asn1Time::days_from_now(30)?;
         let mut earliest_expiry = None;
-        
+
         for cert in x509s.iter() {
             let cert_expiry = cert.not_after();
-            if earliest_expiry.is_none() || cert_expiry < earliest_expiry.expect("Infallible - Option checked") {
+            if earliest_expiry.is_none()
+                || cert_expiry < earliest_expiry.expect("Infallible - Option checked")
+            {
                 earliest_expiry = Some(cert_expiry);
             }
         }
         let should_renew = earliest_expiry
-            .map(|earliest_expiry| {
-                earliest_expiry < thirty_days
-            })
+            .map(|earliest_expiry| earliest_expiry < thirty_days)
             .unwrap_or(false);
 
         Ok(should_renew)
     }
 
-    fn to_certified_key(&self, x509s: Vec<X509>, private_key: PKey<Private>) -> Result<CertifiedKey, AcmeError> {
+    fn to_certified_key(
+        &self,
+        x509s: Vec<X509>,
+        private_key: PKey<Private>,
+    ) -> Result<CertifiedKey, AcmeError> {
         let der_encoded_private_key = private_key.private_key_to_der()?;
         let ecdsa_private_key = sign::any_ecdsa_type(&PrivateKey(der_encoded_private_key))?;
-        
+
         let mut pem_certs = Vec::new();
         for cert in x509s.iter() {
             let pem_encoded_cert: Vec<u8> = cert.to_pem()?;
@@ -110,7 +115,7 @@ impl RawAcmeCertificate {
 
         let combined_pem_encoded_certs: Vec<u8> = pem_certs.concat();
         let parsed_pems = pem::parse_many(combined_pem_encoded_certs)?;
-        
+
         let cert_chain: Vec<Certificate> = parsed_pems
             .into_iter()
             .map(|p| Certificate(p.contents))
@@ -211,7 +216,7 @@ impl AcmeCertificateRetreiver {
             //Certificate already exists, decrypt it
             let decrypted_certificate =
                 Self::decrypt_certificate(&self.e3_client, &raw_acme_certificate).await?;
-            
+
             let x509s = decrypted_certificate.to_x509s()?;
 
             if RawAcmeCertificate::should_renew_cert(x509s.clone())? {
