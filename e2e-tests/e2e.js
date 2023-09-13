@@ -143,20 +143,23 @@ describe("Enclave is runnning", () => {
       const result = data.toString().replace(/'/g, '"').replace(/END/g, "");
       const stats = JSON.parse(result);
       const keys = Object.keys(stats);
-      expect(keys).to.include(
-        "memory.total;cage_uuid=cage_123;app_uuid=app_12345678"
-      );
-      expect(keys).to.include(
-        "memory.avail;cage_uuid=cage_123;app_uuid=app_12345678"
-      );
-      expect(keys).to.include(
-        "cpu.one;cage_uuid=cage_123;app_uuid=app_12345678"
-      );
-      expect(keys).to.include(
-        "cpu.cores;cage_uuid=cage_123;app_uuid=app_12345678"
-      );
-      client.destroy();
-      done();
+      try {
+        expect(keys).to.include(
+          "memory.total;cage_uuid=cage_123;app_uuid=app_12345678"
+        );
+        expect(keys).to.include(
+          "memory.avail;cage_uuid=cage_123;app_uuid=app_12345678"
+        );
+        expect(keys).to.include(
+          "cpu.one;cage_uuid=cage_123;app_uuid=app_12345678"
+        );
+        expect(keys).to.include(
+          "cpu.cores;cage_uuid=cage_123;app_uuid=app_12345678"
+        );
+      } finally {
+        client.destroy();
+        done();
+      }
     });
   });
 
@@ -170,11 +173,14 @@ describe("Enclave is runnning", () => {
       const result = data.toString().replace(/'/g, '"').replace(/END/g, "");
       const stats = JSON.parse(result);
       const keys = Object.keys(stats);
-      expect(keys).to.include(
-        "decrypt.count;cage_uuid=cage_123;app_uuid=app_12345678"
-      );
-      client.destroy();
-      done();
+      try {
+        expect(keys).to.include(
+          "decrypt.count;cage_uuid=cage_123;app_uuid=app_12345678"
+        );
+      } finally {
+        client.destroy();
+        done();
+      }
     });
   });
 });
