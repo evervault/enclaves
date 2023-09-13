@@ -135,9 +135,11 @@ describe("Enclave is runnning", () => {
   // Statsd tests are async and wait for data to be published by the Cage. Adding done callback to prevent early exit.
   it("system metrics are sent to statsD", (done) => {
     const client = new net.Socket();
-    client.connect(8126, "127.0.0.1", function () {
-      client.write("gauges");
-    });
+    setTimeout(() => {
+      client.connect(8126, "127.0.0.1", function () {
+        client.write("gauges");
+      });
+    }, 1000);
 
     client.on("data", function (data) {
       const result = data.toString().replace(/'/g, '"').replace(/END/g, "");
