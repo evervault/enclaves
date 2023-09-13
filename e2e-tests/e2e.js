@@ -139,7 +139,7 @@ describe("Enclave is runnning", () => {
       client.connect(8126, "127.0.0.1", function () {
         client.write("gauges");
       });
-    }, 1000);
+    }, 60000);
 
     client.on("data", function (data) {
       const result = data.toString().replace(/'/g, '"').replace(/END/g, "");
