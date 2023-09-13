@@ -84,40 +84,53 @@ describe('POST data to enclave', () => {
 
 
 describe('Enclave is runnning', () => {
-    it('system metrics are sent to statsD', () => {
-        var net = require('net');
+  // Statsd tests are async and wait for data to be published by the Cage. Adding done callback to prevent early exit.
+  it("system metrics are sent to statsD", (done) => {
+    var net = require("net");
 
-        var client = new net.Socket();
-        client.connect(8126, '127.0.0.1', function() {
-            client.write('gauges');
-        });
-
-        client.on('data', function(data) {
-            let result = data.toString().replace(/'/g, '"').replace(/END/g, '');
-            let stats = JSON.parse(result);
-            let keys = Object.keys(stats);
-            expect(keys).to.include('memory.total;cage_uuid=cage_123;app_uuid=app_12345678');
-            expect(keys).to.include('memory.avail;cage_uuid=cage_123;app_uuid=app_12345678');
-            expect(keys).to.include('cpu.one;cage_uuid=cage_123;app_uuid=app_12345678');
-            expect(keys).to.include('cpu.cores;cage_uuid=cage_123;app_uuid=app_12345678');
-            client.destroy();
-        });
+    var client = new net.Socket();
+    client.connect(8126, "127.0.0.1", function () {
+      client.write("gauges");
     });
 
-    it('product metrics are sent to statsD', () => {
-        var net = require('net');
-
-        var client = new net.Socket();
-        client.connect(8126, '127.0.0.1', function() {
-            client.write('counters');
-        });
-
-        client.on('data', function(data) {
-            let result = data.toString().replace(/'/g, '"').replace(/END/g, '');
-            let stats = JSON.parse(result);
-            let keys = Object.keys(stats);
-            expect(keys).to.include('decrypt.count;cage_uuid=cage_123;app_uuid=app_12345678');
-            client.destroy();
-        });
+    client.on("data", function (data) {
+      let result = data.toString().replace(/'/g, '"').replace(/END/g, "");
+      let stats = JSON.parse(result);
+      let keys = Object.keys(stats);
+      expect(keys).to.include(
+        "memory.total;cage_uuid=cage_123;app_uuid=app_12345678"
+      );
+      expect(keys).to.include(
+        "memory.avail;cage_uuid=cage_123;app_uuid=app_12345678"
+      );
+      expect(keys).to.include(
+        "cpu.one;cage_uuid=cage_123;app_uuid=app_12345678"
+      );
+      expect(keys).to.include(
+        "cpu.cores;cage_uuid=cage_123;app_uuid=app_12345678"
+      );
+      client.destroy();
+      done();
     });
+  });
+
+  it("product metrics are sent to statsD", (done) => {
+    var net = require("net");
+
+    var client = new net.Socket();
+    client.connect(8126, "127.0.0.1", function () {
+      client.write("counters");
+    });
+
+    client.on("data", function (data) {
+      let result = data.toString().replace(/'/g, '"').replace(/END/g, "");
+      let stats = JSON.parse(result);
+      let keys = Object.keys(stats);
+      expect(keys).to.include(
+        "decrypt.count;cage_uuid=cage_123;app_uuid=app_12345678"
+      );
+      client.destroy();
+      done();
+    });
+  });
 });
