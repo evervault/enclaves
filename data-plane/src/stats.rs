@@ -47,7 +47,7 @@ impl StatsProxy {
 
     fn record_system_metrics() {
         task::spawn(async {
-            let mut interval = time::interval(Duration::from_secs(1));
+            let mut interval = time::interval(Duration::from_secs(60));
 
             loop {
                 interval.tick().await;
