@@ -100,17 +100,17 @@ impl RawAcmeCertificate {
                 earliest_expiry = Some(cert_expiry);
             }
         }
-        let renewal_strategy = earliest_expiry
-            .map(|earliest_expiry| {
-                if earliest_expiry < thirty_days && earliest_expiry > seven_days {
-                    RenewalStrategy::AsyncRenewal
-                } else if earliest_expiry < seven_days {
-                    RenewalStrategy::SyncRenewal
-                } else {
-                    RenewalStrategy::NoRenewal
-                }
-            })
-            .unwrap_or(RenewalStrategy::AsyncRenewal); //If failed to get expiry, renew async
+
+        let renewal_strategy = match earliest_expiry {
+            Some(earliest_expiry)
+                if earliest_expiry < thirty_days && earliest_expiry > seven_days =>
+            {
+                RenewalStrategy::AsyncRenewal
+            }
+            Some(earliest_expiry) if earliest_expiry < seven_days => RenewalStrategy::SyncRenewal,
+            None => RenewalStrategy::SyncRenewal, //If failed to get expiry, renew straight away as cert must be corrupted
+            _ => RenewalStrategy::NoRenewal,      // Else, no need to renew
+        };
 
         Ok(renewal_strategy)
     }
