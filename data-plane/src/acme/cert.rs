@@ -1,6 +1,7 @@
 use std::{str::from_utf8, sync::Arc, time::Duration};
 
 use openssl::{
+    asn1::Asn1Time,
     pkey::{PKey, Private},
     x509::X509,
 };
@@ -26,6 +27,12 @@ use super::{
     lock::StorageLock,
     order::OrderBuilder,
 };
+
+pub enum RenewalStrategy {
+    AsyncRenewal,
+    SyncRenewal,
+    NoRenewal,
+}
 
 const CERTIFICATE_LOCK_NAME: &str = "certificate";
 const CERTIFICATE_OBJECT_KEY: &str = "certificate.pem";
@@ -73,20 +80,58 @@ impl RawAcmeCertificate {
         Ok(parsed_response)
     }
 
-    fn to_certified_key(&self, private_key: PKey<Private>) -> Result<CertifiedKey, AcmeError> {
+    fn to_x509s(&self) -> Result<Vec<X509>, AcmeError> {
+        let pem_encoded_certs = self.certificate.as_bytes();
+        let certs = X509::stack_from_pem(pem_encoded_certs)?;
+        Ok(certs)
+    }
+
+    pub fn should_renew_cert(x509s: Vec<X509>) -> Result<RenewalStrategy, AcmeError> {
+        let thirty_days = Asn1Time::days_from_now(30)?;
+        let seven_days = Asn1Time::days_from_now(7)?;
+
+        let mut earliest_expiry = None;
+
+        for cert in x509s.iter() {
+            let cert_expiry = cert.not_after();
+            if earliest_expiry.is_none()
+                || cert_expiry < earliest_expiry.expect("Infallible - Option checked")
+            {
+                earliest_expiry = Some(cert_expiry);
+            }
+        }
+
+        let renewal_strategy = match earliest_expiry {
+            Some(earliest_expiry)
+                if earliest_expiry < thirty_days && earliest_expiry > seven_days =>
+            {
+                RenewalStrategy::AsyncRenewal
+            }
+            Some(earliest_expiry) if earliest_expiry < seven_days => RenewalStrategy::SyncRenewal,
+            None => RenewalStrategy::SyncRenewal, //If failed to get expiry, renew straight away as cert must be corrupted
+            _ => RenewalStrategy::NoRenewal,      // Else, no need to renew
+        };
+
+        Ok(renewal_strategy)
+    }
+
+    fn to_certified_key(
+        &self,
+        x509s: Vec<X509>,
+        private_key: PKey<Private>,
+    ) -> Result<CertifiedKey, AcmeError> {
         let der_encoded_private_key = private_key.private_key_to_der()?;
         let ecdsa_private_key = sign::any_ecdsa_type(&PrivateKey(der_encoded_private_key))?;
 
-        let certs = X509::stack_from_pem(self.certificate.as_bytes())?;
-
         let mut pem_certs = Vec::new();
-        for cert in certs.iter() {
+        for cert in x509s.iter() {
             let pem_encoded_cert: Vec<u8> = cert.to_pem()?;
             pem_certs.push(pem_encoded_cert);
         }
 
         let combined_pem_encoded_certs: Vec<u8> = pem_certs.concat();
         let parsed_pems = pem::parse_many(combined_pem_encoded_certs)?;
+
         let cert_chain: Vec<Certificate> = parsed_pems
             .into_iter()
             .map(|p| Certificate(p.contents))
@@ -104,6 +149,7 @@ impl RawAcmeCertificate {
     }
 }
 
+#[derive(Clone)]
 pub struct AcmeCertificateRetreiver {
     pub config_client: ConfigClient,
     pub e3_client: E3Client,
@@ -139,8 +185,9 @@ impl AcmeCertificateRetreiver {
                 ));
             }
 
-            if let Some(decrypted_certificate) =
-                self.fetch_and_decrypt_certificate(key.clone()).await?
+            if let Some(decrypted_certificate) = self
+                .fetch_and_decrypt_certificate(key.clone(), &cage_context)
+                .await?
             {
                 persisted_certificate = Some(decrypted_certificate);
             } else {
@@ -179,6 +226,7 @@ impl AcmeCertificateRetreiver {
     async fn fetch_and_decrypt_certificate(
         &self,
         key: PKey<Private>,
+        cage_context: &CageContext,
     ) -> Result<Option<CertifiedKey>, AcmeError> {
         if let Some(raw_acme_certificate) =
             RawAcmeCertificate::from_storage(self.config_client.clone()).await?
@@ -187,7 +235,34 @@ impl AcmeCertificateRetreiver {
             //Certificate already exists, decrypt it
             let decrypted_certificate =
                 Self::decrypt_certificate(&self.e3_client, &raw_acme_certificate).await?;
-            Some(decrypted_certificate.to_certified_key(key)).transpose()
+
+            let x509s = decrypted_certificate.to_x509s()?;
+
+            match RawAcmeCertificate::should_renew_cert(x509s.clone())? {
+                RenewalStrategy::AsyncRenewal => {
+                    println!("[ACME] Certificate expires in the comming month. Should be renewed asynchronously");
+                    let mut self_clone = self.clone();
+                    let key_clone = key.clone();
+                    let cage_context_clone = cage_context.clone();
+                    tokio::spawn(async move {
+                        let _ = self_clone
+                            .create_certificate_and_persist_with_lock(
+                                key_clone,
+                                &cage_context_clone,
+                            )
+                            .await;
+                    });
+                    Some(decrypted_certificate.to_certified_key(x509s, key)).transpose()
+                }
+                RenewalStrategy::SyncRenewal => {
+                    println!("[ACME] Certificate expires in the comming week. Should be renewed synchronously");
+                    Ok(None)
+                }
+                RenewalStrategy::NoRenewal => {
+                    println!("[ACME] Certificate expires in more than a month. No need to renew");
+                    Some(decrypted_certificate.to_certified_key(x509s, key)).transpose()
+                }
+            }
         } else {
             println!("[ACME] Certificate not found in storage");
             Ok(None)
@@ -224,7 +299,9 @@ impl AcmeCertificateRetreiver {
 
             certificate_lock.delete().await?;
 
-            Ok(Some(raw_acme_certificate.to_certified_key(key)?))
+            let x509s = raw_acme_certificate.to_x509s()?;
+
+            Ok(Some(raw_acme_certificate.to_certified_key(x509s, key)?))
         } else {
             Ok(None)
         }
