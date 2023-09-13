@@ -28,6 +28,12 @@ use super::{
     order::OrderBuilder,
 };
 
+pub enum RenewalStrategy {
+    AsyncRenewal,
+    SyncRenewal,
+    NoRenewal,
+}
+
 const CERTIFICATE_LOCK_NAME: &str = "certificate";
 const CERTIFICATE_OBJECT_KEY: &str = "certificate.pem";
 
@@ -80,8 +86,10 @@ impl RawAcmeCertificate {
         Ok(certs)
     }
 
-    pub fn should_renew_cert(x509s: Vec<X509>) -> Result<bool, AcmeError> {
+    pub fn should_renew_cert(x509s: Vec<X509>) -> Result<RenewalStrategy, AcmeError> {
         let thirty_days = Asn1Time::days_from_now(30)?;
+        let seven_days = Asn1Time::days_from_now(7)?;
+
         let mut earliest_expiry = None;
 
         for cert in x509s.iter() {
@@ -92,11 +100,19 @@ impl RawAcmeCertificate {
                 earliest_expiry = Some(cert_expiry);
             }
         }
-        let should_renew = earliest_expiry
-            .map(|earliest_expiry| earliest_expiry < thirty_days)
-            .unwrap_or(false);
+        let renewal_strategy = earliest_expiry
+            .map(|earliest_expiry| {
+                if earliest_expiry < thirty_days && earliest_expiry > seven_days {
+                    RenewalStrategy::AsyncRenewal
+                } else if earliest_expiry < seven_days {
+                    RenewalStrategy::SyncRenewal
+                } else {
+                    RenewalStrategy::NoRenewal
+                }
+            })
+            .unwrap_or(RenewalStrategy::AsyncRenewal); //If failed to get expiry, renew async
 
-        Ok(should_renew)
+        Ok(renewal_strategy)
     }
 
     fn to_certified_key(
@@ -133,6 +149,7 @@ impl RawAcmeCertificate {
     }
 }
 
+#[derive(Clone)]
 pub struct AcmeCertificateRetreiver {
     pub config_client: ConfigClient,
     pub e3_client: E3Client,
@@ -168,8 +185,9 @@ impl AcmeCertificateRetreiver {
                 ));
             }
 
-            if let Some(decrypted_certificate) =
-                self.fetch_and_decrypt_certificate(key.clone()).await?
+            if let Some(decrypted_certificate) = self
+                .fetch_and_decrypt_certificate(key.clone(), &cage_context)
+                .await?
             {
                 persisted_certificate = Some(decrypted_certificate);
             } else {
@@ -208,6 +226,7 @@ impl AcmeCertificateRetreiver {
     async fn fetch_and_decrypt_certificate(
         &self,
         key: PKey<Private>,
+        cage_context: &CageContext,
     ) -> Result<Option<CertifiedKey>, AcmeError> {
         if let Some(raw_acme_certificate) =
             RawAcmeCertificate::from_storage(self.config_client.clone()).await?
@@ -219,11 +238,31 @@ impl AcmeCertificateRetreiver {
 
             let x509s = decrypted_certificate.to_x509s()?;
 
-            if RawAcmeCertificate::should_renew_cert(x509s.clone())? {
-                println!("[ACME] Certificate expiring within 30 days, renewing");
-                return Ok(None);
+            match RawAcmeCertificate::should_renew_cert(x509s.clone())? {
+                RenewalStrategy::AsyncRenewal => {
+                    println!("[ACME] Certificate expires in the comming month. Should be renewed asynchronously");
+                    let mut self_clone = self.clone();
+                    let key_clone = key.clone();
+                    let cage_context_clone = cage_context.clone();
+                    tokio::spawn(async move {
+                        let _ = self_clone
+                            .create_certificate_and_persist_with_lock(
+                                key_clone,
+                                &cage_context_clone,
+                            )
+                            .await;
+                    });
+                    Some(decrypted_certificate.to_certified_key(x509s, key)).transpose()
+                }
+                RenewalStrategy::SyncRenewal => {
+                    println!("[ACME] Certificate expires in the comming week. Should be renewed synchronously");
+                    Ok(None)
+                }
+                RenewalStrategy::NoRenewal => {
+                    println!("[ACME] Certificate expires in more than a month. No need to renew");
+                    Some(decrypted_certificate.to_certified_key(x509s, key)).transpose()
+                }
             }
-            Some(decrypted_certificate.to_certified_key(x509s, key)).transpose()
         } else {
             println!("[ACME] Certificate not found in storage");
             Ok(None)
