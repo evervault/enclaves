@@ -134,18 +134,17 @@ describe("POST data to enclave", () => {
 describe("Enclave is runnning", () => {
   // Statsd tests are async and wait for data to be published by the Cage. Adding done callback to prevent early exit.
   it("system metrics are sent to statsD", (done) => {
-    const client = new net.Socket();
-    setTimeout(() => {
-      client.connect(8126, "127.0.0.1", function () {
-        client.write("gauges");
-      });
-    }, 60000);
+    const sysClient = new net.Socket();
+    sysClient.connect(8126, "127.0.0.1", function () {
+      sysClient.write("gauges");
+    });
 
-    client.on("data", function (data) {
-      const result = data.toString().replace(/'/g, '"').replace(/END/g, "");
-      const stats = JSON.parse(result);
-      const keys = Object.keys(stats);
+    sysClient.on("data", function (data) {
       try {
+        const result = data.toString().replace(/'/g, '"').replace(/END/g, "");
+        console.log("[SYSTEM]", result);
+        const stats = JSON.parse(result);
+        const keys = Object.keys(stats);
         expect(keys).to.include(
           "memory.total;cage_uuid=cage_123;app_uuid=app_12345678"
         );
@@ -159,28 +158,30 @@ describe("Enclave is runnning", () => {
           "cpu.cores;cage_uuid=cage_123;app_uuid=app_12345678"
         );
       } finally {
-        client.destroy();
+        sysClient.destroy();
         done();
       }
     });
   });
 
   it("product metrics are sent to statsD", (done) => {
-    const client = new net.Socket();
-    client.connect(8126, "127.0.0.1", function () {
-      client.write("counters");
+    const prodClient = new net.Socket();
+    prodClient.connect(8126, "127.0.0.1", function () {
+      prodClient.write("counters");
     });
 
-    client.on("data", function (data) {
-      const result = data.toString().replace(/'/g, '"').replace(/END/g, "");
-      const stats = JSON.parse(result);
-      const keys = Object.keys(stats);
+    prodClient.on("data", function (data) {
       try {
+        const result = data.toString().replace(/'/g, '"').replace(/END/g, "");
+        console.log("[PRODUCT]", result);
+        const stats = JSON.parse(result);
+        const keys = Object.keys(stats);
+
         expect(keys).to.include(
           "decrypt.count;cage_uuid=cage_123;app_uuid=app_12345678"
         );
       } finally {
-        client.destroy();
+        prodClient.destroy();
         done();
       }
     });

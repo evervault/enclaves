@@ -8,3 +8,6 @@ export MOCK_CERT_PROVISIONER_ROOT_CERT=`cat certs/ca.crt`
 export MOCK_CERT_PROVISIONER_SERVER_CERT=`cat certs/localhost.crt`
 export EV_API_KEY_AUTH=true
 export CUSTOMER_PROCESS=httpCustomerProcess.js
+export ACME_ACCOUNT_EC_KEY=`cat ./e2e-tests/acme-key/key.pem`
+export ACME_ACCOUNT_HMAC_KEY="cGxhY2Vob2xkZXI="
+export ACME_ACCOUNT_HMAC_KEY_ID="placeholder_id"
