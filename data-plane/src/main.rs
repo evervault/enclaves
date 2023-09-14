@@ -20,7 +20,7 @@ use shared::ENCLAVE_CONNECT_PORT;
 
 #[tokio::main]
 async fn main() {
-    log::info!("Data plane running.");
+    shared::logging::init_env_logger();
     print_version!("Data Plane");
 
     let mut args = std::env::args();
