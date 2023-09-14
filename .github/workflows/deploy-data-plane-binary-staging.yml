@@ -35,7 +35,7 @@ jobs:
       - name: Build data-plane (egress enabled, tls termination disabled)
         uses: evervault/cargo-static-build@master
         with:
-          cmd: cargo build -p data-plane --no-default-features --features enclave,network_egress --release --target ${{ env.LINUX_TARGET }}
+          cmd: cargo build -p data-plane --no-default-features --features enclave,network_egress,release_logging --release --target ${{ env.LINUX_TARGET }}
         env:
           RUSTFLAGS: "--cfg staging"
 
@@ -51,7 +51,7 @@ jobs:
       - name: Build data-plane (egress enabled, tls termination enabled)
         uses: evervault/cargo-static-build@master
         with:
-          cmd: cargo build -p data-plane --features enclave,network_egress --release --target ${{ env.LINUX_TARGET }}
+          cmd: cargo build -p data-plane --features enclave,network_egress,release_logging --release --target ${{ env.LINUX_TARGET }}
         env:
           RUSTFLAGS: "--cfg staging"
 
@@ -67,7 +67,7 @@ jobs:
       - name: Build data-plane (egress disabled, tls termination disabled)
         uses: evervault/cargo-static-build@master
         with:
-          cmd: cargo build -p data-plane --no-default-features --features enclave --release --target ${{ env.LINUX_TARGET }}
+          cmd: cargo build -p data-plane --no-default-features --features enclave,release_logging --release --target ${{ env.LINUX_TARGET }}
         env:
           RUSTFLAGS: "--cfg staging"
 
@@ -83,7 +83,7 @@ jobs:
       - name: Build data-plane (egress disabled, tls termination enabled)
         uses: evervault/cargo-static-build@master
         with:
-          cmd: cargo build -p data-plane --features enclave --release --target ${{ env.LINUX_TARGET }}
+          cmd: cargo build -p data-plane --features enclave,release_logging --release --target ${{ env.LINUX_TARGET }}
         env:
           RUSTFLAGS: "--cfg staging"
 

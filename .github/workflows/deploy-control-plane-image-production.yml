@@ -43,7 +43,7 @@ jobs:
       - name: Build control plane
         uses: evervault/cargo-static-build@master
         with:
-          cmd: cargo build -p control-plane --features enclave,network_egress --release --target ${{ env.LINUX_TARGET }}
+          cmd: cargo build -p control-plane --features enclave,network_egress,release_logging --release --target ${{ env.LINUX_TARGET }}
       - name: Move control-plane binary to root
         run: cp ./target/${{ env.LINUX_TARGET }}/release/control-plane ./control-plane
       - name: Configure Production AWS Credentials
@@ -82,7 +82,7 @@ jobs:
       - name: Build control plane
         uses: evervault/cargo-static-build@master
         with:
-          cmd: cargo build -p control-plane --features enclave --release --target ${{ env.LINUX_TARGET }}
+          cmd: cargo build -p control-plane --features enclave,release_logging --release --target ${{ env.LINUX_TARGET }}
       - name: Move control-plane binary to root
         run: cp ./target/${{ env.LINUX_TARGET }}/release/control-plane ./control-plane
       - name: Configure Production AWS Credentials
