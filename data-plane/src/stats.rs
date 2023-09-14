@@ -46,8 +46,14 @@ impl StatsProxy {
     }
 
     fn record_system_metrics() {
-        task::spawn(async {
-            let mut interval = time::interval(Duration::from_secs(1));
+        // Take interval in seconds from the SYSTEM_STATS_INTERVAL variable, defaulting to every minute.
+        let interval = std::env::var("SYSTEM_STATS_INTERVAL")
+            .ok()
+            .and_then(|interval_str| interval_str.parse::<u64>().ok())
+            .unwrap_or(60);
+
+        task::spawn(async move {
+            let mut interval = time::interval(Duration::from_secs(interval));
 
             loop {
                 interval.tick().await;
