@@ -2,7 +2,7 @@ use std::{collections::VecDeque, time::Duration};
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use shared::logging::TrxContext;
-use tokio::time::sleep;
+use tokio::time::interval;
 
 use crate::config_client::ConfigClient;
 
@@ -69,8 +69,8 @@ pub async fn start_log_handler(
     //Start timer send messages to periodically clear buffer
     start_log_timer(tx);
 
-    // Give buffer max capacity of 10 for space. Will flush on 5 but have capacity for more.
-    let mut buffer = LogHandlerBuffer::new(10);
+    // Give buffer max capacity of 20 for space. Will flush on 15 but have capacity for more.
+    let mut buffer = LogHandlerBuffer::new(20);
 
     while let Some(message) = rx.recv().await {
         match message.msg_type {
@@ -88,7 +88,7 @@ pub async fn start_log_handler(
                 };
 
                 let current_size = buffer.get_size();
-                if current_size >= 5 {
+                if current_size >= 15 {
                     //Buffer size has multiple logs. Flush buffer and send to control plane
                     buffer.send_logs().await;
                 }
@@ -100,9 +100,9 @@ pub async fn start_log_handler(
 
 fn start_log_timer(tx: UnboundedSender<LogHandlerMessage>) {
     tokio::spawn(async move {
+        let mut log_interval = interval(Duration::from_secs(30));
         loop {
-            //Wait five seconds
-            sleep(Duration::from_millis(5000)).await;
+            let _ = log_interval.tick().await;
 
             //Send tick message to handler
             if let Err(err) = tx.send(LogHandlerMessage::new_tick_message()) {
