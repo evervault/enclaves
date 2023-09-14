@@ -1026,7 +1026,7 @@ dependencies = [
 
 [[package]]
 name = "control-plane"
-version = "0.1.0"
+version = "0.0.42"
 dependencies = [
  "async-trait",
  "aws-config 0.55.0",
@@ -1254,7 +1254,7 @@ checksum = "23d8666cb01533c39dde32bcbab8e227b4ed6679b2c925eba05feabea39508fb"
 
 [[package]]
 name = "data-plane"
-version = "0.0.41"
+version = "0.0.42"
 dependencies = [
  "async-trait",
  "aws-nitro-enclaves-cose",
