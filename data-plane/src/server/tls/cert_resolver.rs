@@ -314,7 +314,7 @@ impl AttestableCertResolver {
                 Some(nonce),
             )
             .map_err(|err| {
-                eprintln!("An error occurred while generating the self signed cert");
+                log::error!("An error occurred while generating the self signed cert");
                 err
             })
             .ok()

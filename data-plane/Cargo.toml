@@ -1,6 +1,6 @@
 [package]
 name = "data-plane"
-version = "0.0.0-dev"
+version = "0.0.41"
 edition = "2021"
 authors = ["Evervault <engineering@evervault.com>"]
 
@@ -41,6 +41,7 @@ tokio-retry = "0.3.0"
 httparse = "1.8.0"
 mockall = "0.11.4"
 uuid = { version = "1.4.1", features = ["v4"] }
+log = { version = "0.4.19", features = ["max_level_debug"] }
 
 [dev-dependencies]
 tokio-test = "0.4.2"
@@ -51,3 +52,4 @@ tls_termination = ["dep:nom"]
 network_egress = ["dep:dns-message-parser", "dep:dashmap", "shared/network_egress"]
 enclave = ["dep:tokio-vsock", "shared/enclave"]
 not_enclave = []
+release_logging = ["log/release_max_level_info"]

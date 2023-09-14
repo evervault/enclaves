@@ -23,7 +23,7 @@ impl StatsProxy {
             let (amt, _) = match socket.recv_from(&mut buffer).await {
                 Ok((amt, src)) => (amt, src),
                 Err(e) => {
-                    eprintln!("Error receiving stats: {e}");
+                    log::error!("Error receiving stats: {e}");
                     buffer.fill(0);
                     continue;
                 }
@@ -31,7 +31,7 @@ impl StatsProxy {
 
             let buf = Bytes::copy_from_slice(&buffer[..amt]);
             if let Err(e) = Self::forward_stats(buf).await {
-                eprintln!("Error forwarding stats: {e}");
+                log::error!("Error forwarding stats: {e}");
             }
             buffer.fill(0);
         }

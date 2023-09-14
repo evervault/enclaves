@@ -1042,6 +1042,7 @@ dependencies = [
  "dns-message-parser",
  "hyper",
  "lazy_static",
+ "log",
  "mockall",
  "openssl",
  "ppp",
@@ -1253,7 +1254,7 @@ checksum = "23d8666cb01533c39dde32bcbab8e227b4ed6679b2c925eba05feabea39508fb"
 
 [[package]]
 name = "data-plane"
-version = "0.0.0-dev"
+version = "0.0.41"
 dependencies = [
  "async-trait",
  "aws-nitro-enclaves-cose",
@@ -1270,6 +1271,7 @@ dependencies = [
  "httparse",
  "hyper",
  "lazy_static",
+ "log",
  "mockall",
  "nom",
  "once_cell",
@@ -1884,12 +1886,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.17"
+version = "0.4.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "abb12e687cfb44aa40f41fc3978ef76448f9b6038cad6aef4259d3c095a2382e"
-dependencies = [
- "cfg-if",
-]
+checksum = "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
 
 [[package]]
 name = "lru-cache"

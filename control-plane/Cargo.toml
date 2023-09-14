@@ -34,6 +34,7 @@ axum = "0.6.19"
 openssl = { version = "0.10.48", features = ["vendored"] }
 base64 = "0.13.0"
 storage-client-interface = "0.2.0"
+log = { version = "0.4.19", features = ["max_level_debug"] }
 
 [dev-dependencies]
 tokio-test = "0.4.2"
@@ -44,3 +45,4 @@ default = []
 network_egress = ["shared/network_egress"]
 enclave = ["dep:tokio-vsock", "shared/enclave"]
 not_enclave = ["network_egress"]
+release_logging = ["log/release_max_level_info"]

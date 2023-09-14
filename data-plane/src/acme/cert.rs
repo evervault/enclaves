@@ -170,7 +170,7 @@ impl AcmeCertificateRetreiver {
         key: PKey<Private>,
         cage_context: CageContext,
     ) -> Result<CertifiedKey, AcmeError> {
-        println!("[ACME] Starting polling for ACME certificate");
+        log::info!("[ACME] Starting polling for ACME certificate");
         let mut persisted_certificate: Option<CertifiedKey> = None;
 
         let max_checks = 10;
@@ -191,12 +191,12 @@ impl AcmeCertificateRetreiver {
             {
                 persisted_certificate = Some(decrypted_certificate);
             } else {
-                println!("[ACME] Certificate not found in storage, checking for lock");
+                log::info!("[ACME] Certificate not found in storage, checking for lock");
                 if Self::order_lock_exists_and_is_valid().await? {
-                    println!("[ACME] Lock is valid, waiting for Certificate to be created by other instance or waiting for lock to expire");
+                    log::info!("[ACME] Lock is valid, waiting for Certificate to be created by other instance or waiting for lock to expire");
                     //Do nothing if Lock is not expired - wait for certificate to be created by other instance or wait for lock to expire
                 } else {
-                    println!(
+                    log::info!(
                         "[ACME] No valid lock on ACME ordering, creating lock and certificate."
                     );
                     //No Lock on order - create lock - create Certificate - encrypt Certificate - persist Certificate - delete lock
@@ -208,13 +208,13 @@ impl AcmeCertificateRetreiver {
             };
 
             if persisted_certificate.is_none() {
-                println!("[ACME] Certificate not found, sleeping for 5 seconds");
+                log::info!("[ACME] Certificate not found, sleeping for 5 seconds");
                 tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             }
         }
 
         if let Some(persisted_certificate) = persisted_certificate {
-            println!("[ACME] Certificate found after polling");
+            log::info!("[ACME] Certificate found after polling");
             Ok(persisted_certificate)
         } else {
             Err(AcmeError::General(
@@ -231,7 +231,7 @@ impl AcmeCertificateRetreiver {
         if let Some(raw_acme_certificate) =
             RawAcmeCertificate::from_storage(self.config_client.clone()).await?
         {
-            println!("[ACME] Certificate found in storage");
+            log::info!("[ACME] Certificate found in storage");
             //Certificate already exists, decrypt it
             let decrypted_certificate =
                 Self::decrypt_certificate(&self.e3_client, &raw_acme_certificate).await?;
@@ -240,7 +240,7 @@ impl AcmeCertificateRetreiver {
 
             match RawAcmeCertificate::should_renew_cert(x509s.clone())? {
                 RenewalStrategy::AsyncRenewal => {
-                    println!("[ACME] Certificate expires in the comming month. Should be renewed asynchronously");
+                    log::info!("[ACME] Certificate expires in the comming month. Should be renewed asynchronously");
                     let mut self_clone = self.clone();
                     let key_clone = key.clone();
                     let cage_context_clone = cage_context.clone();
@@ -255,16 +255,16 @@ impl AcmeCertificateRetreiver {
                     Some(decrypted_certificate.to_certified_key(x509s, key)).transpose()
                 }
                 RenewalStrategy::SyncRenewal => {
-                    println!("[ACME] Certificate expires in the comming week. Should be renewed synchronously");
+                    log::info!("[ACME] Certificate expires in the comming week. Should be renewed synchronously");
                     Ok(None)
                 }
                 RenewalStrategy::NoRenewal => {
-                    println!("[ACME] Certificate expires in more than a month. No need to renew");
+                    log::info!("[ACME] Certificate expires in more than a month. No need to renew");
                     Some(decrypted_certificate.to_certified_key(x509s, key)).transpose()
                 }
             }
         } else {
-            println!("[ACME] Certificate not found in storage");
+            log::info!("[ACME] Certificate not found in storage");
             Ok(None)
         }
     }
@@ -400,7 +400,7 @@ impl AcmeCertificateRetreiver {
                 "Certificate not found in completed order".into(),
             ))?;
 
-        println!("Certificate received from ACME provider: {:?}", cert_chain);
+        log::info!("Certificate received from ACME provider: {:?}", cert_chain);
 
         RawAcmeCertificate::from_x509s(cert_chain)
     }
