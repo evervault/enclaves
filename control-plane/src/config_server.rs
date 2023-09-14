@@ -98,7 +98,9 @@ impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> 
                     .await;
 
                 if let Err(processing_err) = sent_response {
-                    log::error!("An error occurred while processing the request — {processing_err}");
+                    log::error!(
+                        "An error occurred while processing the request — {processing_err}"
+                    );
                 }
             });
         }
@@ -156,7 +158,9 @@ async fn handle_token_request(
 ) -> Response<Body> {
     match get_token(cert_provisioner_client, token_type.clone()).await {
         Ok(res) => res,
-        Err(e) => build_error_response(format!("Failed to get token for token {token_type:?} err: {e}"))
+        Err(e) => build_error_response(format!(
+            "Failed to get token for token {token_type:?} err: {e}"
+        )),
     }
 }
 
@@ -213,9 +217,9 @@ async fn handle_post_trx_logs_request(
             build_success_response()
         }
         Err(e) => {
-          log::error!("Failed to parse log body from data plane - {e:?}");
-          build_error_response("Failed to parse log body from data plane".to_string())
-        },
+            log::error!("Failed to parse log body from data plane - {e:?}");
+            build_error_response("Failed to parse log body from data plane".to_string())
+        }
     }
 }
 
@@ -256,11 +260,11 @@ async fn handle_acme_storage_get_request<T: StorageClientInterface>(
                 .map_err(ServerError::HyperHttp)
         }
         Err(e) => {
-          log::error!("Failed to parse get object request - {e:?}");
-          Ok(build_error_response(
-            "Failed to parse get object request from data plane".to_string(),
-          ))
-        },
+            log::error!("Failed to parse get object request - {e:?}");
+            Ok(build_error_response(
+                "Failed to parse get object request from data plane".to_string(),
+            ))
+        }
     }
 }
 
@@ -320,7 +324,7 @@ async fn handle_acme_storage_delete_request<T: StorageClientInterface>(
             }
         }
         Err(_) => Ok(build_error_response(
-          "Failed to parse delete object request from data plane".to_string(),
+            "Failed to parse delete object request from data plane".to_string(),
         )),
     }
 }
@@ -333,7 +337,7 @@ async fn handle_acme_signing_request(
     log::info!("Received ACME signing request in config server");
     match sign_acme_payload(req, acme_account_details, cage_context).await {
         Ok(response) => response,
-        Err(_) => build_error_response("Failed to sign JWS request".to_string())
+        Err(_) => build_error_response("Failed to sign JWS request".to_string()),
     }
 }
 
@@ -395,7 +399,9 @@ async fn sign_acme_payload(
                 }
             }
         }
-        Err(_) => Ok(build_error_response("Failed to parse signing request from data plane".to_string()))
+        Err(_) => Ok(build_error_response(
+            "Failed to parse signing request from data plane".to_string(),
+        )),
     }
 }
 
@@ -403,7 +409,7 @@ async fn handle_acme_jwk_request(acme_account_details: AcmeAccountDetails) -> Re
     log::info!("Recieved ACME JWK request in config server");
     match get_acme_jwk(acme_account_details).await {
         Ok(response) => response,
-        Err(_) => build_error_response("Failed to get JWK".to_string())
+        Err(_) => build_error_response("Failed to get JWK".to_string()),
     }
 }
 

@@ -65,7 +65,9 @@ where
         let mut stream = match server.accept().await {
             Ok(stream) => stream,
             Err(tls_err) => {
-                log::error!("An error occurred while accepting the incoming connection — {tls_err}");
+                log::error!(
+                    "An error occurred while accepting the incoming connection — {tls_err}"
+                );
                 continue;
             }
         };

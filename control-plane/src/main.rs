@@ -196,18 +196,17 @@ async fn tcp_server() -> Result<()> {
     loop {
         let data_plane_version = parsed_data_plane_version.clone();
         let (mut connection, client_socket_addr) = match tcp_listener.accept().await {
-          Ok(conn) => conn,
-          Err(e) => {
-            log::error!("Failed to accept incoming TCP stream - {:?}", e);
-            continue;
-          }
+            Ok(conn) => conn,
+            Err(e) => {
+                log::error!("Failed to accept incoming TCP stream - {:?}", e);
+                continue;
+            }
         };
         StatsClient::record_request();
         tokio::spawn(async move {
             log::debug!("Accepted incoming TCP stream — {client_socket_addr:?}");
             let enclave_stream =
-                match enclave_connection::get_connection_to_enclave(ENCLAVE_CONNECT_PORT).await
-                {
+                match enclave_connection::get_connection_to_enclave(ENCLAVE_CONNECT_PORT).await {
                     Ok(enclave_stream) => enclave_stream,
                     Err(e) => {
                         log::error!("An error occurred while connecting to the enclave — {e:?}");
@@ -220,11 +219,8 @@ async fn tcp_server() -> Result<()> {
                 };
 
             if should_remove_proxy_protocol(data_plane_version.as_ref()) {
-                if let Err(e) = strip_proxy_protocol_and_pipe(connection, enclave_stream).await
-                {
-                    log::error!(
-                        "An error occurred while piping the connection over vsock - {e:?}"
-                    );
+                if let Err(e) = strip_proxy_protocol_and_pipe(connection, enclave_stream).await {
+                    log::error!("An error occurred while piping the connection over vsock - {e:?}");
                 }
             } else if let Err(e) = pipe_streams(connection, enclave_stream).await {
                 log::error!("An error occurred while piping the connection over vsock - {e:?}");

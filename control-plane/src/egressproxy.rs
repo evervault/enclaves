@@ -24,11 +24,11 @@ lazy_static! {
 impl EgressProxy {
     pub async fn listen() -> Result<()> {
         let mut server = match get_vsock_server(EGRESS_PROXY_VSOCK_PORT, Parent).await {
-          Ok(server) => server,
-          Err(e) => {
-            log::error!("Error starting egress proxy - {e:?}");
-            return Err(e.into());
-          }
+            Ok(server) => server,
+            Err(e) => {
+                log::error!("Error starting egress proxy - {e:?}");
+                return Err(e.into());
+            }
         };
         log::info!("Egress proxy started");
         let allowed_domains = shared::server::egress::get_egress_allow_list_from_env();
