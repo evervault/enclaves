@@ -30,12 +30,12 @@ fn main() {
         .unwrap_or(8008);
 
     let runtime = tokio::runtime::Builder::new_current_thread()
-      .enable_all()
-      .build()
-      .expect("Failed to build tokio runtime in data plane");
+        .enable_all()
+        .build()
+        .expect("Failed to build tokio runtime in data plane");
 
     runtime.block_on(async move {
-      tokio::join!(start(data_plane_port), start_health_check_server());
+        tokio::join!(start(data_plane_port), start_health_check_server());
     });
 }
 
