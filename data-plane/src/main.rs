@@ -18,8 +18,7 @@ use data_plane::FeatureContext;
 use futures::future::join_all;
 use shared::ENCLAVE_CONNECT_PORT;
 
-#[tokio::main]
-async fn main() {
+fn main() {
     println!("Data plane running.");
     print_version!("Data Plane");
 
@@ -30,7 +29,14 @@ async fn main() {
         .and_then(|port_str| port_str.as_str().parse::<u16>().ok())
         .unwrap_or(8008);
 
-    tokio::join!(start(data_plane_port), start_health_check_server());
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("Failed to build tokio runtime in data plane");
+
+    runtime.block_on(async move {
+        tokio::join!(start(data_plane_port), start_health_check_server());
+    });
 }
 
 #[cfg(not(feature = "network_egress"))]
