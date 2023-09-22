@@ -199,19 +199,21 @@ async fn tcp_server() -> Result<()> {
             StatsClient::record_request();
             tokio::spawn(async move {
                 println!("Accepted incoming TCP stream — {_client_socket_addr:?}");
-                let enclave_stream =
-                    match enclave_connection::get_connection_to_enclave(ENCLAVE_CONNECT_PORT).await
-                    {
-                        Ok(enclave_stream) => enclave_stream,
-                        Err(e) => {
-                            eprintln!("An error occurred while connecting to the enclave for connection {_client_socket_addr:?} — {e:?}");
-                            connection
-                                .shutdown()
-                                .await
-                                .expect("Failed to close connection to client");
-                            return;
-                        }
-                    };
+                let enclave_stream = match enclave_connection::get_connection_to_enclave(
+                    ENCLAVE_CONNECT_PORT,
+                )
+                .await
+                {
+                    Ok(enclave_stream) => enclave_stream,
+                    Err(e) => {
+                        eprintln!("An error occurred while connecting to the enclave for connection {_client_socket_addr:?} — {e:?}");
+                        connection
+                            .shutdown()
+                            .await
+                            .expect("Failed to close connection to client");
+                        return;
+                    }
+                };
 
                 if should_remove_proxy_protocol(data_plane_version.as_ref()) {
                     if let Err(e) = strip_proxy_protocol_and_pipe(connection, enclave_stream).await
