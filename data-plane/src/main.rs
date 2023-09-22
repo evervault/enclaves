@@ -31,7 +31,9 @@ fn try_update_fd_limit(soft_limit: u64, hard_limit: u64) {
     }
 }
 
+#[cfg(feature = "enclave")]
 const ENCLAVE_NOFILE_SOFT_LIMIT: u64 = 4096;
+#[cfg(feature = "enclave")]
 const ENCLAVE_NOFILE_HARD_LIMIT: u64 = 16384;
 
 fn main() {
