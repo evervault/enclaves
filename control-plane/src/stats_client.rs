@@ -10,7 +10,7 @@ pub struct StatsClient;
 impl StatsClient {
     pub fn init() {
         if let Err(e) = Self::initialize_sink() {
-            println!("Couldn't init statsd client: {e}");
+            log::error!("Couldn't init statsd client: {e}");
         }
     }
 

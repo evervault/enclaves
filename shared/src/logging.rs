@@ -12,6 +12,12 @@ use hyper::{
 
 use rand::{thread_rng, Rng};
 
+use env_logger::Env;
+pub fn init_env_logger() {
+    let env = Env::default().filter_or("EV_CAGE_LOG", "info");
+    env_logger::init_from_env(env);
+}
+
 #[allow(dead_code)]
 #[derive(Serialize, Deserialize, Clone, Debug, Builder, PartialEq)]
 #[serde(rename_all = "camelCase")]

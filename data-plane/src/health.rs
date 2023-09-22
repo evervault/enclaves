@@ -10,13 +10,13 @@ pub async fn start_health_check_server() {
     let mut health_check_server = get_vsock_server(ENCLAVE_HEALTH_CHECK_PORT, Enclave)
         .await
         .unwrap();
-    println!("Data plane health check server running on port {ENCLAVE_HEALTH_CHECK_PORT}");
+    log::info!("Data plane health check server running on port {ENCLAVE_HEALTH_CHECK_PORT}");
 
     loop {
         let stream = match health_check_server.accept().await {
             Ok(stream) => stream,
             Err(e) => {
-                eprintln!("Error accepting health check request — {e:?}");
+                log::error!("Error accepting health check request — {e:?}");
                 continue;
             }
         };
@@ -45,7 +45,7 @@ pub async fn start_health_check_server() {
             .serve_connection(stream, service)
             .await
         {
-            eprintln!("Data plane health check error: {error}");
+            log::error!("Data plane health check error: {error}");
         }
     }
 

@@ -12,7 +12,7 @@ pub struct StatsClient;
 impl StatsClient {
     pub fn init() {
         if let Err(e) = Self::initialize_sink() {
-            println!("Couldn't init statsd client: {e}");
+            log::error!("Couldn't init statsd client: {e}");
         }
     }
 
@@ -39,7 +39,7 @@ impl StatsClient {
 
     pub fn record_system_metrics() {
         if let Err(e) = Self::try_record_system_metrics() {
-            println!("Couldn't get system metrics: {e}");
+            log::error!("Couldn't get system metrics: {e}");
         }
     }
 

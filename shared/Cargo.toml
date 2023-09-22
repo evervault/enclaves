@@ -29,7 +29,7 @@ cadence = "0.29.0"
 httparse = "1.8.0"
 openssl = { version = "0.10.48", features = ["vendored"] }
 base64 = "0.13.0"
-
+env_logger = "0.10.0"
 
 [dev-dependencies]
 tokio-test = "0.4.2"
