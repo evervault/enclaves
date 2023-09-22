@@ -18,9 +18,30 @@ use data_plane::FeatureContext;
 use futures::future::join_all;
 use shared::ENCLAVE_CONNECT_PORT;
 
+#[cfg(feature = "enclave")]
+fn try_update_fd_limit(soft_limit: u64, hard_limit: u64) {
+    if let Err(e) = rlimit::setrlimit(rlimit::Resource::NOFILE, soft_limit, hard_limit) {
+        eprintln!("Failed to set enclave file descriptor limit on startup - {e:?}");
+    }
+    if let Ok((soft_limit, hard_limit)) = rlimit::getrlimit(rlimit::Resource::NOFILE) {
+        println!(
+            "RLIMIT_NOFILE: SoftLimit={}, HardLimit={}",
+            soft_limit, hard_limit
+        );
+    }
+}
+
+#[cfg(feature = "enclave")]
+const ENCLAVE_NOFILE_SOFT_LIMIT: u64 = 4096;
+#[cfg(feature = "enclave")]
+const ENCLAVE_NOFILE_HARD_LIMIT: u64 = 16384;
+
 fn main() {
     shared::logging::init_env_logger();
     print_version!("Data Plane");
+
+    #[cfg(feature = "enclave")]
+    try_update_fd_limit(ENCLAVE_NOFILE_SOFT_LIMIT, ENCLAVE_NOFILE_HARD_LIMIT);
 
     let mut args = std::env::args();
     let _ = args.next(); // ignore path to executable
