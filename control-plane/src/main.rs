@@ -204,7 +204,7 @@ async fn tcp_server() -> Result<()> {
                     {
                         Ok(enclave_stream) => enclave_stream,
                         Err(e) => {
-                            eprintln!("An error occurred while connecting to the enclave — {e:?}");
+                            eprintln!("An error occurred while connecting to the enclave for connection {_client_socket_addr:?} — {e:?}");
                             connection
                                 .shutdown()
                                 .await
