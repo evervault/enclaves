@@ -28,10 +28,10 @@ impl InterCaRetreiver {
     }
 
     pub async fn get_intermediate_ca(&self) -> Result<(X509, PKey<Private>)> {
-        println!("Sending request to control plane for cert provisioner token.");
+        log::info!("Sending request to control plane for cert provisioner token.");
         let token = self.config_client.get_cert_token().await?.token();
 
-        println!("Received token for cert provisioner. Requesting intermediate CA.");
+        log::info!("Received token for cert provisioner. Requesting intermediate CA.");
         let cert_response = self
             .cert_provisioner_client
             .get_cert(token)

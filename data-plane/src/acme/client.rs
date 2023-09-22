@@ -89,7 +89,7 @@ impl AcmeClientInterface for AcmeClient {
         let (mut request_sender, connection) = self.get_conn().await?;
         tokio::spawn(async move {
             if let Err(e) = connection.await {
-                eprintln!("Error in client connection: {e}");
+                log::error!("Error in client connection: {e}");
             }
         });
 

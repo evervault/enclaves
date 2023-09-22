@@ -91,7 +91,7 @@ impl HealthCheckServer {
     }
 
     pub async fn start(&mut self) -> ServerResult<()> {
-        println!(
+        log::info!(
             "Control plane health-check server running on port {CONTROL_PLANE_HEALTH_CHECK_PORT}"
         );
 
@@ -120,7 +120,7 @@ impl HealthCheckServer {
                 .serve_connection(stream, service)
                 .await
             {
-                eprintln!("Health check error: {error}");
+                log::error!("Health check error: {error}");
             }
         }
     }

@@ -22,7 +22,6 @@ pub fn find_ciphertext_prefix(input: &[u8]) -> IResult<&[u8], &[u8]> {
     take_until("ev:")(input)
 }
 
-// This function will be used, temporarily disabling linter
 pub fn parse_ciphertexts(input: &[u8]) -> IResult<&[u8], Option<Ciphertext>> {
     opt(context_aware_ciphertext)(input)
 }

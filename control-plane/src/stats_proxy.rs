@@ -10,7 +10,7 @@ pub struct StatsProxy;
 
 impl StatsProxy {
     pub async fn listen() -> Result<()> {
-        println!("Started control plane stats proxy");
+        log::info!("Started control plane stats proxy");
         let mut server = get_vsock_server(STATS_VSOCK_PORT, Parent).await?;
 
         loop {
@@ -18,11 +18,11 @@ impl StatsProxy {
                 Ok(stream) => {
                     tokio::spawn(async move {
                         if let Err(e) = Self::proxy_connection(stream).await {
-                            eprintln!("Error proxying stats connection: {e}");
+                            log::error!("Error proxying stats connection: {e}");
                         }
                     });
                 }
-                Err(e) => eprintln!("Error accepting connection in stats proxy - {e:?}"),
+                Err(e) => log::error!("Error accepting connection in stats proxy - {e:?}"),
             }
         }
         #[allow(unreachable_code)]

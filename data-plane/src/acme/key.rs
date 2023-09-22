@@ -93,7 +93,7 @@ impl AcmeKeyRetreiver {
     }
 
     pub async fn get_or_create_cage_key_pair(&self) -> Result<PKey<Private>, AcmeError> {
-        println!("[ACME] Starting polling for ACME key pair");
+        log::info!("[ACME] Starting polling for ACME key pair");
         let mut persisted_key_pair: Option<PKey<Private>> = None;
 
         let max_checks = 5;
@@ -108,32 +108,32 @@ impl AcmeKeyRetreiver {
 
             match RawAcmeKeyPair::from_storage(self.config_client.clone()).await? {
                 Some(raw_acme_key_pair) => {
-                    println!("[ACME] Key pair found in storage");
+                    log::info!("[ACME] Key pair found in storage");
                     //Key pair already exists, decrypt it
                     let decrypted_key_pair =
                         Self::decrypt_key_pair(self.e3_client.clone(), raw_acme_key_pair).await?;
                     persisted_key_pair = Some(decrypted_key_pair.key_pair()?);
                 }
                 None => {
-                    println!("[ACME] Key pair not found in storage, checking for lock");
+                    log::info!("[ACME] Key pair not found in storage, checking for lock");
                     let existing_lock =
                         StorageLock::read_from_storage(KEY_PAIR_LOCK_NAME.into()).await?;
                     match existing_lock {
                         Some(lock) => {
-                            println!("[ACME] Lock found, checking if expired");
+                            log::info!("[ACME] Lock found, checking if expired");
                             if lock.is_expired() {
-                                println!("[ACME] Lock expired, creating new lock, creating key pair, encrypting key pair, persisting key pair, deleting lock");
+                                log::info!("[ACME] Lock expired, creating new lock, creating key pair, encrypting key pair, persisting key pair, deleting lock");
                                 //Lock is expired - create new lock, create_key_pair - encrypt key pair - persist key pair - delete lock
                                 let unencrypted_key_pair_maybe =
                                     self.create_key_pair_and_persist_with_lock().await?;
                                 persisted_key_pair = unencrypted_key_pair_maybe;
                             }
-                            println!("[ACME] Lock not expired, waiting for key pair to be created by other instance or waiting for lock to expire");
+                            log::info!("[ACME] Lock not expired, waiting for key pair to be created by other instance or waiting for lock to expire");
                             //Do nothing if Lock is not expired
                             //wait for key pair to be created by other instance or wait for lock to expire
                         }
                         None => {
-                            println!("[ACME] Lock not found, creating lock, creating key pair, encrypting key pair, persisting key pair, deleting lock");
+                            log::info!("[ACME] Lock not found, creating lock, creating key pair, encrypting key pair, persisting key pair, deleting lock");
                             //Lock doesn't exist - create lock - create_key_pair - encrypt key pair - persist key pair - delete lock
                             let unencrypted_key_pair_maybe =
                                 self.create_key_pair_and_persist_with_lock().await?;
@@ -144,13 +144,13 @@ impl AcmeKeyRetreiver {
             };
 
             if persisted_key_pair.is_none() {
-                println!("[ACME] Key pair not found, sleeping for 3 seconds");
+                log::info!("[ACME] Key pair not found, sleeping for 3 seconds");
                 tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
             }
         }
 
         if let Some(persisted_key_pair) = persisted_key_pair {
-            println!("[ACME] Key pair found after polling");
+            log::info!("[ACME] Key pair found after polling");
             Ok(persisted_key_pair)
         } else {
             Err(AcmeError::General(

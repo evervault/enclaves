@@ -31,8 +31,9 @@ const PROXY_PROTOCOL_MIN_VERSION: semver::Version = semver::Version::new(0, 0, 3
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    shared::logging::init_env_logger();
     print_version!("Control Plane");
-    println!("Starting control plane on {CONTROL_PLANE_PORT}");
+    log::debug!("Starting control plane on {CONTROL_PLANE_PORT}");
     let e3_proxy = e3proxy::E3Proxy::new();
 
     let provisioner_proxy = tls_proxy::TlsProxy::new(
@@ -54,7 +55,7 @@ async fn main() -> Result<()> {
     let mtls_config = mtls_config::CertProvisionerMtlsCerts::from_env_vars()
         .expect("Couldn't read in env vars for mtls certs");
 
-    println!("MTLS Certs loaded for Cert Provisioner");
+    log::info!("MTLS Certs loaded for Cert Provisioner");
 
     let cert_provisioner_client = cert_provisioner::CertProvisionerClient::new(
         mtls_config.client_key_pair(),
@@ -89,27 +90,27 @@ async fn main() -> Result<()> {
         );
 
         if let Err(err) = tcp_result {
-            eprintln!("Error running TCP server on host: {err:?}");
+            log::error!("Error running TCP server on host: {err:?}");
         };
 
         if let Err(err) = e3_result {
-            eprintln!("Error running E3 proxy on host: {err:?}");
+            log::error!("Error running E3 proxy on host: {err:?}");
         }
 
         if let Err(err) = health_check_result {
-            eprintln!("Error running health check server on host: {err:?}");
+            log::error!("Error running health check server on host: {err:?}");
         }
 
         if let Err(err) = config_server_result {
-            eprintln!("Error running config server on host: {err:?}");
+            log::error!("Error running config server on host: {err:?}");
         }
 
         if let Err(err) = provisioner_proxy_result {
-            eprintln!("Error running provisioner proxy on host: {err:?}");
+            log::error!("Error running provisioner proxy on host: {err:?}");
         }
 
         if let Err(err) = acme_proxy_result {
-            eprintln!("Error running acme proxy on host: {err:?}");
+            log::error!("Error running acme proxy on host: {err:?}");
         }
     }
 
@@ -143,35 +144,35 @@ async fn main() -> Result<()> {
         );
 
         if let Err(tcp_err) = tcp_result {
-            eprintln!("An error occurred in the tcp server - {tcp_err:?}");
+            log::error!("An error occurred in the tcp server - {tcp_err:?}");
         }
 
         if let Err(dns_err) = dns_result {
-            eprintln!("An error occurred in the dns server - {dns_err:?}");
+            log::error!("An error occurred in the dns server - {dns_err:?}");
         }
 
         if let Err(egress_err) = egress_result {
-            eprintln!("An error occurred in the egress server - {egress_err:?}");
+            log::error!("An error occurred in the egress server - {egress_err:?}");
         }
 
         if let Err(e3_err) = e3_result {
-            eprintln!("An error occurred in the e3 server - {e3_err:?}");
+            log::error!("An error occurred in the e3 server - {e3_err:?}");
         }
 
         if let Err(err) = health_check_result {
-            eprintln!("Error running health check server on host: {err:?}");
+            log::error!("Error running health check server on host: {err:?}");
         }
 
         if let Err(err) = config_server_result {
-            eprintln!("Error running config server on host: {err:?}");
+            log::error!("Error running config server on host: {err:?}");
         }
 
         if let Err(err) = provisioner_result {
-            eprintln!("Error running provisioner proxy on host: {err:?}");
+            log::error!("Error running provisioner proxy on host: {err:?}");
         }
 
         if let Err(err) = acme_proxy_result {
-            eprintln!("Error running acme proxy on host: {err:?}");
+            log::error!("Error running acme proxy on host: {err:?}");
         }
     }
 
@@ -184,7 +185,7 @@ async fn tcp_server() -> Result<()> {
     let tcp_listener = match TcpListener::bind(addr).await {
         Ok(tcp_listener) => tcp_listener,
         Err(e) => {
-            eprintln!("Failed to bind to TCP Socket - {e:?}");
+            log::error!("Failed to bind to TCP Socket - {e:?}");
             return Err(e.into());
         }
     };
@@ -195,36 +196,37 @@ async fn tcp_server() -> Result<()> {
 
     loop {
         let data_plane_version = parsed_data_plane_version.clone();
-        if let Ok((mut connection, _client_socket_addr)) = tcp_listener.accept().await {
-            StatsClient::record_request();
-            tokio::spawn(async move {
-                println!("Accepted incoming TCP stream — {_client_socket_addr:?}");
-                let enclave_stream =
-                    match enclave_connection::get_connection_to_enclave(ENCLAVE_CONNECT_PORT).await
-                    {
-                        Ok(enclave_stream) => enclave_stream,
-                        Err(e) => {
-                            eprintln!("An error occurred while connecting to the enclave — {e:?}");
-                            connection
-                                .shutdown()
-                                .await
-                                .expect("Failed to close connection to client");
-                            return;
-                        }
-                    };
-
-                if should_remove_proxy_protocol(data_plane_version.as_ref()) {
-                    if let Err(e) = strip_proxy_protocol_and_pipe(connection, enclave_stream).await
-                    {
-                        eprintln!(
-                            "An error occurred while piping the connection over vsock - {e:?}"
-                        );
+        let (mut connection, client_socket_addr) = match tcp_listener.accept().await {
+            Ok(conn) => conn,
+            Err(e) => {
+                log::error!("Failed to accept incoming TCP stream - {:?}", e);
+                continue;
+            }
+        };
+        StatsClient::record_request();
+        tokio::spawn(async move {
+            log::debug!("Accepted incoming TCP stream — {client_socket_addr:?}");
+            let enclave_stream =
+                match enclave_connection::get_connection_to_enclave(ENCLAVE_CONNECT_PORT).await {
+                    Ok(enclave_stream) => enclave_stream,
+                    Err(e) => {
+                        log::error!("An error occurred while connecting to the enclave — {e:?}");
+                        connection
+                            .shutdown()
+                            .await
+                            .expect("Failed to close connection to client");
+                        return;
                     }
-                } else if let Err(e) = pipe_streams(connection, enclave_stream).await {
-                    eprintln!("An error occurred while piping the connection over vsock - {e:?}");
+                };
+
+            if should_remove_proxy_protocol(data_plane_version.as_ref()) {
+                if let Err(e) = strip_proxy_protocol_and_pipe(connection, enclave_stream).await {
+                    log::error!("An error occurred while piping the connection over vsock - {e:?}");
                 }
-            });
-        }
+            } else if let Err(e) = pipe_streams(connection, enclave_stream).await {
+                log::error!("An error occurred while piping the connection over vsock - {e:?}");
+            }
+        });
     }
 }
 
@@ -250,7 +252,7 @@ async fn strip_proxy_protocol_and_pipe<
 
 // Listen for SIGTERM and deregister task before shutting down
 fn listen_for_shutdown_signal() {
-    println!("Setting up listener for SIGTERM");
+    log::debug!("Setting up listener for SIGTERM");
     tokio::spawn(async {
         let sns_client =
             ControlPlaneSnsClient::new(configuration::get_deregistration_topic_arn()).await;
@@ -269,17 +271,17 @@ fn listen_for_shutdown_signal() {
 
         let _ = ctrlc::set_handler(move || {
             tx.send(()).unwrap_or_else(|err| {
-                println!("Could not broadcast sigterm to channel: {err:?}");
+                log::warn!("Could not broadcast sigterm to channel: {err:?}");
             })
         })
         .map_err(|err| {
-            eprintln!("Error setting up Sigterm handler: {err:?}");
+            log::error!("Error setting up Sigterm handler: {err:?}");
             std::io::Error::new(std::io::ErrorKind::Other, err)
         });
 
         match rx.recv().await {
             Some(_) => {
-                println!("Received SIGTERM - sending message to SNS");
+                log::info!("Received SIGTERM, deregistering.");
                 let sns_message = serde_json::to_string(&DeregistrationMessage::new(
                     ec2_instance_id,
                     cage_uuid,
@@ -289,7 +291,6 @@ fn listen_for_shutdown_signal() {
                 .expect("Error deserialising SNS message with serde");
                 sns_client.publish_message(sns_message).await;
 
-                println!("Received SIGTERM - sending message to SNS");
                 // Wait for 55 seconds before terminating enclave - ECS waits 60 seconds to kill the container
                 sleep(Duration::from_millis(55000)).await;
 
@@ -299,13 +300,13 @@ fn listen_for_shutdown_signal() {
                     .output()
                     .expect("failed to terminate enclave");
 
-                println!(
+                log::info!(
                     "Terminated enclave: {}",
                     String::from_utf8_lossy(&output.stdout)
                 );
             }
             None => {
-                eprintln!("Signal watcher returned None.");
+                log::error!("Signal watcher returned None.");
             }
         };
     });
