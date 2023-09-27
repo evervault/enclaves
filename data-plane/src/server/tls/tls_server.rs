@@ -79,9 +79,9 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
     }
 
     pub async fn with_attestable_cert(self) -> ServerResult<TlsServer<S>> {
-        println!("Creating TLSServer with attestable cert");
+        log::info!("Creating TLSServer with attestable cert");
         let (ca_cert, ca_private_key) = Self::get_ca_with_retry().await;
-        println!("Received intermediate CA from cert provisioner. Using it with TLS Server.");
+        log::debug!("Received intermediate CA from cert provisioner. Using it with TLS Server.");
 
         #[cfg(feature = "enclave")]
         let trusted_cert: Option<CertifiedKey> = enclave_trusted_cert().await;
@@ -112,14 +112,14 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
                     let exp_duration =
                         Duration::from_millis(((2 ^ attempts) * 100) + rng.gen_range(50..150));
                     thread::sleep(exp_duration);
-                    println!(
+                    log::error!(
                         "Error from provisioner sleeping for {} ms, error: {e}",
                         exp_duration.as_millis()
                     );
                     attempts += 1;
                 }
                 Err(e) => {
-                    println!("Error from provisioner sleeping for 20 seconds: {e}");
+                    log::error!("Error from provisioner sleeping for 20 seconds: {e}");
                     thread::sleep(Duration::from_secs(20));
                 }
                 Ok(ca) => break ca,

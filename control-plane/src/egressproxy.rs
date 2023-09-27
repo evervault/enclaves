@@ -23,8 +23,14 @@ lazy_static! {
 
 impl EgressProxy {
     pub async fn listen() -> Result<()> {
-        println!("Egress proxy started");
-        let mut server = get_vsock_server(EGRESS_PROXY_VSOCK_PORT, Parent).await?;
+        let mut server = match get_vsock_server(EGRESS_PROXY_VSOCK_PORT, Parent).await {
+            Ok(server) => server,
+            Err(e) => {
+                log::error!("Error starting egress proxy - {e:?}");
+                return Err(e.into());
+            }
+        };
+        log::info!("Egress proxy started");
         let allowed_domains = shared::server::egress::get_egress_allow_list_from_env();
 
         loop {
@@ -33,14 +39,14 @@ impl EgressProxy {
                 Ok(stream) => {
                     tokio::spawn(async move {
                         if let Err(e) = Self::handle_connection(stream, domains).await {
-                            eprintln!(
+                            log::error!(
                                 "An error occurred while handling an egress connection - {e:?}"
                             );
                         }
                     });
                 }
                 Err(e) => {
-                    eprintln!("An error occurred accepting the egress connection — {e:?}");
+                    log::error!("An error occurred accepting the egress connection — {e:?}");
                 }
             }
         }
@@ -52,7 +58,7 @@ impl EgressProxy {
         mut external_stream: T,
         egress_domains: EgressDomains,
     ) -> Result<(u64, u64)> {
-        println!("Received request to egress proxy");
+        log::debug!("Received request to egress proxy");
         let mut request_buffer = [0; 4096];
         let packet_size = external_stream.read(&mut request_buffer).await?;
         let req = &request_buffer[..packet_size];
@@ -70,7 +76,8 @@ impl EgressProxy {
         let hostname = get_hostname(external_request.data.clone())?;
         if let Err(err) = check_allow_list(hostname.clone(), egress_domains) {
             let _ = external_stream.shutdown().await;
-            return Err(err.into());
+            log::info!("Blocking request to {hostname} - {err}");
+            return Ok((0, 0));
         };
         let mut remote_stream = TcpStream::connect((connect_ip, external_request.port)).await?;
         remote_stream.write_all(&external_request.data).await?;
@@ -104,11 +111,11 @@ fn validate_requested_ip(ip_addr: &str, allow_egress_to_internal: bool) -> Resul
         Ok(parsed_addr)
             if is_not_globally_reachable_ip(&parsed_addr) && !allow_egress_to_internal =>
         {
-            println!("Blocking request to internal IP");
+            log::error!("Blocking request to internal IP");
             Err(ServerError::IllegalInternalIp(parsed_addr))
         }
         Err(e) => {
-            println!("Failed to parse IP");
+            log::error!("Failed to parse IP");
             Err(ServerError::InvalidIp(e))
         }
         Ok(ip_addr) => Ok(ip_addr),

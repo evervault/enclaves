@@ -91,8 +91,8 @@ impl ControlPlaneSnsClient {
             .send()
             .await
         {
-            Ok(_) => println!("Successfully published message to SNS"),
-            Err(err) => eprintln!("Failed to publish message to SNS. {err}"),
+            Ok(_) => log::debug!("Successfully published message to SNS"),
+            Err(err) => log::error!("Failed to publish message to SNS. {err}"),
         }
     }
 }

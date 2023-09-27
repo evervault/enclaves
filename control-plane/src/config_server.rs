@@ -54,7 +54,7 @@ impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> 
         let storage_client = self.storage_client.clone();
         let cage_context = self.cage_context.clone();
         let acme_account_details = self.acme_account_details.clone();
-        println!("Running config server on {}", shared::ENCLAVE_CONFIG_PORT);
+        log::info!("Running config server on {}", shared::ENCLAVE_CONFIG_PORT);
         loop {
             let cert_client = cert_client.clone();
             let storage_client = storage_client.clone();
@@ -63,7 +63,7 @@ impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> 
             let connection = match enclave_conn.accept().await {
                 Ok(conn) => conn,
                 Err(e) => {
-                    eprintln!("Error accepting config request from data plane — {e:?}");
+                    log::error!("Error accepting config request from data plane — {e:?}");
                     continue;
                 }
             };
@@ -98,7 +98,9 @@ impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> 
                     .await;
 
                 if let Err(processing_err) = sent_response {
-                    eprintln!("An error occurred while processing the request — {processing_err}");
+                    log::error!(
+                        "An error occurred while processing the request — {processing_err}"
+                    );
                 }
             });
         }
@@ -187,7 +189,7 @@ async fn get_token(
         .header("Content-Type", "application/json")
         .body(body)?;
 
-    println!("Token returned from cert provisioner, sending it back to the cage");
+    log::info!("Token returned from cert provisioner, sending it back to the cage");
 
     Ok(res)
 }
@@ -203,7 +205,7 @@ async fn handle_post_trx_logs_request(
     req: Request<Body>,
     cage_context: configuration::CageContext,
 ) -> Response<Body> {
-    println!("Recieved request in config server to log transactions");
+    log::debug!("Recieved request in config server to log transactions");
     let parsed_result: ServerResult<PostTrxLogsRequest> = parse_request(req).await;
     match parsed_result {
         Ok(log_body) => {
@@ -214,7 +216,10 @@ async fn handle_post_trx_logs_request(
             });
             build_success_response()
         }
-        Err(_) => build_error_response("Failed to parse log body from data plane".to_string()),
+        Err(e) => {
+            log::error!("Failed to parse log body from data plane - {e:?}");
+            build_error_response("Failed to parse log body from data plane".to_string())
+        }
     }
 }
 
@@ -227,7 +232,7 @@ async fn handle_acme_storage_get_request<T: StorageClientInterface>(
     match parsed_result {
         Ok(request_body) => {
             let namespaced_key = namespace_key(request_body.key(), &cage_context);
-            println!(
+            log::info!(
                 "Received get request in config server for {}",
                 namespaced_key
             );
@@ -235,12 +240,12 @@ async fn handle_acme_storage_get_request<T: StorageClientInterface>(
                 Ok(object) => match object {
                     Some(object) => object,
                     None => {
-                        println!("Object not found in storage client");
+                        log::info!("Object not found in storage client");
                         return Ok(build_bad_request_response());
                     }
                 },
                 Err(err) => {
-                    println!("Failed to get object in storage client: {}", err);
+                    log::error!("Failed to get object in storage client: {}", err);
                     return Ok(build_error_response(
                         "Failed to get object in storage client".to_string(),
                     ));
@@ -254,9 +259,12 @@ async fn handle_acme_storage_get_request<T: StorageClientInterface>(
                 .body(body)
                 .map_err(ServerError::HyperHttp)
         }
-        Err(_) => Ok(build_error_response(
-            "Failed to parse get object request from data plane".to_string(),
-        )),
+        Err(e) => {
+            log::error!("Failed to parse get object request - {e:?}");
+            Ok(build_error_response(
+                "Failed to parse get object request from data plane".to_string(),
+            ))
+        }
     }
 }
 
@@ -269,7 +277,7 @@ async fn handle_acme_storage_put_request<T: StorageClientInterface>(
     match parsed_result {
         Ok(request_body) => {
             let namespaced_key = namespace_key(request_body.key(), &cage_context);
-            println!(
+            log::info!(
                 "Received post request in config server for {}",
                 namespaced_key
             );
@@ -279,7 +287,7 @@ async fn handle_acme_storage_put_request<T: StorageClientInterface>(
             {
                 Ok(_) => Ok(build_success_response()),
                 Err(err) => {
-                    println!("Failed to put object in storage client: {}", err);
+                    log::error!("Failed to put object in storage client: {}", err);
                     Ok(build_error_response(
                         "Failed to put object in storage client".to_string(),
                     ))
@@ -301,14 +309,14 @@ async fn handle_acme_storage_delete_request<T: StorageClientInterface>(
     match parsed_result {
         Ok(request_body) => {
             let namespaced_key = namespace_key(request_body.key(), &cage_context);
-            println!(
+            log::info!(
                 "Received delete request in config server for {}",
                 namespaced_key
             );
             match storage_client.delete_object(namespaced_key).await {
                 Ok(_) => Ok(build_success_response()),
                 Err(err) => {
-                    println!("Failed to delete object in storage client: {}", err);
+                    log::error!("Failed to delete object in storage client: {}", err);
                     Ok(build_error_response(
                         "Failed to delete object in storage client".to_string(),
                     ))
@@ -326,13 +334,10 @@ async fn handle_acme_signing_request(
     acme_account_details: AcmeAccountDetails,
     cage_context: configuration::CageContext,
 ) -> Response<Body> {
-    println!("Received ACME signing request in config server");
+    log::info!("Received ACME signing request in config server");
     match sign_acme_payload(req, acme_account_details, cage_context).await {
         Ok(response) => response,
-        Err(err) => {
-            println!("Failed to sign request: {}", err);
-            build_error_response("Failed to sign JWS request".to_string())
-        }
+        Err(_) => build_error_response("Failed to sign JWS request".to_string()),
     }
 }
 
@@ -387,30 +392,24 @@ async fn sign_acme_payload(
                         .map_err(ServerError::HyperHttp)
                 }
                 Err(err) => {
-                    println!("Failed to sign request: {}", err);
+                    log::error!("Failed to sign request: {}", err);
                     Ok(build_error_response(
                         "Failed to sign JWS request".to_string(),
                     ))
                 }
             }
         }
-        Err(err) => {
-            println!("Failed to parse signing request from data plane: {}", err);
-            Ok(build_error_response(
-                "Failed to parse signing request from data plane".to_string(),
-            ))
-        }
+        Err(_) => Ok(build_error_response(
+            "Failed to parse signing request from data plane".to_string(),
+        )),
     }
 }
 
 async fn handle_acme_jwk_request(acme_account_details: AcmeAccountDetails) -> Response<Body> {
-    println!("Recieved ACME JWK request in config server");
+    log::info!("Recieved ACME JWK request in config server");
     match get_acme_jwk(acme_account_details).await {
         Ok(response) => response,
-        Err(err) => {
-            println!("Failed to get jwk: {}", err);
-            build_error_response("Failed to get JWK".to_string())
-        }
+        Err(_) => build_error_response("Failed to get JWK".to_string()),
     }
 }
 
@@ -462,7 +461,7 @@ fn build_bad_request_response() -> Response<Body> {
 }
 
 fn build_error_response(body_msg: String) -> Response<Body> {
-    println!("Request failed: {body_msg}");
+    log::debug!("Request failed: {body_msg}");
     Response::builder()
         .status(500)
         .header("Content-Type", "application/json")

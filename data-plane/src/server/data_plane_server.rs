@@ -62,12 +62,14 @@ where
     }
 
     let http_client = hyper::Client::new();
-    println!("TLS Server Created - Listening for new connections.");
+    log::info!("TLS Server Created - Listening for new connections.");
     loop {
         let mut stream = match server.accept().await {
             Ok(stream) => stream,
             Err(tls_err) => {
-                eprintln!("An error occurred while accepting the incoming connection — {tls_err}");
+                log::error!(
+                    "An error occurred while accepting the incoming connection — {tls_err}"
+                );
                 continue;
             }
         };
@@ -88,7 +90,7 @@ where
                 let chunk_size = match stream.read(&mut temp_chunk).await {
                     Ok(chunk_size) => chunk_size,
                     Err(e) => {
-                        eprintln!("Connection read error - {e:?}");
+                        log::error!("Connection read error - {e:?}");
                         shutdown_conn(&mut stream).await;
                         break;
                     }
@@ -102,11 +104,11 @@ where
                             let response_bytes = match handle_attestation_request(req).await {
                                 Ok(response) => response_to_bytes(response).await,
                                 Err(err) => {
-                                    eprintln!("Failed to handle attestation request - {err:?}");
+                                    log::error!("Failed to handle attestation request - {err:?}");
                                     match build_attestation_err_response(err) {
                                         Ok(response) => response_to_bytes(response).await,
                                         Err(err) => {
-                                            eprintln!("Failed to build attesation error response - {err:?}");
+                                            log::error!("Failed to build attesation error response - {err:?}");
                                             shutdown_conn(&mut stream).await;
                                             break;
                                         }
@@ -115,7 +117,7 @@ where
                             };
 
                             if let Err(err) = stream.write_all(&response_bytes).await {
-                                eprintln!("Failed to write attestation response to control plane - {err:?}");
+                                log::error!("Failed to write attestation response to control plane - {err:?}");
                                 shutdown_conn(&mut stream).await;
                             };
                             break;
@@ -134,7 +136,7 @@ where
                         )
                         .await
                         {
-                            eprintln!(
+                            log::error!(
                                 "Failed piping HTTP or WS stream to customer process — {err:?}"
                             );
                             shutdown_conn(&mut stream).await;
@@ -153,7 +155,7 @@ where
                         )
                         .await
                         {
-                            eprintln!(
+                            log::error!(
                                 "Failed piping non HTTP/WS stream to customer process — {err:?}"
                             );
                             shutdown_conn(&mut stream).await;
@@ -246,7 +248,7 @@ fn log_non_http_trx(
     remote_ip: Option<String>,
 ) {
     if let Err(e) = try_log_non_http_trx(tx_sender, authorized, req, RequestType::TCP, remote_ip) {
-        println!("Failed to send transaction context to log handler. err: {e}");
+        log::error!("Failed to send transaction context to log handler. err: {e}");
     };
 }
 
@@ -299,7 +301,7 @@ where
     TlsStream<L>: AsyncWriteExt + Unpin,
 {
     if let Err(e) = stream.shutdown().await {
-        eprintln!("Failed to shutdown data plane connection — {e:?}");
+        log::error!("Failed to shutdown data plane connection — {e:?}");
     }
 }
 
@@ -452,12 +454,12 @@ async fn handle_http_request(
 
                 //Send trx to config server in data plane
                 if let Err(e) = tx_for_req.send(LogHandlerMessage::new_log_message(ctx)) {
-                    println!("Failed to send transaction context to log handler. err: {e}")
+                    log::error!("Failed to send transaction context to log handler. err: {e}")
                 }
             }
         }
         Err(e) => {
-            println!("Failed to build transaction context. err: {e:?}")
+            log::error!("Failed to build transaction context. err: {e:?}")
         }
     };
 
@@ -499,7 +501,7 @@ async fn auth_request(
     cage_context: CageContext,
     e3_client: Arc<E3Client>,
 ) -> Option<Response<Body>> {
-    println!("Authenticating request");
+    log::debug!("Authenticating request");
 
     let hashed_api_key = match HeaderValue::from_bytes(&compute_base64_sha512(api_key.as_bytes())) {
         Ok(hashed_api_key_header) => hashed_api_key_header,
@@ -520,7 +522,7 @@ async fn auth_request(
     {
         Ok(auth_status) => {
             if !auth_status {
-                println!("Failed to authenticate request using provided API Key");
+                log::debug!("Failed to authenticate request using provided API Key");
                 let response: Response<Body> = AuthError::FailedToAuthenticateApiKey.into();
                 Some(response)
             } else {
@@ -529,14 +531,14 @@ async fn auth_request(
         }
         Err(ClientError::FailedRequest(status)) if status.as_u16() == 401 => {
             //Temporary fallback to authenticate with APP api key -- remove this match when moving to just scoped api keys
-            println!("Failed to auth with scoped api key hash, attempting with app api key");
+            log::debug!("Failed to auth with scoped api key hash, attempting with app api key");
             match e3_client
                 .authenticate(&api_key, auth_payload_for_app_api_key)
                 .await
             {
                 Ok(auth_status) => {
                     if !auth_status {
-                        println!("Failed to authenticate request using provided API Key");
+                        log::debug!("Failed to authenticate request using provided API Key");
                         let response: Response<Body> = AuthError::FailedToAuthenticateApiKey.into();
                         Some(response)
                     } else {
@@ -547,8 +549,9 @@ async fn auth_request(
                     let response: Response<Body> = AuthError::FailedToAuthenticateApiKey.into();
                     Some(response)
                 }
+                // non-401 response
                 Err(e) => {
-                    eprintln!("Failed to authenticate against e3 — {e:?}");
+                    log::error!("Failed to authenticate against e3 — {e:?}");
                     Some(build_error_response(Some(
                         "Connection to E3 failed.".to_string(),
                     )))
@@ -556,7 +559,7 @@ async fn auth_request(
             }
         }
         Err(e) => {
-            eprintln!("Failed to authenticate against e3 — {e:?}");
+            log::error!("Failed to authenticate against e3 — {e:?}");
             Some(build_error_response(Some(
                 "Connection to E3 failed.".to_string(),
             )))
@@ -578,7 +581,6 @@ async fn handle_incoming_request(
     // Serialize request onto socket
 
     if feature_context.api_key_auth {
-        println!("Authenticating request");
         let api_key = match req
             .headers()
             .get(hyper::http::header::HeaderName::from_static("api-key"))
@@ -629,7 +631,7 @@ pub async fn handle_standard_request(
     let request_bytes = match hyper::body::to_bytes(req_body).await {
         Ok(body_bytes) => body_bytes,
         Err(e) => {
-            eprintln!("Failed to read entire body — {e}");
+            log::error!("Failed to read entire body — {e}");
             return build_error_response(None);
         }
     };
@@ -656,12 +658,12 @@ pub async fn handle_standard_request(
         {
             Ok(decrypted) => decrypted,
             Err(e) => {
-                eprintln!("Failed to decrypt — {e}");
+                log::error!("Failed to decrypt — {e}");
                 return build_error_response(Some(format!("Failed to decrypt ciphertexts {e}")));
             }
         };
 
-        println!("Decryption complete");
+        log::info!("Decryption complete");
         decrypted.data().iter().rev().for_each(|entry| {
             let range = entry.range();
             let value_in_bytes = serde_json::to_vec(entry.value());
@@ -670,7 +672,7 @@ pub async fn handle_standard_request(
                     let _: Vec<u8> = bytes_vec.splice(range.0..range.1, value).collect();
                 }
                 Err(err) => {
-                    eprintln!("Failed to convert Json Value into bytes. Error {err}");
+                    log::error!("Failed to convert Json Value into bytes. Error {err}");
                 }
             }
         });
@@ -691,12 +693,12 @@ pub async fn handle_standard_request(
         .insert("Content-Length", HeaderValue::from(bytes_vec.len()));
 
     let decrypted_request = Request::from_parts(req_info, Body::from(bytes_vec));
-    println!("Finished processing request");
+    log::info!("Finished processing request");
     match http_client.request(decrypted_request).await {
         Ok(res) => res,
         Err(e) => {
             let msg = format!("Error requesting user process - {e}");
-            eprintln!("{msg}");
+            log::error!("{msg}");
             build_error_response(Some(msg))
         }
     }

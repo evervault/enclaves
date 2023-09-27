@@ -78,7 +78,7 @@ impl ConfigClient {
         let (mut request_sender, connection) = self.get_conn().await?;
         tokio::spawn(async move {
             if let Err(e) = connection.await {
-                eprintln!("Error with connection to config server in control plane: {e}");
+                log::error!("Error with connection to config server in control plane: {e}");
             }
         });
 
@@ -135,7 +135,7 @@ impl ConfigClient {
         if response.status() == StatusCode::OK {
             Ok(())
         } else {
-            println!(
+            log::error!(
                 "Error in post_trx_logs request to control plane: {}",
                 response.status()
             );
@@ -157,7 +157,7 @@ impl ConfigClient {
         let payload =
             JwsRequest::new(signature_type, url, nonce, payload, account_id).into_body()?;
 
-        println!("Sending JWS request to control plane: {:#?}", payload);
+        log::debug!("Sending JWS request to control plane: {:#?}", payload);
 
         let response = self
             .send(ConfigServerPath::AcmeSign, "GET", payload)
@@ -167,7 +167,7 @@ impl ConfigClient {
             let result: JwsResponse = self.parse_response(response).await?;
             Ok(result)
         } else {
-            println!(
+            log::error!(
                 "Error sending jws request to control plane. Response Code: {}",
                 response.status()
             );
@@ -187,7 +187,7 @@ impl ConfigClient {
             let result: JwkResponse = self.parse_response(response).await?;
             Ok(result)
         } else {
-            println!(
+            log::error!(
                 "Error sending jwk request to control plane. Response Code: {}",
                 response.status()
             );
@@ -220,7 +220,7 @@ impl ConfigClient {
             }
             StatusCode::NOT_FOUND => Ok(None),
             _ => {
-                println!(
+                log::error!(
                     "Error from get object request to control plane. Key: {}, Response Code {}",
                     key,
                     response.status()
@@ -240,7 +240,7 @@ impl ConfigClient {
         if response.status() == StatusCode::OK {
             Ok(())
         } else {
-            println!(
+            log::error!(
                 "Error sending put object request to control plane. Key: {}, Response Code{}",
                 key,
                 response.status()
@@ -261,7 +261,7 @@ impl ConfigClient {
         if response.status() == StatusCode::OK {
             Ok(())
         } else {
-            println!(
+            log::error!(
                 "Error sending delete object request to control plane. Key: {}, Response Code{}",
                 key,
                 response.status()

@@ -37,7 +37,7 @@ jobs:
       - name: Build control plane
         uses: evervault/cargo-static-build@master
         with:
-          cmd: cargo build -p control-plane --features enclave,network_egress --release --target ${{ env.LINUX_TARGET }}
+          cmd: cargo build -p control-plane --features enclave,network_egress,release_logging --release --target ${{ env.LINUX_TARGET }}
         env:
           RUSTFLAGS: "--cfg staging"
       - name: Move control-plane binary to root
@@ -79,7 +79,7 @@ jobs:
       - name: Build control plane
         uses: evervault/cargo-static-build@master
         with:
-          cmd: cargo build -p control-plane --features enclave --release --target ${{ env.LINUX_TARGET }}
+          cmd: cargo build -p control-plane --features enclave,release_logging --release --target ${{ env.LINUX_TARGET }}
         env:
           RUSTFLAGS: "--cfg staging"
       - name: Move control-plane binary to root

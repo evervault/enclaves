@@ -92,7 +92,7 @@ impl E3Client {
 
         Retry::spawn(retry_strategy, || async {
             self.decrypt(payload.clone()).await.map_err(|e| {
-                println!("Error attempting decryption {e:?}");
+                log::error!("Error attempting decryption {e:?}");
                 e
             })
         })
@@ -154,7 +154,7 @@ impl E3Client {
                 payload.try_into_body()?,
             )
             .await?;
-        println!("{response:?}");
+        log::debug!("{response:?}");
         Ok(response.status().is_success())
     }
 
