@@ -1,0 +1,15 @@
+[package]
+name = "vsock-proxy"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-trait = "0.1.73"
+clap = "4.4.6"
+pin-project = "1.1.3"
+shared = { path = "../../shared" }
+thiserror = "1.0.30"
+tokio = { version = "1.12.0", features = ["net", "rt", "io-util"] }
+tokio-vsock = "0.3.2"
