@@ -171,7 +171,14 @@ pub enum SourceConnection {
 }
 
 #[async_trait::async_trait]
-impl shared::server::Listener for SourceConnection {
+pub trait Listener: Sized {
+    type Connection: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Sync + Unpin;
+    type Error: std::fmt::Debug + std::fmt::Display;
+    async fn accept(&mut self) -> Result<Self::Connection, Self::Error>;
+}
+
+#[async_trait::async_trait]
+impl Listener for SourceConnection {
     type Connection = Connection;
     type Error = tokio::io::Error;
 
