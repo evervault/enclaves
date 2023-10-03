@@ -1,4 +1,3 @@
-use shared::server::Listener;
 use std::{net::AddrParseError, num::ParseIntError};
 use thiserror::Error;
 
@@ -40,6 +39,7 @@ impl Address {
             )));
         }
 
+        #[allow(clippy::get_first)]
         let parsed_cid = match addr_parts.get(0).unwrap().trim().parse::<u32>() {
             Ok(cid) => cid,
             Err(e) => return Err(Error::VsockParseError(VsockParseError::from(e))),
@@ -68,7 +68,7 @@ impl Address {
     }
 
     /// Convert an address into a destination connection to forward traffic over
-    pub async fn into_destination_connection(&self) -> Result<Connection, tokio::io::Error> {
+    pub async fn get_destination_connection(&self) -> Result<Connection, tokio::io::Error> {
         match self {
             Self::Tcp(tcp_addr) => {
                 let socket = tokio::net::TcpStream::connect(tcp_addr).await?;

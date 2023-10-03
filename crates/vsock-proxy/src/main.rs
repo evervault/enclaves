@@ -102,7 +102,7 @@ fn main() {
                 }
             };
 
-            let mut destination = match destination_address.into_destination_connection().await {
+            let mut destination = match destination_address.get_destination_connection().await {
                 Ok(dest_conn) => dest_conn,
                 Err(e) => {
                     eprintln!("Failed to create destination connection - {e}");
