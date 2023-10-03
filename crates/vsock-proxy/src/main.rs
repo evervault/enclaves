@@ -2,8 +2,7 @@ use clap::{Arg, Command};
 
 mod net;
 
-use net::{Address, Error};
-use shared::server::Listener;
+use net::{Address, Error, Listener};
 
 fn main() {
     let matches = Command::new("vsock-proxy")
