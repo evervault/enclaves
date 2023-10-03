@@ -68,7 +68,7 @@ fn main() {
 
     let parsed_destination: Result<Address, Error> = tcp_destination
         .map(|tcp_addr| Address::new_tcp_address(tcp_addr))
-        .or_else(|| vsock_source.map(|vsock_addr| Address::new_vsock_address(vsock_addr)))
+        .or_else(|| vsock_destination.map(|vsock_addr| Address::new_vsock_address(vsock_addr)))
         .expect("Infallible: either tcp or vsock address must exist");
 
     let destination_address = match parsed_destination {
