@@ -79,6 +79,29 @@ app.post('/attestation-doc', async (req, res) => {
 })
 
 
+app.all("/chunked", async (req, res) => {
+  try {
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('transfer-encoding', 'chunked');
+    const responseData = { response: 'Hello from enclave', ...req.body };
+
+    const jsonStr = JSON.stringify(responseData);
+
+    const chunkSize = 20;
+
+    for (let i = 0; i < jsonStr.length; i += chunkSize) {
+      const chunk = jsonStr.slice(i, i + chunkSize);
+      res.write(chunk);
+    }
+
+    res.end();
+  } catch (err) {
+    console.log("Could not handle hello request", err);
+    res.status(500).send({msg: "Error from within the cage!"})
+  }
+});
+
+
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`)
 })

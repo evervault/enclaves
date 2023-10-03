@@ -439,6 +439,9 @@ async fn handle_http_request(
     trx_context.add_res_to_trx_context(&response, trusted_headers.as_ref());
     let built_context = trx_context.stop_timer_and_build(request_timer);
 
+    //Strip transfer encoding header as hyper client is building chunked response before returning. Temp fix, should supported passing chunked bytes back to client
+    response.headers_mut().remove("transfer-encoding");
+
     match built_context {
         Ok(ctx) => {
             if trx_logging_enabled {
