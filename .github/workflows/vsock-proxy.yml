@@ -22,8 +22,11 @@ jobs:
       - name: Check project
         run: cargo check -p vsock-proxy
       - uses: actions-rs/clippy-check@v1
+        with:
+          args: -p vsock-proxy
       - name: Check formatting
         run: cargo fmt --check
+
   test-proxy:
     runs-on: ubuntu-latest
     needs: [check-proxy]
@@ -38,6 +41,7 @@ jobs:
           shared-key: "vsock-proxy"
       - name: Test vsock proxy
         run: cargo test -p vsock-proxy
+
   build-proxy:
     runs-on: ubuntu-latest
     needs: [check-proxy,test-proxy]
@@ -54,6 +58,7 @@ jobs:
         with:
           name: vsock-proxy
           path: target/release/vsock-proxy
+          
   release-proxy:
     runs-on: ubuntu-latest
     needs: [check-proxy, test-proxy, build-proxy]
