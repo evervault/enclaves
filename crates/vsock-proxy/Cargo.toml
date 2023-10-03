@@ -2,6 +2,10 @@
 name = "vsock-proxy"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+description = "A minimal CLI to proxy TCP traffic to or from VSock"
+authors = ["Evervault Engineering <engineering@evervault.com>"]
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
