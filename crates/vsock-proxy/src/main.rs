@@ -203,14 +203,14 @@ fn main() {
         .arg(
             Arg::new("tcp-source")
                 .long("tcp-source")
-                .help("The tcp source address for the proxy to bind to.")
+                .help("The tcp address for the proxy to listen on.")
                 .conflicts_with("vsock-source")
                 .required(false),
         )
         .arg(
             Arg::new("tcp-destination")
                 .long("tcp-dest")
-                .help("The tcp destination address for the proxy to forward to.")
+                .help("The tcp address for the proxy to forward to.")
                 .conflicts_with("vsock-destination")
                 .conflicts_with("tcp-source")
                 .required(false),
@@ -218,13 +218,13 @@ fn main() {
         .arg(
             Arg::new("vsock-source")
                 .long("vsock-source")
-                .help("The vsock source address for the proxy to bind to.")
+                .help("The vsock address for the proxy to listen on.")
                 .required(false),
         )
         .arg(
             Arg::new("vsock-destination")
                 .long("vsock-dest")
-                .help("The vsock destination address for the proxy to forward to.")
+                .help("The vsock address for the proxy to forward to.")
                 .conflicts_with("vsock-source")
                 .required(false),
         )
