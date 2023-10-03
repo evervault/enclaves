@@ -46,7 +46,7 @@ impl Address {
             Err(e) => return Err(Error::VsockParseError(VsockParseError::from(e))),
         };
 
-        let parsed_port = match addr_parts.get(0).unwrap().trim().parse::<u32>() {
+        let parsed_port = match addr_parts.get(1).unwrap().trim().parse::<u32>() {
             Ok(port) => port,
             Err(e) => return Err(Error::VsockParseError(VsockParseError::from(e))),
         };
