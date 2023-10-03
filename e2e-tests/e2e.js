@@ -10,6 +10,7 @@ describe("POST data to enclave", () => {
       rejectUnauthorized: false,
     }),
   });
+
   it("enclave responds and echos back body", () => {
     return allowAllCerts
       .post(
@@ -128,6 +129,28 @@ describe("POST data to enclave", () => {
         PCR8: "000",
       },
     });
+  });
+
+  it("enclave responds and echos back body without transfer-encoding", () => {
+    return allowAllCerts
+      .post(
+        "https://cage.localhost:443/chunked",
+        { secret: "ev:123" },
+        { headers: { "api-key": "placeholder" } }
+      )
+      .then((result) => {
+        console.log("Post request sent to the enclave");
+        expect(result.data).to.deep.equal({
+          response: "Hello from enclave",
+          secret: "ev:123",
+        });
+        //check transfer-encoding is not set
+        expect(result.headers['transfer-encoding']).to.be.undefined;
+      })
+      .catch((err) => {
+        console.error(err);
+        throw err;
+      });
   });
 });
 
