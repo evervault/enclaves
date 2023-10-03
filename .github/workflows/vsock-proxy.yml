@@ -1,0 +1,43 @@
+on:
+  push:
+    paths:
+      - crates/vsock-proxy/**
+      - shared/**
+      - .github/workflows/vsock-proxy.yml
+name: vsock-proxy
+jobs:
+  check-proxy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "vsock-proxy"
+      - name: Check project
+        run: cargo check -p vsock-proxy
+  test-proxy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "vsock-proxy"
+      - name: Test vsock proxy
+        run: cargo test -p vsock-proxy
+  build-proxy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compile proxy
+        run: cargo build -p vsock-proxy --release
+      - name: Upload proxy
+        uses: actions/upload-artifact@v2
+        with:
+          name: vsock-proxy
+          path: target/release/vsock-proxy
+      
