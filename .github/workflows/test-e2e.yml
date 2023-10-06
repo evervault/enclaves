@@ -15,7 +15,7 @@ jobs:
       - name: Build Cages Project
         uses: evervault/cargo-static-build@master
         with:
-          cmd: cargo build --features network_egress --release --target x86_64-unknown-linux-musl
+          cmd: cargo build --features network_egress --release --target x86_64-unknown-linux-musl --exclude vsock-proxy
       - name: Build mock crypto API
         uses: evervault/cargo-static-build@master
         with:
@@ -40,7 +40,7 @@ jobs:
       - name: Build Cages Project
         uses: evervault/cargo-static-build@master
         with:
-          cmd: cargo build --release --target x86_64-unknown-linux-musl --features not_enclave --no-default-features
+          cmd: cargo build --release --target x86_64-unknown-linux-musl --features not_enclave --no-default-features --exclude vsock-proxy
       - name: Build mock crypto API
         uses: evervault/cargo-static-build@master
         with:

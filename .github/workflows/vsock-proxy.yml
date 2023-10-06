@@ -26,7 +26,7 @@ jobs:
           args: -p vsock-proxy
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Check formatting
-        run: cargo fmt --check
+        run: cargo fmt -p vsock-proxy --check
 
   test-proxy:
     runs-on: ubuntu-latest
