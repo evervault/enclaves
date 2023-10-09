@@ -167,32 +167,34 @@ where
             }
         };
 
-        let mut customer_stream = match tokio::net::TcpStream::connect(("0.0.0.0", port)).await {
-            Ok(customer_stream) => customer_stream,
-            Err(e) => {
-                log::error!(
-                    "An error occurred while connecting to the customer process — {}",
-                    e
-                );
-                continue;
-            }
-        };
-
-        if incoming_conn.has_proxy_protocol() && should_forward_proxy_protocol {
-            // flush proxy protocol bytes to customer process
-            let proxy_protocol = incoming_conn.proxy_protocol().unwrap();
-            if let Err(e) = customer_stream.write_all(proxy_protocol.as_bytes()).await {
-                log::error!(
-                    "An error occurred while forwarding the proxy protocol to the customer process — {}",
-                    e
-                );
-                continue;
-            }
-        }
-
-        if let Err(e) = pipe_streams(incoming_conn, customer_stream).await {
-            log::error!("An error occurred piping between the incoming connection and the customer process — {}", e);
-            continue;
-        }
+        tokio::spawn(async move {
+          let mut customer_stream = match tokio::net::TcpStream::connect(("0.0.0.0", port)).await {
+              Ok(customer_stream) => customer_stream,
+              Err(e) => {
+                  log::error!(
+                      "An error occurred while connecting to the customer process — {}",
+                      e
+                  );
+                  return;
+              }
+          };
+  
+          if incoming_conn.has_proxy_protocol() && should_forward_proxy_protocol {
+              // flush proxy protocol bytes to customer process
+              let proxy_protocol = incoming_conn.proxy_protocol().unwrap();
+              if let Err(e) = customer_stream.write_all(proxy_protocol.as_bytes()).await {
+                  log::error!(
+                      "An error occurred while forwarding the proxy protocol to the customer process — {}",
+                      e
+                  );
+                  return;
+              }
+          }
+  
+          if let Err(e) = pipe_streams(incoming_conn, customer_stream).await {
+              log::error!("An error occurred piping between the incoming connection and the customer process — {}", e);
+              return;
+          }
+        });
     }
 }
