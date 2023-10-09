@@ -2,7 +2,7 @@ use std::time::SystemTime;
 use tokio_rustls::rustls::client::ServerCertVerifier;
 use tokio_rustls::rustls::{
     client::{ServerCertVerified, ServerName},
-    Certificate, CertificateError, Error
+    Certificate, CertificateError, Error,
 };
 
 use crate::configuration;
