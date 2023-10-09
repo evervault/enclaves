@@ -448,10 +448,12 @@ async fn handle_http_request(
 
     //Strip transfer encoding header as hyper client is building chunked response before returning. Temp fix, should supported passing chunked bytes back to client
     if let Some(_chunked) = response.headers_mut().remove("transfer-encoding") {
-      let (mut parts, body) = response.into_parts();
-      let body_bytes = hyper::body::to_bytes(body).await.unwrap();
-      parts.headers.append("content-length", body_bytes.len().into());
-      response = hyper::Response::from_parts(parts, hyper::Body::from(body_bytes));
+        let (mut parts, body) = response.into_parts();
+        let body_bytes = hyper::body::to_bytes(body).await.unwrap();
+        parts
+            .headers
+            .append("content-length", body_bytes.len().into());
+        response = hyper::Response::from_parts(parts, hyper::Body::from(body_bytes));
     }
 
     match built_context {
