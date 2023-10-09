@@ -2,7 +2,7 @@ use std::time::SystemTime;
 use tokio_rustls::rustls::client::ServerCertVerifier;
 use tokio_rustls::rustls::{
     client::{ServerCertVerified, ServerName},
-    Certificate, Error,
+    Certificate, CertificateError, Error
 };
 
 use crate::configuration;
@@ -25,9 +25,7 @@ impl ServerCertVerifier for CertProvisionerCertVerifier {
         if &expected_server_name == _server_name {
             Ok(ServerCertVerified::assertion())
         } else {
-            Err(Error::InvalidCertificateData(
-                "Hostname in cert not what was expected".to_string(),
-            ))
+            Err(Error::InvalidCertificate(CertificateError::NotValidForName))
         }
     }
 }

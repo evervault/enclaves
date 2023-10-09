@@ -80,7 +80,7 @@ where
         tokio::spawn(async move {
             let e3_client_for_tcp = e3_client_for_connection.clone();
             let tx_for_tcp = tx_for_connection.clone();
-            let remote_ip = stream.get_remote_addr();
+            let remote_ip = stream.get_ref().0.get_remote_addr();
 
             let mut buffer = Vec::new();
             loop {
