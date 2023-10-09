@@ -17,6 +17,7 @@ impl From<AuthError> for hyper::Response<hyper::Body> {
         let msg = err.to_string();
         hyper::Response::builder()
             .status(401)
+            .header("content-length", msg.len())
             .body(msg.into())
             .expect("Failed to build auth error to response")
     }
