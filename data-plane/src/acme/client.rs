@@ -36,7 +36,7 @@ impl AcmeClient {
     pub fn new(server_name: ServerName) -> Self {
         let mut root_cert_store = RootCertStore::empty();
 
-        root_cert_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
+        root_cert_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
             OwnedTrustAnchor::from_subject_spki_name_constraints(
                 ta.subject,
                 ta.spki,
