@@ -17,6 +17,7 @@ use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
 
 use bytes::Bytes;
 use futures::StreamExt;
+use hyper::client::HttpConnector;
 
 use crate::error::Error;
 use httparse::Status;
@@ -60,6 +61,7 @@ where
         });
     }
 
+    let http_client = hyper::Client::new();
     log::info!("TLS Server Created - Listening for new connections.");
     loop {
         let mut stream = match server.accept().await {
@@ -74,6 +76,7 @@ where
 
         let e3_client_for_connection = e3_client.clone();
         let tx_for_connection = tx.clone();
+        let cloned_http_client = http_client.clone();
         tokio::spawn(async move {
             let e3_client_for_tcp = e3_client_for_connection.clone();
             let tx_for_tcp = tx_for_connection.clone();
@@ -129,6 +132,7 @@ where
                             body_offset,
                             &buffer,
                             &mut stream,
+                            cloned_http_client.clone(),
                         )
                         .await
                         {
@@ -193,6 +197,7 @@ async fn handle_full_parsed_http_request<L>(
     body_offset: usize,
     buffer: &[u8],
     stream: &mut TlsStream<L>,
+    http_client: hyper::Client<HttpConnector, Body>,
 ) -> Result<()>
 where
     TlsStream<L>: AsyncReadExt + AsyncWriteExt + Unpin,
@@ -227,11 +232,11 @@ where
             tx_sender.clone(),
             remote_ip.clone(),
             port,
+            http_client,
         )
         .await?;
         let response_bytes = response_to_bytes(response).await;
         stream.write_all(&response_bytes).await?;
-        shutdown_conn(stream).await;
         Ok(())
     }
 }
@@ -400,6 +405,7 @@ async fn handle_http_request(
     tx_for_tcp: UnboundedSender<LogHandlerMessage>,
     remote_ip: Option<String>,
     port: u16,
+    http_client: hyper::Client<HttpConnector, Body>,
 ) -> Result<Response<Body>> {
     let e3_client_for_req = e3_client_for_tcp.clone();
     let feature_context = FeatureContext::get();
@@ -432,6 +438,7 @@ async fn handle_http_request(
         cage_context.clone(),
         feature_context.clone(),
         &mut trx_context,
+        http_client,
     )
     .await;
 
@@ -570,6 +577,7 @@ async fn handle_incoming_request(
     cage_context: CageContext,
     feature_context: FeatureContext,
     trx_context: &mut TrxContextBuilder,
+    http_client: hyper::Client<HttpConnector, Body>,
 ) -> Response<Body> {
     // Extract API Key header and authenticate request
     // Run parser over payload
@@ -608,6 +616,7 @@ async fn handle_incoming_request(
             customer_port,
             e3_client,
             trx_context,
+            http_client,
         )
         .await
     }
@@ -619,6 +628,7 @@ pub async fn handle_standard_request(
     customer_port: u16,
     e3_client: Arc<E3Client>,
     trx_context: &mut TrxContextBuilder,
+    http_client: hyper::Client<HttpConnector, Body>,
 ) -> Response<Body> {
     let (mut req_info, req_body) = req_parts;
     let request_bytes = match hyper::body::to_bytes(req_body).await {
@@ -687,7 +697,6 @@ pub async fn handle_standard_request(
 
     let decrypted_request = Request::from_parts(req_info, Body::from(bytes_vec));
     log::info!("Finished processing request");
-    let http_client = hyper::Client::new();
     match http_client.request(decrypted_request).await {
         Ok(res) => res,
         Err(e) => {

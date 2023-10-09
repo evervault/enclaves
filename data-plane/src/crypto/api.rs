@@ -56,17 +56,18 @@ pub enum CryptoApiError {
 impl From<CryptoApiError> for hyper::Response<hyper::Body> {
     fn from(err: CryptoApiError) -> Self {
         match err {
-            CryptoApiError::SerdeError(error) => build_response(400, Body::from(error.to_string())),
-            CryptoApiError::SerializationError => build_response(400, Body::from(err.to_string())),
-            _ => build_response(500, Body::from(err.to_string())),
+            CryptoApiError::SerdeError(error) => build_response(400, error.to_string()),
+            CryptoApiError::SerializationError => build_response(400, err.to_string()),
+            _ => build_response(500, err.to_string()),
         }
     }
 }
 
-fn build_response(status: u16, body: Body) -> hyper::Response<hyper::Body> {
+fn build_response(status: u16, body: String) -> hyper::Response<hyper::Body> {
     hyper::Response::builder()
         .status(status)
-        .body(body)
+        .header("content-length", body.len())
+        .body(body.into())
         .expect("Failed to build response")
 }
 
