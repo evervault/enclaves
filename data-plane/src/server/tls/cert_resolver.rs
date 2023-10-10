@@ -368,10 +368,14 @@ mod tests {
         };
     }
 
+    fn get_test_trusted_cert() -> Option<CertifiedKey>{
+        TRUSTED_CERT_STORE.read().unwrap().get_trusted_cert()
+    }
+
     fn test_cert_with_hostname(server_name: Option<String>) {
         let (cert, key) = generate_ca().unwrap();
         let test_trustable_cert = generate_end_cert();
-        let resolver = AttestableCertResolver::new(cert, key, Some(test_trustable_cert)).unwrap();
+        let resolver = AttestableCertResolver::new(cert, key).unwrap();
         let first_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();
@@ -426,7 +430,7 @@ mod tests {
         let server_name = Some(ctx.get_cert_name());
         let (cert, key) = generate_ca().unwrap();
         let test_trustable_cert = generate_end_cert();
-        let resolver = AttestableCertResolver::new(cert, key, Some(test_trustable_cert)).unwrap();
+        let resolver = AttestableCertResolver::new(cert, key).unwrap();
         let first_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();
@@ -482,7 +486,7 @@ mod tests {
         let server_name = Some(hostname.clone());
         let (cert, key) = generate_ca().unwrap();
         let test_trustable_cert = generate_end_cert();
-        let resolver = AttestableCertResolver::new(cert, key, Some(test_trustable_cert)).unwrap();
+        let resolver = AttestableCertResolver::new(cert, key).unwrap();
         let first_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();
@@ -513,8 +517,7 @@ mod tests {
 
         let server_name = Some(hostname.clone());
         let (cert, key) = generate_ca().unwrap();
-        let test_trustable_cert = generate_end_cert();
-        let resolver = AttestableCertResolver::new(cert, key, Some(test_trustable_cert)).unwrap();
+        let resolver = AttestableCertResolver::new(cert, key).unwrap();
         let first_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();
@@ -529,60 +532,6 @@ mod tests {
             given_host == hostname
         });
         assert!(final_name_entry.is_some());
-    }
-
-    fn test_trusted_cert_with_hostname(
-        server_name: Option<String>,
-        should_return_trusted_cert: bool,
-    ) {
-        let (cert, key) = generate_ca().unwrap();
-        let test_trustable_cert = generate_end_cert();
-        let resolver =
-            AttestableCertResolver::new(cert, key, Some(test_trustable_cert.clone())).unwrap();
-        let returned_cert = resolver
-            .resolve_cert_using_sni(server_name.as_deref())
-            .unwrap();
-
-        let returned_x509 = parse_x509_from_rustls_certified_key(&returned_cert);
-        let expected_x509 = parse_x509_from_rustls_certified_key(&test_trustable_cert);
-
-        if should_return_trusted_cert {
-            assert_eq!(get_digest!(&returned_x509), get_digest!(&expected_x509));
-        } else {
-            assert_ne!(get_digest!(&returned_x509), get_digest!(&expected_x509));
-        }
-    }
-
-    #[test]
-    fn test_trusted_cert_used_with_trusted_hostname() {
-        let server_name = Some("wicked_cage.app_123543.cage.evervault.com".to_string());
-        test_trusted_cert_with_hostname(server_name, true);
-    }
-
-    #[test]
-    fn test_trusted_cert_used_with_other_hostname() {
-        let server_name = Some("wicked_cage.app_123543.cages.evervault.com".to_string());
-        test_trusted_cert_with_hostname(server_name, false);
-    }
-
-    #[test]
-    fn test_trusted_cert_not_set_in_resolver() {
-        let (cert, key) = generate_ca().unwrap();
-        let resolver = AttestableCertResolver::new(cert, key, None).unwrap();
-
-        //Should return default cert when trusted cert not set.
-        let first_cert = resolver
-            .resolve_cert_using_sni(Some("wicked_cage.app_123543.cage.evervault.com"))
-            .unwrap();
-
-        let second_cert = resolver
-            .resolve_cert_using_sni(Some("wicked_cage.app_123543.cage.evervault.com"))
-            .unwrap();
-
-        let first_x509 = parse_x509_from_rustls_certified_key(&first_cert);
-        let second_x509 = parse_x509_from_rustls_certified_key(&second_cert);
-
-        assert_eq!(get_digest!(&first_x509), get_digest!(&second_x509));
     }
 
     #[test]
