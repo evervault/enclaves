@@ -120,7 +120,14 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
         });
 
         #[cfg(not(feature = "enclave"))] // Don't order trusted certs locally
-        log::info!("Not ordering trusted cert, running in non-enclave mode");
+        {
+            log::info!("Not ordering trusted cert, running in non-enclave mode");
+
+            //Once trusted cert ordered and stored, write trusted cert initialised var
+            if let Err(err) = Environment::write_trusted_cert_complete_env_var() {
+                log::error!("Error writing trusted cert initialised env var: {err}");
+            }
+        }
     }
 
     async fn get_ca_with_retry() -> (X509, PKey<Private>) {
