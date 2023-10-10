@@ -319,7 +319,7 @@ impl AttestableCertResolver {
             match TRUSTED_CERT_STORE.read() {
                 Ok(trusted_cert_store) => trusted_cert_store
                     .get_trusted_cert()
-                    .map(|cert| Arc::new(cert)),
+                    .map(Arc::new),
                 Err(_) => {
                     log::error!("Unable to get lock on the for publicly trusted certificate.");
                     None

@@ -21,6 +21,12 @@ pub struct TrustedCertStore {
     cage_initliazed_time: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+impl Default for TrustedCertStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TrustedCertStore {
     pub fn new() -> Self {
         Self {
@@ -38,7 +44,7 @@ impl TrustedCertStore {
     }
 
     pub fn get_initialized_time(&self) -> Option<chrono::DateTime<chrono::Utc>> {
-        self.cage_initliazed_time.clone()
+        self.cage_initliazed_time
     }
 
     pub fn set_initialized_time(&mut self, time: chrono::DateTime<chrono::Utc>) {
