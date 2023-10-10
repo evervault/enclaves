@@ -20,6 +20,7 @@ use tokio_rustls::rustls::server::ResolvesServerCert;
 use tokio_rustls::rustls::sign::{self, CertifiedKey};
 use tokio_rustls::rustls::{Certificate, PrivateKey};
 
+use crate::cache::TRUSTED_CERT_STORE;
 use crate::server::error::{ServerResult, TlsError};
 use crate::CageContext;
 
@@ -91,15 +92,10 @@ pub struct AttestableCertResolver {
     internal_pk: PKey<Private>,
     // if we don't receive a nonce, we should return a generic, attestable cert
     base_cert_container: CertContainer,
-    trusted_cert: Option<CertifiedKey>,
 }
 
 impl AttestableCertResolver {
-    pub fn new(
-        internal_ca: X509,
-        internal_pk: PKey<Private>,
-        trusted_cert: Option<CertifiedKey>,
-    ) -> ServerResult<Self> {
+    pub fn new(internal_ca: X509, internal_pk: PKey<Private>) -> ServerResult<Self> {
         let cage_context = CageContext::get()?;
         let hostnames = cage_context.get_cert_names();
         let (created_at, cert_and_key) = Self::generate_self_signed_cert(
@@ -114,7 +110,6 @@ impl AttestableCertResolver {
             internal_ca,
             internal_pk,
             base_cert_container: CertContainer::new(created_at, cert_and_key),
-            trusted_cert,
         })
     }
 
@@ -320,13 +315,16 @@ impl AttestableCertResolver {
             .ok()
             .map(|(_expiry, cert)| Arc::new(cert))?;
             Some(certified_key)
-        } else if self.trusted_cert.is_some() && Self::is_trusted_cert_domain(server_name) {
-            let trusted_cert = self
-                .trusted_cert
-                .clone()
-                .expect("Infallible - Checked in if condition earlier");
-
-            Some(Arc::new(trusted_cert))
+        } else if Self::is_trusted_cert_domain(server_name) {
+            match TRUSTED_CERT_STORE.read() {
+                Ok(trusted_cert_store) => trusted_cert_store
+                    .get_trusted_cert()
+                    .map(|cert| Arc::new(cert)),
+                Err(_) => {
+                    log::error!("Unable to get lock on the for publicly trusted certificate.");
+                    None
+                }
+            }
         } else {
             // no nonce given - serve base cert
             self.base_cert_container.resolve_cert(|| {
