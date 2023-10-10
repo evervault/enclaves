@@ -317,9 +317,7 @@ impl AttestableCertResolver {
             Some(certified_key)
         } else if Self::is_trusted_cert_domain(server_name) {
             match TRUSTED_CERT_STORE.read() {
-                Ok(trusted_cert_store) => trusted_cert_store
-                    .get_trusted_cert()
-                    .map(Arc::new),
+                Ok(trusted_cert_store) => trusted_cert_store.get_trusted_cert().map(Arc::new),
                 Err(_) => {
                     log::error!("Unable to get lock on the for publicly trusted certificate.");
                     None
