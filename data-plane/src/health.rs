@@ -6,6 +6,8 @@ use shared::server::health::{HealthCheckLog, HealthCheckStatus};
 use shared::server::CID::Enclave;
 use shared::{server::Listener, ENCLAVE_HEALTH_CHECK_PORT};
 
+use crate::cache::TRUSTED_CERT_STORE;
+
 pub async fn start_health_check_server() {
     let mut health_check_server = get_vsock_server(ENCLAVE_HEALTH_CHECK_PORT, Enclave)
         .await
@@ -20,20 +22,16 @@ pub async fn start_health_check_server() {
                 continue;
             }
         };
-        let service = hyper::service::service_fn(move |_: Request<Body>| async move {
+        let service = hyper::service::service_fn(move |_: Request<Body>| async {
             match fs::read_to_string("/etc/customer-env") {
                 Ok(contents) => {
-                    if contents.contains("EV_CAGE_INITIALIZED") {
-                        let response = HealthCheckLog {
-                            message: Some("Hello from the data-plane".into()),
-                            status: HealthCheckStatus::Ok,
-                        };
-
-                        Response::builder()
-                            .status(200)
-                            .body(Body::from(serde_json::to_string(&response).unwrap()))
-                    } else {
-                        error_response()
+                    match (
+                        contents.contains("EV_CAGE_INITIALIZED"),
+                        contents.contains("EV_CAGE_CERT_READY"),
+                    ) {
+                        (true, true) => ok_response(),
+                        (true, false) => check_for_trusted_cert_timeout(),
+                        _ => error_response(),
                     }
                 }
                 Err(_) => error_response(),
@@ -49,6 +47,21 @@ pub async fn start_health_check_server() {
         }
     }
 
+    fn check_for_trusted_cert_timeout() -> Result<Response<Body>, hyper::http::Error> {
+        let now = chrono::Utc::now();
+
+        match TRUSTED_CERT_STORE.read() {
+            Ok(store) => match store.get_initialized_time() {
+                Some(time) if now.signed_duration_since(time).num_minutes() < 3 => ok_response(),
+                _ => error_response(),
+            },
+            Err(err) => {
+                log::error!("Error reading cage initialized time from store: {}", err);
+                error_response()
+            }
+        }
+    }
+
     fn error_response() -> Result<Response<Body>, hyper::http::Error> {
         let response = HealthCheckLog {
             message: Some("Cage environment is not yet initialized".into()),
@@ -57,6 +70,17 @@ pub async fn start_health_check_server() {
 
         Response::builder()
             .status(500)
+            .body(Body::from(serde_json::to_string(&response).unwrap()))
+    }
+
+    fn ok_response() -> Result<Response<Body>, hyper::http::Error> {
+        let response = HealthCheckLog {
+            message: Some("Hello from the data-plane".into()),
+            status: HealthCheckStatus::Ok,
+        };
+
+        Response::builder()
+            .status(200)
             .body(Body::from(serde_json::to_string(&response).unwrap()))
     }
 }

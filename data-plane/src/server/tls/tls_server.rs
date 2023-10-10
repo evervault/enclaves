@@ -11,6 +11,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use tokio_rustls::rustls::server::WantsServerCert;
+#[cfg(feature = "enclave")]
 use tokio_rustls::rustls::sign::CertifiedKey;
 use tokio_rustls::rustls::ConfigBuilder;
 use tokio_rustls::rustls::ServerConfig;
@@ -22,6 +23,8 @@ use super::inter_ca_retreiver;
 #[cfg(feature = "enclave")]
 use crate::acme;
 
+#[cfg(feature = "enclave")]
+use crate::cache::TRUSTED_CERT_STORE;
 use crate::env::Environment;
 use crate::server::error::ServerResult;
 use crate::server::error::TlsError;
@@ -79,27 +82,45 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
     }
 
     pub async fn with_attestable_cert(self) -> ServerResult<TlsServer<S>> {
+        Self::start_trusted_cert_background_order();
+
         log::info!("Creating TLSServer with attestable cert");
         let (ca_cert, ca_private_key) = Self::get_ca_with_retry().await;
         log::debug!("Received intermediate CA from cert provisioner. Using it with TLS Server.");
 
-        #[cfg(feature = "enclave")]
-        let trusted_cert: Option<CertifiedKey> = enclave_trusted_cert().await;
-
-        #[cfg(not(feature = "enclave"))] // Don't order trusted certs locally
-        let trusted_cert: Option<CertifiedKey> = None;
-
         //Once intermediate cert and trusted cert retrieved, write cage initialised vars
         Environment::write_startup_complete_env_vars()?;
 
-        let attestable_cert_resolver = super::cert_resolver::AttestableCertResolver::new(
-            ca_cert,
-            ca_private_key,
-            trusted_cert,
-        )?;
+        let attestable_cert_resolver =
+            super::cert_resolver::AttestableCertResolver::new(ca_cert, ca_private_key)?;
         let tls_config =
             Self::get_base_config().with_cert_resolver(Arc::new(attestable_cert_resolver));
         Ok(TlsServer::new(tls_config, self.tcp_server))
+    }
+
+    fn start_trusted_cert_background_order() {
+        #[cfg(feature = "enclave")]
+        tokio::spawn(async move {
+            let trusted_cert: Option<CertifiedKey> = enclave_trusted_cert().await;
+            match TRUSTED_CERT_STORE.write() {
+                Ok(mut store) => {
+                    if let Some(trusted_cert) = trusted_cert {
+                        store.set_trusted_cert(trusted_cert);
+                    }
+
+                    //Once trusted cert ordered and stored, write trusted cert initialised var
+                    if let Err(err) = Environment::write_trusted_cert_complete_env_var() {
+                        log::error!("Error writing trusted cert initialised env var: {err}");
+                    }
+                }
+                Err(e) => {
+                    log::error!("Error writing trusted cert to store: {e}");
+                }
+            }
+        });
+
+        #[cfg(not(feature = "enclave"))] // Don't order trusted certs locally
+        log::info!("Not ordering trusted cert, running in non-enclave mode");
     }
 
     async fn get_ca_with_retry() -> (X509, PKey<Private>) {

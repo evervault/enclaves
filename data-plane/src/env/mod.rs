@@ -7,7 +7,7 @@ use std::{
 use crate::cert_provisioner_client::CertProvisionerClient;
 #[cfg(not(feature = "tls_termination"))]
 use crate::config_client::ConfigClient;
-use crate::{base_tls_client::ClientError, CageContextError};
+use crate::{base_tls_client::ClientError, cache::TRUSTED_CERT_STORE, CageContextError};
 use hyper::header::InvalidHeaderValue;
 use serde_json::json;
 use shared::server::config_server::requests::Secret;
@@ -31,6 +31,8 @@ pub enum EnvError {
     InvalidHeaderValue(#[from] InvalidHeaderValue),
     #[error("Couldn't get cage context")]
     CageContextError(#[from] CageContextError),
+    #[error("{0}")]
+    LockError(String),
 }
 
 #[derive(Clone)]
@@ -119,6 +121,28 @@ impl Environment {
 
         write!(file, "export EV_CAGE_INITIALIZED=true  ")?;
         write!(file, "export EV_API_KEY=placeholder  ")?;
+
+        match TRUSTED_CERT_STORE.write() {
+            Ok(mut store) => {
+                let now = chrono::Utc::now();
+                store.set_initialized_time(now);
+            }
+            Err(err) => {
+                log::error!("Error writing cage initialized time to store");
+                return Err(EnvError::LockError(err.to_string()));
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn write_trusted_cert_complete_env_var() -> Result<(), EnvError> {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .append(true)
+            .open("/etc/customer-env")?;
+
+        write!(file, "export EV_CAGE_CERT_READY=true  ")?;
 
         Ok(())
     }
