@@ -368,7 +368,7 @@ mod tests {
         };
     }
 
-    fn get_test_trusted_cert() -> Option<CertifiedKey>{
+    fn get_test_trusted_cert() -> Option<CertifiedKey> {
         TRUSTED_CERT_STORE.read().unwrap().get_trusted_cert()
     }
 
