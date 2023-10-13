@@ -64,7 +64,8 @@ impl HealthcheckAgent {
             tls_client_config::get_tls_client_config, OpenServerCertVerifier,
         };
         use hyper_rustls::HttpsConnectorBuilder;
-        let tls_client_config = get_tls_client_config(OpenServerCertVerifier);
+        let cert_verifier = std::sync::Arc::new(OpenServerCertVerifier);
+        let tls_client_config = get_tls_client_config(cert_verifier);
         let https_connector = HttpsConnectorBuilder::new()
             .with_tls_config(tls_client_config)
             .https_only()
@@ -88,7 +89,7 @@ impl HealthcheckAgent {
         }
     }
 
-    async fn perform_healthcheck(&mut self, client: &Client<HttpConnector, Body>) {
+    async fn perform_healthcheck<C: hyper::client::connect::Connect + Clone + Send + Sync + 'static>(&mut self, client: Client<C, Body>) {
         let healthcheck_result = match self.state {
             HealthcheckAgentState::Initializing => {
                 self.check_user_process_initialized().unwrap_or_else(|err| {
@@ -126,7 +127,7 @@ impl HealthcheckAgent {
                   self.serve_healthcheck_request(req).await;
                 }
               },
-              _ = interval.tick() => self.perform_healthcheck(&client).await
+              _ = interval.tick() => self.perform_healthcheck(client.clone()).await
             }
         }
     }
@@ -141,11 +142,11 @@ impl HealthcheckAgent {
         format!("http://127.0.0.1/{}", &healthcheck_path)
     }
 
-    async fn probe_user_process(
-        client: &Client<HttpConnector, Body>,
+    async fn probe_user_process<C: hyper::client::connect::Connect + Clone + Send + Sync + 'static>(
+        client: Client<C, Body>,
         healthcheck_path: &str,
     ) -> HealthCheckStatus {
-        let healthcheck_uri = Self::build_healthcheck_uri(&healthcheck_path);
+        let healthcheck_uri = Self::build_healthcheck_uri(healthcheck_path);
         let req = Request::builder()
             .method(Method::GET)
             .uri(&healthcheck_uri)

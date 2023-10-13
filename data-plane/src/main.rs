@@ -3,8 +3,6 @@ use shared::server::Listener;
 use shared::server::CID::Enclave;
 use shared::{print_version, server::get_vsock_server_with_proxy_protocol};
 
-#[cfg(not(feature = "tls_termination"))]
-use data_plane::configuration;
 #[cfg(feature = "network_egress")]
 use data_plane::dns::egressproxy::EgressProxy;
 #[cfg(feature = "network_egress")]

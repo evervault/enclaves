@@ -28,7 +28,7 @@ use shared::server::egress::{get_egress_ports_from_env, EgressConfig};
 #[cfg(feature = "tls_termination")]
 pub mod server;
 
-use shared::server::config_server::requests::GetCertResponseDataPlane;
+use shared::server::config_server::requests::{GetCertResponseDataPlane, GetSecretsResponseDataPlane};
 use thiserror::Error;
 
 static CAGE_CONTEXT: OnceCell<CageContext> = OnceCell::new();
@@ -159,6 +159,18 @@ impl From<GetCertResponseDataPlane> for CageContext {
             cert_response.context.cage_uuid,
             cert_response.context.cage_name,
             cert_response.healthcheck,
+        )
+    }
+}
+
+impl From<GetSecretsResponseDataPlane> for CageContext {
+    fn from(secrets_response: GetSecretsResponseDataPlane) -> Self {
+        CageContext::new(
+            secrets_response.context.team_uuid,
+            secrets_response.context.app_uuid,
+            secrets_response.context.cage_uuid,
+            secrets_response.context.cage_name,
+            secrets_response.healthcheck,
         )
     }
 }
