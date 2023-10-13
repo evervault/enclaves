@@ -304,10 +304,55 @@ mod test {
         assert_eq!(healthcheck_result.to_owned(), HealthCheckStatus::Ok);
     }
 
+    #[cfg(not(feature = "tls_termination"))]
+    #[tokio::test]
+    async fn validate_initialized_agent_with_healthy_response_returns_healthy() {
+        mock_connector!(MockHealthcheckEndpoint {
+          "https://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n"
+        });
+        let duration = std::time::Duration::from_secs(1);
+        let (mut agent, _sender) = HealthcheckAgent::new(
+            3000,
+            duration,
+            Some("/healthz".into()),
+            TestInitialized(false),
+        );
+        agent.state = super::HealthcheckAgentState::Ready;
+
+        let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
+        agent.perform_healthcheck(client).await;
+
+        let healthcheck_result = agent.buffer.iter().max().unwrap();
+        assert_eq!(healthcheck_result.to_owned(), HealthCheckStatus::Ok);
+    }
+
+    #[cfg(feature = "tls_termination")]
     #[tokio::test]
     async fn validate_initialized_agent_with_unhealthy_response_returns_error() {
         mock_connector!(MockHealthcheckEndpoint {
           "http://127.0.0.1" => "HTTP/1.1 400 Bad Request\r\n\r\n"
+        });
+        let duration = std::time::Duration::from_secs(1);
+        let (mut agent, _sender) = HealthcheckAgent::new(
+            3001,
+            duration,
+            Some("/healthcheck".into()),
+            TestInitialized(false),
+        );
+        agent.state = super::HealthcheckAgentState::Ready;
+
+        let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
+        agent.perform_healthcheck(client).await;
+
+        let healthcheck_result = agent.buffer.iter().max().unwrap();
+        assert_eq!(healthcheck_result.to_owned(), HealthCheckStatus::Err);
+    }
+
+    #[cfg(not(feature = "tls_termination"))]
+    #[tokio::test]
+    async fn validate_initialized_agent_with_unhealthy_response_returns_error() {
+        mock_connector!(MockHealthcheckEndpoint {
+          "https://127.0.0.1" => "HTTP/1.1 400 Bad Request\r\n\r\n"
         });
         let duration = std::time::Duration::from_secs(1);
         let (mut agent, _sender) = HealthcheckAgent::new(
