@@ -89,7 +89,12 @@ impl HealthcheckAgent {
         }
     }
 
-    async fn perform_healthcheck<C: hyper::client::connect::Connect + Clone + Send + Sync + 'static>(&mut self, client: Client<C, Body>) {
+    async fn perform_healthcheck<
+        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
+    >(
+        &mut self,
+        client: Client<C, Body>,
+    ) {
         let healthcheck_result = match self.state {
             HealthcheckAgentState::Initializing => {
                 self.check_user_process_initialized().unwrap_or_else(|err| {
@@ -142,7 +147,9 @@ impl HealthcheckAgent {
         format!("http://127.0.0.1/{}", &healthcheck_path)
     }
 
-    async fn probe_user_process<C: hyper::client::connect::Connect + Clone + Send + Sync + 'static>(
+    async fn probe_user_process<
+        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
+    >(
         client: Client<C, Body>,
         healthcheck_path: &str,
     ) -> HealthCheckStatus {

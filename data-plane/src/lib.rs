@@ -28,7 +28,9 @@ use shared::server::egress::{get_egress_ports_from_env, EgressConfig};
 #[cfg(feature = "tls_termination")]
 pub mod server;
 
-use shared::server::config_server::requests::{GetCertResponseDataPlane, GetSecretsResponseDataPlane};
+use shared::server::config_server::requests::{
+    GetCertResponseDataPlane, GetSecretsResponseDataPlane,
+};
 use thiserror::Error;
 
 static CAGE_CONTEXT: OnceCell<CageContext> = OnceCell::new();

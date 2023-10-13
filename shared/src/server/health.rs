@@ -11,7 +11,7 @@ impl HealthCheckLog {
     }
 
     pub fn status_code(&self) -> u16 {
-      self.status.status_code()
+        self.status.status_code()
     }
 }
 
