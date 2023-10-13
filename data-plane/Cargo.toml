@@ -47,6 +47,7 @@ hyper-rustls = { version = "0.24.1", default-features = false, features = ["http
 
 [dev-dependencies]
 tokio-test = "0.4.2"
+yup-hyper-mock = "6.0.0"
 
 [features]
 default = ["tls_termination"]

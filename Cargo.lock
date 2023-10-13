@@ -1083,6 +1083,7 @@ dependencies = [
  "tokio-vsock",
  "uuid",
  "webpki-roots",
+ "yup-hyper-mock",
 ]
 
 [[package]]
@@ -3448,6 +3449,19 @@ name = "xmlparser"
 version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4d25c75bf9ea12c4040a97f829154768bbbce366287e2dc044af160cd79a13fd"
+
+[[package]]
+name = "yup-hyper-mock"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bda7d318bc83f223105671a6240804f4cdc463b7b34abe873bb97b74012c5dce"
+dependencies = [
+ "futures",
+ "hyper",
+ "log",
+ "mio",
+ "tokio",
+]
 
 [[package]]
 name = "zeroize"

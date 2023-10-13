@@ -1,4 +1,5 @@
 mod agent;
+mod initialized;
 
 use agent::UserProcessHealthcheckSender;
 
@@ -10,9 +11,8 @@ use shared::{server::Listener, ENCLAVE_HEALTH_CHECK_PORT};
 
 use crate::health::agent::HealthcheckStatusRequest;
 
-fn spawn_customer_healthcheck_agent() -> UserProcessHealthcheckSender {
-    let duration = std::time::Duration::from_secs(1);
-    let (agent, healthcheck_channel) = agent::HealthcheckAgent::new(duration);
+fn spawn_customer_healthcheck_agent(customer_process_port: u16) -> UserProcessHealthcheckSender {
+    let (agent, healthcheck_channel) = agent::default_agent(customer_process_port);
     tokio::spawn(async move {
         log::info!("Spawning healthcheck agent.");
         agent.run().await;
@@ -20,8 +20,8 @@ fn spawn_customer_healthcheck_agent() -> UserProcessHealthcheckSender {
     healthcheck_channel
 }
 
-pub async fn start_health_check_server() {
-    let user_process_healthcheck_channel = spawn_customer_healthcheck_agent();
+pub async fn start_health_check_server(customer_process_port: u16) {
+    let user_process_healthcheck_channel = spawn_customer_healthcheck_agent(customer_process_port);
     let mut health_check_server = get_vsock_server(ENCLAVE_HEALTH_CHECK_PORT, Enclave)
         .await
         .unwrap();

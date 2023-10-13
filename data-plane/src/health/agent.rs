@@ -1,3 +1,4 @@
+use super::initialized::{InitializedHealthcheck, EnclaveEnvInitialized};
 use hyper::{client::HttpConnector, header, Body, Client, Method, Request};
 use shared::server::health::HealthCheckStatus;
 use std::collections::VecDeque;
@@ -32,23 +33,36 @@ impl HealthcheckStatusRequest {
 
 pub type UserProcessHealthcheckSender = UnboundedSender<HealthcheckStatusRequest>;
 
-pub struct HealthcheckAgent {
+pub struct HealthcheckAgent<T: InitializedHealthcheck> {
+    customer_process_port: u16,
     healthcheck_path: Option<String>,
     buffer: VecDeque<HealthCheckStatus>,
     interval: std::time::Duration,
     state: HealthcheckAgentState,
     recv: UnboundedReceiver<HealthcheckStatusRequest>,
+    initialized_check: T
 }
 
-impl HealthcheckAgent {
-    pub fn new(interval: std::time::Duration) -> (Self, UnboundedSender<HealthcheckStatusRequest>) {
+pub fn default_agent(customer_process_port: u16) -> (HealthcheckAgent<EnclaveEnvInitialized>, UnboundedSender<HealthcheckStatusRequest>) {
+  HealthcheckAgent::new(
+    customer_process_port,
+    std::time::Duration::from_secs(1),
+    None,
+    EnclaveEnvInitialized
+  )
+}
+
+impl<T: InitializedHealthcheck> HealthcheckAgent<T> {
+    pub fn new(customer_process_port: u16, interval: std::time::Duration, healthcheck_path: Option<String>, init_health_checker: T) -> (Self, UnboundedSender<HealthcheckStatusRequest>) {
         let (sender, recv) = unbounded_channel();
         let healthcheck_agent = Self {
-            healthcheck_path: None,
+            customer_process_port,
+            healthcheck_path,
             buffer: VecDeque::with_capacity(10),
             state: HealthcheckAgentState::default(),
             interval,
             recv,
+            initialized_check: init_health_checker
         };
         (healthcheck_agent, sender)
     }
@@ -75,11 +89,11 @@ impl HealthcheckAgent {
     }
 
     fn check_user_process_initialized(&mut self) -> Result<HealthCheckStatus, CageContextError> {
-        let contents = match std::fs::read_to_string("/etc/customer-env") {
-            Ok(contents) => contents,
+        let is_initialized = match self.initialized_check.is_initialized() {
+            Ok(is_initialized) => is_initialized,
             Err(_) => return Ok(HealthCheckStatus::Err),
         };
-        if contents.contains("EV_CAGE_INITIALIZED") {
+        if is_initialized {
             let ctx = CageContext::get()?;
             self.healthcheck_path = ctx.healthcheck.clone();
             self.state = HealthcheckAgentState::Ready;
@@ -103,7 +117,7 @@ impl HealthcheckAgent {
                 })
             }
             HealthcheckAgentState::Ready if self.healthcheck_path.is_some() => {
-                Self::probe_user_process(client, self.healthcheck_path.as_deref().unwrap()).await
+                self.probe_user_process(client, self.healthcheck_path.as_deref().unwrap()).await
             }
             HealthcheckAgentState::Ready => HealthCheckStatus::Ok,
         };
@@ -111,7 +125,7 @@ impl HealthcheckAgent {
         self.buffer.push_back(healthcheck_result);
     }
 
-    async fn serve_healthcheck_request(&mut self, request: HealthcheckStatusRequest) {
+    fn serve_healthcheck_request(&mut self, request: HealthcheckStatusRequest) {
         if self.buffer.is_empty() {
             let _ = request.sender.send(HealthCheckStatus::Uninitialized);
             return;
@@ -129,7 +143,7 @@ impl HealthcheckAgent {
             tokio::select! {
               healthcheck_req = self.recv.recv() => {
                 if let Some(req) = healthcheck_req {
-                  self.serve_healthcheck_request(req).await;
+                  self.serve_healthcheck_request(req);
                 }
               },
               _ = interval.tick() => self.perform_healthcheck(client.clone()).await
@@ -138,22 +152,23 @@ impl HealthcheckAgent {
     }
 
     #[cfg(not(feature = "tls_termination"))]
-    fn build_healthcheck_uri(healthcheck_path: &str) -> String {
-        format!("https://127.0.0.1/{}", &healthcheck_path)
+    fn build_healthcheck_uri(&self, healthcheck_path: &str) -> String {
+        format!("https://127.0.0.1:{}{}", self.customer_process_port, &healthcheck_path)
     }
 
     #[cfg(feature = "tls_termination")]
-    fn build_healthcheck_uri(healthcheck_path: &str) -> String {
-        format!("http://127.0.0.1/{}", &healthcheck_path)
+    fn build_healthcheck_uri(&self, healthcheck_path: &str) -> String {
+        format!("http://127.0.0.1:{}{}", self.customer_process_port, &healthcheck_path)
     }
 
     async fn probe_user_process<
         C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
     >(
+        &self,
         client: Client<C, Body>,
         healthcheck_path: &str,
     ) -> HealthCheckStatus {
-        let healthcheck_uri = Self::build_healthcheck_uri(healthcheck_path);
+        let healthcheck_uri = self.build_healthcheck_uri(healthcheck_path);
         let req = Request::builder()
             .method(Method::GET)
             .uri(&healthcheck_uri)
@@ -176,4 +191,106 @@ impl HealthcheckAgent {
             }
         }
     }
+}
+
+#[cfg(test)]
+mod test {
+  use super::{default_agent, HealthcheckAgent, HealthcheckStatusRequest, HealthCheckStatus};
+  use yup_hyper_mock::mock_connector;
+
+  #[test]
+  fn validate_ok_returned_from_healthy_buffer() {
+    let (mut agent, _sender) = default_agent(3000);
+    for _ in 0..5 {
+      agent.buffer.push_back(HealthCheckStatus::Ok);
+    }
+    let (req, mut receiver) = HealthcheckStatusRequest::new();
+    agent.serve_healthcheck_request(req);
+
+    let result = receiver.try_recv().unwrap();
+    assert_eq!(HealthCheckStatus::Ok, result);
+  }
+
+  #[test]
+  fn validate_unitialized_returned_from_otherwise_healthy_buffer() {
+    let (mut agent, _sender) = default_agent(3000);
+    for _ in 0..5 {
+      agent.buffer.push_back(HealthCheckStatus::Ok);
+    }
+    agent.buffer.push_back(HealthCheckStatus::Uninitialized);
+    let (req, mut receiver) = HealthcheckStatusRequest::new();
+    agent.serve_healthcheck_request(req);
+
+    let result = receiver.try_recv().unwrap();
+    assert_eq!(HealthCheckStatus::Uninitialized, result);
+  }
+
+  pub struct TestInitialized(bool);
+
+  impl super::InitializedHealthcheck for TestInitialized {
+    type Error = std::convert::Infallible;
+
+    fn is_initialized(&self) -> Result<bool, Self::Error> {
+      Ok(self.0)
+    }
+  }
+
+  #[tokio::test]
+  async fn validate_uninitialized_user_process_doesnt_return_errors() {
+    
+    let duration = std::time::Duration::from_secs(1);
+    let (mut agent, _sender) = HealthcheckAgent::new(3000, duration, None, TestInitialized(false));
+
+    let client = hyper::Client::builder().build_http();
+    agent.perform_healthcheck(client).await;
+
+    let healthcheck_result = agent.buffer.iter().max().unwrap();
+    assert_eq!(healthcheck_result.to_owned(), HealthCheckStatus::Uninitialized);
+  }
+
+  #[tokio::test]
+  async fn validate_initialized_agent_with_no_healthcheck_path_returns_ok() {
+    let duration = std::time::Duration::from_secs(1);
+    let (mut agent, _sender) = HealthcheckAgent::new(3000, duration, None, TestInitialized(false));
+    agent.state = super::HealthcheckAgentState::Ready;
+
+    let client = hyper::Client::builder().build_http();
+    agent.perform_healthcheck(client).await;
+
+    let healthcheck_result = agent.buffer.iter().max().unwrap();
+    assert_eq!(healthcheck_result.to_owned(), HealthCheckStatus::Ok);
+  }
+
+  #[cfg(feature = "tls_termination")]
+  #[tokio::test]
+  async fn validate_initialized_agent_with_healthy_response_returns_healthy() {
+    mock_connector!(MockHealthcheckEndpoint {
+      "http://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n"
+    });
+    let duration = std::time::Duration::from_secs(1);
+    let (mut agent, _sender) = HealthcheckAgent::new(3000, duration, Some("/healthz".into()), TestInitialized(false));
+    agent.state = super::HealthcheckAgentState::Ready;
+
+    let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
+    agent.perform_healthcheck(client).await;
+
+    let healthcheck_result = agent.buffer.iter().max().unwrap();
+    assert_eq!(healthcheck_result.to_owned(), HealthCheckStatus::Ok);
+  }
+
+  #[tokio::test]
+  async fn validate_initialized_agent_with_unhealthy_response_returns_error() {
+    mock_connector!(MockHealthcheckEndpoint {
+      "http://127.0.0.1" => "HTTP/1.1 400 Bad Request\r\n\r\n"
+    });
+    let duration = std::time::Duration::from_secs(1);
+    let (mut agent, _sender) = HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()), TestInitialized(false));
+    agent.state = super::HealthcheckAgentState::Ready;
+
+    let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
+    agent.perform_healthcheck(client).await;
+
+    let healthcheck_result = agent.buffer.iter().max().unwrap();
+    assert_eq!(healthcheck_result.to_owned(), HealthCheckStatus::Err);
+  }
 }

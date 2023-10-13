@@ -54,7 +54,7 @@ fn main() {
         .expect("Failed to build tokio runtime in data plane");
 
     runtime.block_on(async move {
-        tokio::join!(start(data_plane_port), start_health_check_server());
+        tokio::join!(start(data_plane_port), start_health_check_server(data_plane_port));
     });
 }
 
