@@ -1,5 +1,3 @@
-mod tls_verifier;
-
 use hyper::header::HeaderValue;
 use hyper::{Body, Response};
 use serde::de::DeserializeOwned;
@@ -26,14 +24,14 @@ impl std::default::Default for E3Client {
 }
 
 use crate::base_tls_client::tls_client_config::get_tls_client_config;
-use crate::base_tls_client::{AuthType, BaseClient, ClientError};
+use crate::base_tls_client::{AuthType, BaseClient, ClientError, OpenServerCertVerifier};
 use crate::configuration;
 use crate::crypto::token::TokenClient;
 use crate::stats_client::StatsClient;
 
 impl E3Client {
     pub fn new() -> Self {
-        let verifier = std::sync::Arc::new(tls_verifier::E3CertVerifier);
+        let verifier = std::sync::Arc::new(OpenServerCertVerifier);
         let tls_connector =
             TlsConnector::from(std::sync::Arc::new(get_tls_client_config(verifier)));
 

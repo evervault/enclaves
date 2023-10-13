@@ -20,6 +20,7 @@ pub mod e3client;
 pub mod env;
 pub mod error;
 pub mod health;
+pub mod proc;
 pub mod stats;
 pub mod stats_client;
 pub mod utils;
@@ -28,7 +29,7 @@ use shared::server::egress::{get_egress_ports_from_env, EgressConfig};
 #[cfg(feature = "tls_termination")]
 pub mod server;
 
-use shared::server::config_server::requests::ProvisionerContext;
+use shared::server::config_server::requests::GetCertResponseDataPlane;
 use thiserror::Error;
 
 static CAGE_CONTEXT: OnceCell<CageContext> = OnceCell::new();
@@ -40,6 +41,7 @@ pub struct CageContext {
     app_uuid: String,
     cage_uuid: String,
     cage_name: String,
+    healthcheck: Option<String>,
 }
 
 #[derive(Error, Debug)]
@@ -60,12 +62,19 @@ impl CageContext {
         CAGE_CONTEXT.get_or_init(|| ctx);
     }
 
-    pub fn new(team_uuid: String, app_uuid: String, cage_uuid: String, cage_name: String) -> Self {
+    pub fn new(
+        team_uuid: String,
+        app_uuid: String,
+        cage_uuid: String,
+        cage_name: String,
+        healthcheck: Option<String>,
+    ) -> Self {
         Self {
             cage_uuid,
             app_uuid,
             team_uuid,
             cage_name,
+            healthcheck,
         }
     }
 
@@ -143,13 +152,14 @@ impl CageContext {
     }
 }
 
-impl From<ProvisionerContext> for CageContext {
-    fn from(context: ProvisionerContext) -> Self {
+impl From<GetCertResponseDataPlane> for CageContext {
+    fn from(cert_response: GetCertResponseDataPlane) -> Self {
         CageContext::new(
-            context.team_uuid,
-            context.app_uuid,
-            context.cage_uuid,
-            context.cage_name,
+            cert_response.context.team_uuid,
+            cert_response.context.app_uuid,
+            cert_response.context.cage_uuid,
+            cert_response.context.cage_name,
+            cert_response.healthcheck,
         )
     }
 }

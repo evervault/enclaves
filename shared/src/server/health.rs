@@ -9,6 +9,10 @@ impl HealthCheckLog {
     pub fn new(status: HealthCheckStatus, message: Option<String>) -> HealthCheckLog {
         HealthCheckLog { status, message }
     }
+
+    pub fn status_code(&self) -> u16 {
+      self.status.status_code()
+    }
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]

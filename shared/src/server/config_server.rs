@@ -146,6 +146,7 @@ pub mod requests {
         key_pair: String,
         pub secrets: Option<Vec<Secret>>,
         pub context: ProvisionerContext,
+        pub healthcheck: Option<String>
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -160,6 +161,7 @@ pub mod requests {
     pub struct GetSecretsResponseDataPlane {
         pub secrets: Vec<Secret>,
         pub context: ProvisionerContext,
+        pub healthcheck: Option<String>
     }
 
     impl ConfigServerPayload for GetCertResponseDataPlane {}

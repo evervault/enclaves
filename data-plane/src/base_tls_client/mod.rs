@@ -1,6 +1,8 @@
 pub mod error;
 pub use error::ClientError;
+pub mod server_cert_verifier;
 pub mod tls_client_config;
+pub use server_cert_verifier::OpenServerCertVerifier;
 
 use hyper::client::conn::{Connection as HyperConnection, SendRequest};
 use hyper::header::HeaderValue;
