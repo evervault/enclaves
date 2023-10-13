@@ -20,7 +20,6 @@ pub mod e3client;
 pub mod env;
 pub mod error;
 pub mod health;
-pub mod proc;
 pub mod stats;
 pub mod stats_client;
 pub mod utils;
