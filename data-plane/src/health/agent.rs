@@ -45,7 +45,7 @@ pub struct HealthcheckAgent<T: InitializedHealthcheck> {
 
 pub fn default_agent(
     customer_process_port: u16,
-    healthcheck: Option<String>
+    healthcheck: Option<String>,
 ) -> (
     HealthcheckAgent<EnclaveEnvInitialized>,
     UnboundedSender<HealthcheckStatusRequest>,
