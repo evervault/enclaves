@@ -4,6 +4,7 @@ on:
       - control-plane/**
       - shared/**
       - .github/workflows/test-control-plane.yml
+      - Cargo.lock
 name: Test Control Plane
 jobs:
   test_control_plane:

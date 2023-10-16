@@ -4,6 +4,7 @@ on:
       - data-plane/**
       - shared/**
       - .github/workflows/test-data-plane.yml
+      - Cargo.lock
 name: Test Data Plane
 jobs:
   check_data_plane:
