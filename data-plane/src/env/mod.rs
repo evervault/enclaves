@@ -86,10 +86,10 @@ impl Environment {
 
         log::info!("Initializing env without TLS termination, sending request to control plane for cert provisioner token.");
         let token = self.config_client.get_cert_token().await.unwrap().token();
-        let cert_response = self.cert_provisioner_client.get_secrets(token).await?;
-        CageContext::set(cert_response.clone().into());
+        let secrets_response = self.cert_provisioner_client.get_secrets(token).await?;
+        CageContext::set(secrets_response.context.clone().into());
 
-        self.init(cert_response.clone().secrets).await?;
+        self.init(secrets_response.clone().secrets).await?;
 
         //Write vars to indicate cage is initialised
         let _ = Self::write_startup_complete_env_vars();
