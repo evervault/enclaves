@@ -28,9 +28,7 @@ use shared::server::egress::{get_egress_ports_from_env, EgressConfig};
 #[cfg(feature = "tls_termination")]
 pub mod server;
 
-use shared::server::config_server::requests::{
-    GetCertResponseDataPlane, GetSecretsResponseDataPlane,
-};
+use shared::server::config_server::requests::ProvisionerContext;
 use thiserror::Error;
 
 static CAGE_CONTEXT: OnceCell<CageContext> = OnceCell::new();
@@ -42,7 +40,6 @@ pub struct CageContext {
     app_uuid: String,
     cage_uuid: String,
     cage_name: String,
-    healthcheck: Option<String>,
 }
 
 #[derive(Error, Debug)]
@@ -63,19 +60,12 @@ impl CageContext {
         CAGE_CONTEXT.get_or_init(|| ctx);
     }
 
-    pub fn new(
-        team_uuid: String,
-        app_uuid: String,
-        cage_uuid: String,
-        cage_name: String,
-        healthcheck: Option<String>,
-    ) -> Self {
+    pub fn new(team_uuid: String, app_uuid: String, cage_uuid: String, cage_name: String) -> Self {
         Self {
             cage_uuid,
             app_uuid,
             team_uuid,
             cage_name,
-            healthcheck,
         }
     }
 
@@ -153,26 +143,13 @@ impl CageContext {
     }
 }
 
-impl From<GetCertResponseDataPlane> for CageContext {
-    fn from(cert_response: GetCertResponseDataPlane) -> Self {
+impl From<ProvisionerContext> for CageContext {
+    fn from(context: ProvisionerContext) -> Self {
         CageContext::new(
-            cert_response.context.team_uuid,
-            cert_response.context.app_uuid,
-            cert_response.context.cage_uuid,
-            cert_response.context.cage_name,
-            cert_response.healthcheck,
-        )
-    }
-}
-
-impl From<GetSecretsResponseDataPlane> for CageContext {
-    fn from(secrets_response: GetSecretsResponseDataPlane) -> Self {
-        CageContext::new(
-            secrets_response.context.team_uuid,
-            secrets_response.context.app_uuid,
-            secrets_response.context.cage_uuid,
-            secrets_response.context.cage_name,
-            secrets_response.healthcheck,
+            context.team_uuid,
+            context.app_uuid,
+            context.cage_uuid,
+            context.cage_name,
         )
     }
 }
@@ -203,6 +180,7 @@ impl FeatureContext {
             .unwrap_or(true);
         FeatureContext {
             api_key_auth,
+            healthcheck: None,
             trx_logging_enabled,
             forward_proxy_protocol: should_forward_proxy_protocol(),
             trusted_headers: vec![],
@@ -231,6 +209,7 @@ impl FeatureContext {
 #[derive(Clone, Deserialize)]
 pub struct FeatureContext {
     pub api_key_auth: bool,
+    pub healthcheck: Option<String>,
     pub trx_logging_enabled: bool,
     #[serde(default)]
     pub forward_proxy_protocol: bool,
@@ -253,6 +232,21 @@ mod test {
         assert_eq!(feature_context.api_key_auth, true);
         assert_eq!(feature_context.trx_logging_enabled, false);
         assert_eq!(feature_context.forward_proxy_protocol, false);
+        assert!(feature_context.healthcheck.is_none());
+    }
+
+    #[cfg(not(feature = "network_egress"))]
+    #[test]
+    fn test_config_deserialization_without_proxy_protocol_and_healthcheck() {
+        let raw_feature_context =
+            r#"{ "api_key_auth": true, "healthcheck": "/health", "trx_logging_enabled": false }"#;
+        let parsed = serde_json::from_str(raw_feature_context);
+        assert!(parsed.is_ok());
+        let feature_context: FeatureContext = parsed.unwrap();
+        assert_eq!(feature_context.api_key_auth, true);
+        assert_eq!(feature_context.trx_logging_enabled, false);
+        assert_eq!(feature_context.forward_proxy_protocol, false);
+        assert_eq!(feature_context.healthcheck, Some("/health".into()));
     }
 
     #[cfg(feature = "network_egress")]
@@ -266,9 +260,28 @@ mod test {
         assert_eq!(feature_context.trx_logging_enabled, false);
         assert_eq!(feature_context.forward_proxy_protocol, true);
         assert_eq!(feature_context.egress.ports, vec![443, 8080]);
+        assert!(feature_context.healthcheck.is_none());
         assert_eq!(
             feature_context.egress.allow_list.wildcard,
             vec![".stripe.com".to_string()]
         );
+    }
+
+    #[cfg(feature = "network_egress")]
+    #[test]
+    fn test_config_deserialization_with_egress_and_healthcheck() {
+        let raw_feature_context = r#"{ "api_key_auth": true, "healthcheck": "/health", "trx_logging_enabled": false, "forward_proxy_protocol": true, "egress": { "ports": "443,8080", "allow_list": "*.stripe.com" } }"#;
+        let parsed = serde_json::from_str(raw_feature_context);
+        assert!(parsed.is_ok());
+        let feature_context: FeatureContext = parsed.unwrap();
+        assert_eq!(feature_context.api_key_auth, true);
+        assert_eq!(feature_context.trx_logging_enabled, false);
+        assert_eq!(feature_context.forward_proxy_protocol, true);
+        assert_eq!(feature_context.egress.ports, vec![443, 8080]);
+        assert_eq!(
+            feature_context.egress.allow_list.wildcard,
+            vec![".stripe.com".to_string()]
+        );
+        assert_eq!(feature_context.healthcheck, Some("/health".into()));
     }
 }

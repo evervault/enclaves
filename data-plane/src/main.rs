@@ -53,6 +53,7 @@ fn main() {
         .build()
         .expect("Failed to build tokio runtime in data plane");
 
+    FeatureContext::set();
     runtime.block_on(async move {
         tokio::join!(
             start(data_plane_port),
@@ -66,7 +67,6 @@ async fn start(data_plane_port: u16) {
     use data_plane::{crypto::api::CryptoApi, stats::StatsProxy};
 
     StatsClient::init();
-    FeatureContext::set();
     log::info!("Running data plane with egress disabled");
     let (_, e3_api_result, stats_result) = tokio::join!(
         start_data_plane(data_plane_port),
@@ -88,7 +88,6 @@ async fn start(data_plane_port: u16) {
     use data_plane::{crypto::api::CryptoApi, stats::StatsProxy};
 
     StatsClient::init();
-    FeatureContext::set();
     let ports = FeatureContext::get().egress.ports;
     let egress_proxies = join_all(ports.into_iter().map(EgressProxy::listen));
 

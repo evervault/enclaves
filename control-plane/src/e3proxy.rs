@@ -5,14 +5,11 @@ use shared::server::{get_vsock_server, Listener};
 use std::net::SocketAddr;
 #[cfg(not(feature = "enclave"))]
 use tokio::io::AsyncWriteExt;
-use trust_dns_resolver::name_server::{GenericConnection, GenericConnectionProvider, TokioRuntime};
-use trust_dns_resolver::AsyncResolver;
-
-type AsyncDnsResolver = AsyncResolver<GenericConnection, GenericConnectionProvider<TokioRuntime>>;
+use trust_dns_resolver::TokioAsyncResolver;
 
 pub struct E3Proxy {
     #[allow(unused)]
-    dns_resolver: AsyncDnsResolver,
+    dns_resolver: TokioAsyncResolver,
 }
 
 impl std::default::Default for E3Proxy {
@@ -23,8 +20,7 @@ impl std::default::Default for E3Proxy {
 
 impl E3Proxy {
     pub fn new() -> Self {
-        let dns_resolver = InternalAsyncDnsResolver::new_resolver()
-            .expect("Failed to create internal dns resolver");
+        let dns_resolver = InternalAsyncDnsResolver::new_resolver();
         Self { dns_resolver }
     }
 
