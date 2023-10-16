@@ -1,7 +1,7 @@
 use crate::utils::nsm::{NsmConnection, NsmConnectionError};
 use aws_nitro_enclaves_cose as cose;
 use aws_nitro_enclaves_nsm_api as nitro;
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::DateTime;
 use openssl::x509::X509;
 use serde_bytes::ByteBuf;
 use std::fmt::Formatter;

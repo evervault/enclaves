@@ -7,7 +7,7 @@ use tokio::sync::oneshot::{
     channel as oneshot_channel, Receiver as OneshotReceiver, Sender as OneshotSender,
 };
 
-use crate::{CageContext, CageContextError, FeatureContext};
+use crate::{CageContext, CageContextError};
 
 enum HealthcheckAgentState {
     Initializing,
@@ -45,15 +45,15 @@ pub struct HealthcheckAgent<T: InitializedHealthcheck> {
 
 pub fn default_agent(
     customer_process_port: u16,
+    healthcheck: Option<String>
 ) -> (
     HealthcheckAgent<EnclaveEnvInitialized>,
     UnboundedSender<HealthcheckStatusRequest>,
 ) {
-    let ctx = FeatureContext::get();
     HealthcheckAgent::new(
         customer_process_port,
         std::time::Duration::from_secs(1),
-        ctx.healthcheck,
+        healthcheck,
         EnclaveEnvInitialized,
     )
 }
@@ -217,7 +217,7 @@ mod test {
 
     #[test]
     fn validate_ok_returned_from_healthy_buffer() {
-        let (mut agent, _sender) = default_agent(3000);
+        let (mut agent, _sender) = default_agent(3000, None);
         for _ in 0..5 {
             agent.buffer.push_back(HealthCheckStatus::Ok);
         }
@@ -230,7 +230,7 @@ mod test {
 
     #[test]
     fn validate_unitialized_returned_from_otherwise_healthy_buffer() {
-        let (mut agent, _sender) = default_agent(3000);
+        let (mut agent, _sender) = default_agent(3000, None);
         for _ in 0..5 {
             agent.buffer.push_back(HealthCheckStatus::Ok);
         }

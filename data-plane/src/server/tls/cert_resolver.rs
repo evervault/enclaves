@@ -403,7 +403,7 @@ mod tests {
         let team_uuid = "team_456".to_string();
         let cage_uuid = "cage_123".to_string();
         let cage_name = "my-sick-cage".to_string();
-        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name, None);
+        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name);
         let server_name = Some(ctx.get_cert_name());
         test_cert_with_hostname(server_name);
     }
@@ -414,7 +414,7 @@ mod tests {
         let team_uuid = "team_456".to_string();
         let cage_uuid = "cage_123".to_string();
         let cage_name = "my-sick-cage".to_string();
-        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name, None);
+        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name);
         let server_name = Some(ctx.get_hyphenated_cert_name());
         test_cert_with_hostname(server_name);
     }
@@ -425,7 +425,7 @@ mod tests {
         let team_uuid = "team_456".to_string();
         let cage_uuid = "cage_123".to_string();
         let cage_name = "my-sick-cage".to_string();
-        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name, None);
+        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name);
         CageContext::set(ctx.clone());
         let server_name = Some(ctx.get_cert_name());
         let (cert, key) = generate_ca().unwrap();
@@ -463,7 +463,7 @@ mod tests {
         let team_uuid = "team_456".to_string();
         let cage_uuid = "cage_123".to_string();
         let cage_name = "a-cage".to_string();
-        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name, None);
+        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name);
         let hostname = ctx.get_cert_name();
         assert!(hostname.ends_with(".dev"));
     }
@@ -474,7 +474,7 @@ mod tests {
         let team_uuid = "team_456".to_string();
         let cage_uuid = "cage_123".to_string();
         let cage_name = "a-sick-cage-that-has-a-very-long-name".to_string();
-        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name, None);
+        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name);
         let hostname = ctx.get_cert_name();
 
         if cfg!(staging) {
@@ -507,7 +507,7 @@ mod tests {
         let team_uuid = "team_456".to_string();
         let cage_uuid = "cage_123".to_string();
         let cage_name = "my-sick-cage".to_string();
-        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name, None);
+        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name);
         let hostname = ctx.get_cert_name();
         if cfg!(staging) {
             assert!(hostname.ends_with(".dev"));
