@@ -114,3 +114,17 @@ fn parse_not_after_date_time(
         .earliest()
         .ok_or_else(|| AttestationError::InvalidTimeError(not_after.to_string()))
 }
+
+#[cfg(test)]
+mod test {
+  use super::parse_not_after_date_time;
+
+  #[test]
+  fn test_parse_valid_utc_date() {
+    let result = parse_not_after_date_time("Dec  6 23:59:59 2023 UTC");
+    assert!(result.is_ok());
+    let time = result.unwrap();
+    let serialized_time = time.to_rfc3339();
+    assert_eq!("2023-12-06T23:59:59+00:00", &serialized_time);
+  }
+}
