@@ -1,10 +1,11 @@
 use crate::utils::nsm::{NsmConnection, NsmConnectionError};
 use aws_nitro_enclaves_cose as cose;
 use aws_nitro_enclaves_nsm_api as nitro;
-use chrono::DateTime;
+use chrono::{DateTime, NaiveDateTime};
 use openssl::x509::X509;
 use serde_bytes::ByteBuf;
 use std::fmt::Formatter;
+use std::str::FromStr;
 use std::time::{Duration, SystemTime};
 use thiserror::Error;
 
@@ -43,6 +44,8 @@ pub enum AttestationError {
     ConnectionFailed(#[from] NsmConnectionError),
     #[error("Failed to parse timestamp from cert: {0}")]
     DateTimeParseError(#[from] chrono::ParseError),
+    #[error("Invalid time when paired with timezone: {0}")]
+    InvalidTimeError(String),
 }
 
 pub fn get_attestation_doc(
@@ -96,6 +99,30 @@ pub fn get_expiry_time(cose_sign_1_bytes: &[u8]) -> Result<SystemTime, Attestati
     let signing_cert = X509::from_der(&attestation_doc.certificate[..])
         .map_err(AttestationError::SigningCertParseFailed)?;
     let not_after = signing_cert.not_after().to_string();
-    let date_time = DateTime::parse_from_str(&not_after, "%b %e %H:%M:%S %Y %Z")?;
-    Ok(SystemTime::UNIX_EPOCH + Duration::from_secs(date_time.timestamp() as u64))
+    let utc_date_time = parse_not_after_date_time(&not_after)?;
+    Ok(SystemTime::UNIX_EPOCH + Duration::from_secs(utc_date_time.timestamp() as u64))
+}
+
+fn parse_not_after_date_time(not_after: &str) -> Result<DateTime<chrono_tz::Tz>, AttestationError> {
+    let (date_time, remainder) =
+        NaiveDateTime::parse_and_remainder(not_after, "%b %e %H:%M:%S %Y")?;
+    let tz = chrono_tz::Tz::from_str(remainder.trim()).unwrap_or(chrono_tz::UTC);
+    date_time
+        .and_local_timezone(tz)
+        .earliest()
+        .ok_or_else(|| AttestationError::InvalidTimeError(not_after.to_string()))
+}
+
+#[cfg(test)]
+mod test {
+    use super::parse_not_after_date_time;
+
+    #[test]
+    fn test_parse_valid_utc_date() {
+        let result = parse_not_after_date_time("Dec  6 23:59:59 2023 UTC");
+        assert!(result.is_ok());
+        let time = result.unwrap();
+        let serialized_time = time.to_rfc3339();
+        assert_eq!("2023-12-06T23:59:59+00:00", &serialized_time);
+    }
 }
