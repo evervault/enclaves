@@ -5,6 +5,7 @@ on:
     paths:
       - installer/**
       - .github/workflows/test-runtime-builder.yml
+      - Cargo.lock
 name: Build runtime installer
 jobs:
   run-build-on-runtime-installer:
