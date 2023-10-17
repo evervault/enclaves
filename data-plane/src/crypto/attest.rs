@@ -103,12 +103,10 @@ pub fn get_expiry_time(cose_sign_1_bytes: &[u8]) -> Result<SystemTime, Attestati
     Ok(SystemTime::UNIX_EPOCH + Duration::from_secs(utc_date_time.timestamp() as u64))
 }
 
-fn parse_not_after_date_time(
-    not_after: &str,
-) -> Result<DateTime<chrono_tz::Tz>, AttestationError> {
+fn parse_not_after_date_time(not_after: &str) -> Result<DateTime<chrono_tz::Tz>, AttestationError> {
     let (date_time, remainder) =
-        NaiveDateTime::parse_and_remainder(&not_after, "%b %e %H:%M:%S %Y")?;
-    let tz = chrono_tz::Tz::from_str(remainder).unwrap_or_else(|_| chrono_tz::UTC);
+        NaiveDateTime::parse_and_remainder(not_after, "%b %e %H:%M:%S %Y")?;
+    let tz = chrono_tz::Tz::from_str(remainder).unwrap_or(chrono_tz::UTC);
     date_time
         .and_local_timezone(tz)
         .earliest()
@@ -117,14 +115,14 @@ fn parse_not_after_date_time(
 
 #[cfg(test)]
 mod test {
-  use super::parse_not_after_date_time;
+    use super::parse_not_after_date_time;
 
-  #[test]
-  fn test_parse_valid_utc_date() {
-    let result = parse_not_after_date_time("Dec  6 23:59:59 2023 UTC");
-    assert!(result.is_ok());
-    let time = result.unwrap();
-    let serialized_time = time.to_rfc3339();
-    assert_eq!("2023-12-06T23:59:59+00:00", &serialized_time);
-  }
+    #[test]
+    fn test_parse_valid_utc_date() {
+        let result = parse_not_after_date_time("Dec  6 23:59:59 2023 UTC");
+        assert!(result.is_ok());
+        let time = result.unwrap();
+        let serialized_time = time.to_rfc3339();
+        assert_eq!("2023-12-06T23:59:59+00:00", &serialized_time);
+    }
 }
