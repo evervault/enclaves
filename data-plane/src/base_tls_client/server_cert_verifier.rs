@@ -5,9 +5,9 @@ use tokio_rustls::rustls::{
     Certificate, Error,
 };
 
-pub struct E3CertVerifier;
+pub struct OpenServerCertVerifier;
 
-impl ServerCertVerifier for E3CertVerifier {
+impl ServerCertVerifier for OpenServerCertVerifier {
     fn verify_server_cert(
         &self,
         _end_entity: &Certificate,
@@ -17,7 +17,6 @@ impl ServerCertVerifier for E3CertVerifier {
         _ocsp_response: &[u8],
         _now: SystemTime,
     ) -> Result<ServerCertVerified, Error> {
-        // TODO: add assertions on E3's cert
         Ok(ServerCertVerified::assertion())
     }
 }

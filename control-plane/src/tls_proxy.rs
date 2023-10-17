@@ -5,10 +5,7 @@ use shared::server::{get_vsock_server, Listener};
 use std::net::SocketAddr;
 #[cfg(not(feature = "enclave"))]
 use tokio::io::AsyncWriteExt;
-use trust_dns_resolver::name_server::{GenericConnection, GenericConnectionProvider, TokioRuntime};
-use trust_dns_resolver::AsyncResolver;
-
-type AsyncDnsResolver = AsyncResolver<GenericConnection, GenericConnectionProvider<TokioRuntime>>;
+use trust_dns_resolver::TokioAsyncResolver;
 
 #[derive(Debug, Clone)]
 pub struct TlsTargetDetails {
@@ -26,7 +23,7 @@ impl TlsTargetDetails {
 #[derive(Debug, Clone)]
 pub struct TlsProxy {
     #[allow(unused)]
-    dns_resolver: AsyncDnsResolver,
+    dns_resolver: TokioAsyncResolver,
     target: TlsTargetDetails,
     vsock_port: u16,
 }
@@ -36,7 +33,7 @@ impl TlsProxy {
         target_host: String,
         target_port: u16,
         vsock_port: u16,
-        dns_resolver: AsyncDnsResolver,
+        dns_resolver: TokioAsyncResolver,
     ) -> Self {
         let target = TlsTargetDetails::new(target_host, target_port);
         Self {

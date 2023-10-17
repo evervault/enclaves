@@ -37,7 +37,7 @@ impl InterCaRetreiver {
             .get_cert(token)
             .await
             .map_err(|err| Error::CertServer(err.to_string()))?;
-        CageContext::set(cert_response.clone().context.into());
+        CageContext::set(cert_response.context.clone().into());
         self.env
             .clone()
             .init(cert_response.clone().secrets.unwrap())

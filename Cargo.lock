@@ -1041,6 +1041,7 @@ dependencies = [
  "futures",
  "httparse",
  "hyper",
+ "hyper-rustls",
  "lazy_static",
  "log",
  "mockall",
@@ -1066,6 +1067,7 @@ dependencies = [
  "tokio-vsock",
  "uuid",
  "webpki-roots",
+ "yup-hyper-mock",
 ]
 
 [[package]]
@@ -1752,6 +1754,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "927a765cd3fc26206e66b296465fa9d3e5ab003e651c1b3c060e7956d96b19d2"
 dependencies = [
  "libc",
+ "log",
  "wasi",
  "windows-sys",
 ]
@@ -3320,6 +3323,19 @@ name = "xmlparser"
 version = "0.13.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "66fee0b777b0f5ac1c69bb06d361268faafa61cd4682ae064a171c16c433e9e4"
+
+[[package]]
+name = "yup-hyper-mock"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bda7d318bc83f223105671a6240804f4cdc463b7b34abe873bb97b74012c5dce"
+dependencies = [
+ "futures",
+ "hyper",
+ "log",
+ "mio",
+ "tokio",
+]
 
 [[package]]
 name = "zeroize"

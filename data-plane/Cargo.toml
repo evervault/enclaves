@@ -43,9 +43,11 @@ mockall = "0.11.4"
 uuid = { version = "1.4.1", features = ["v4"] }
 log = { version = "0.4.19", features = ["max_level_debug"] }
 rlimit = { version = "0.10.1", optional = true }
+hyper-rustls = { version = "0.24.1", default-features = false, features = ["http1","http2","tls12","tokio-runtime"] }
 
 [dev-dependencies]
 tokio-test = "0.4.2"
+yup-hyper-mock = "6.0.0"
 
 [features]
 default = ["tls_termination"]

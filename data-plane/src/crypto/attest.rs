@@ -1,7 +1,7 @@
 use crate::utils::nsm::{NsmConnection, NsmConnectionError};
 use aws_nitro_enclaves_cose as cose;
 use aws_nitro_enclaves_nsm_api as nitro;
-use chrono::{TimeZone, Utc};
+use chrono::DateTime;
 use openssl::x509::X509;
 use serde_bytes::ByteBuf;
 use std::fmt::Formatter;
@@ -41,6 +41,8 @@ pub enum AttestationError {
     SigningCertParseFailed(openssl::error::ErrorStack),
     #[error(transparent)]
     ConnectionFailed(#[from] NsmConnectionError),
+    #[error("Failed to parse timestamp from cert: {0}")]
+    DateTimeParseError(#[from] chrono::ParseError),
 }
 
 pub fn get_attestation_doc(
@@ -93,11 +95,7 @@ pub fn get_expiry_time(cose_sign_1_bytes: &[u8]) -> Result<SystemTime, Attestati
             .map_err(AttestationError::AttestationDocParseFailed)?;
     let signing_cert = X509::from_der(&attestation_doc.certificate[..])
         .map_err(AttestationError::SigningCertParseFailed)?;
-    let chrono_expiry_time = Utc
-        .datetime_from_str(
-            &signing_cert.not_after().to_string(),
-            "%b %e %H:%M:%S %Y %Z",
-        )
-        .expect("OpenSSL breaking change!");
-    Ok(SystemTime::UNIX_EPOCH + Duration::from_secs(chrono_expiry_time.timestamp() as u64))
+    let not_after = signing_cert.not_after().to_string();
+    let date_time = DateTime::parse_from_str(&not_after, "%b %e %H:%M:%S %Y %Z")?;
+    Ok(SystemTime::UNIX_EPOCH + Duration::from_secs(date_time.timestamp() as u64))
 }
