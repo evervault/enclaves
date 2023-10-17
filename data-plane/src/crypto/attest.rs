@@ -1,9 +1,10 @@
 use crate::utils::nsm::{NsmConnection, NsmConnectionError};
 use aws_nitro_enclaves_cose as cose;
 use aws_nitro_enclaves_nsm_api as nitro;
-use chrono::DateTime;
+use chrono::{DateTime, NaiveDateTime, TimeZone};
 use openssl::x509::X509;
 use serde_bytes::ByteBuf;
+use std::str::FromStr;
 use std::fmt::Formatter;
 use std::time::{Duration, SystemTime};
 use thiserror::Error;
@@ -96,6 +97,9 @@ pub fn get_expiry_time(cose_sign_1_bytes: &[u8]) -> Result<SystemTime, Attestati
     let signing_cert = X509::from_der(&attestation_doc.certificate[..])
         .map_err(AttestationError::SigningCertParseFailed)?;
     let not_after = signing_cert.not_after().to_string();
-    let date_time = DateTime::parse_from_str(&not_after, "%b %e %H:%M:%S %Y %Z")?;
-    Ok(SystemTime::UNIX_EPOCH + Duration::from_secs(date_time.timestamp() as u64))
+    let (date_time, remainder) = NaiveDateTime::parse_and_remainder(&not_after, "%b %e %H:%M:%S %Y")?;
+    let tz = chrono_tz::Tz::from_str(remainder).unwrap_or_else(|_| chrono_tz::UTC);
+    let offset = tz.offset_from_utf_date(&date_time);
+    let utc_date_time = DateTime::<chrono::Utc>::from_naive_utc_and_offset(date_time, offset);
+    Ok(SystemTime::UNIX_EPOCH + Duration::from_secs(utc_date_time.timestamp() as u64))
 }
