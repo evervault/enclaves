@@ -106,7 +106,7 @@ pub fn get_expiry_time(cose_sign_1_bytes: &[u8]) -> Result<SystemTime, Attestati
 fn parse_not_after_date_time(not_after: &str) -> Result<DateTime<chrono_tz::Tz>, AttestationError> {
     let (date_time, remainder) =
         NaiveDateTime::parse_and_remainder(not_after, "%b %e %H:%M:%S %Y")?;
-    let tz = chrono_tz::Tz::from_str(remainder).unwrap_or(chrono_tz::UTC);
+    let tz = chrono_tz::Tz::from_str(remainder.trim()).unwrap_or(chrono_tz::UTC);
     date_time
         .and_local_timezone(tz)
         .earliest()
