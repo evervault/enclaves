@@ -41,6 +41,7 @@ pub struct HealthcheckAgent<T: InitializedHealthcheck> {
     state: HealthcheckAgentState,
     recv: UnboundedReceiver<HealthcheckStatusRequest>,
     initialized_check: T,
+    buffer_size_limit: usize
 }
 
 pub fn default_agent(
@@ -58,6 +59,8 @@ pub fn default_agent(
     )
 }
 
+const DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT: usize = 10;
+
 impl<T: InitializedHealthcheck> HealthcheckAgent<T> {
     pub fn new(
         customer_process_port: u16,
@@ -69,13 +72,21 @@ impl<T: InitializedHealthcheck> HealthcheckAgent<T> {
         let healthcheck_agent = Self {
             customer_process_port,
             healthcheck_path,
-            buffer: VecDeque::with_capacity(10),
+            buffer: VecDeque::with_capacity(DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT),
             state: HealthcheckAgentState::default(),
             interval,
             recv,
             initialized_check: init_health_checker,
+            buffer_size_limit: DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT
         };
         (healthcheck_agent, sender)
+    }
+
+    fn record_result(&mut self, healthcheck_status: HealthCheckStatus) {
+      self.buffer.push_back(healthcheck_status);
+      if self.buffer.len() >= self.buffer_size_limit {
+        self.buffer.pop_front();
+      }
     }
 
     #[cfg(feature = "tls_termination")]
@@ -133,7 +144,7 @@ impl<T: InitializedHealthcheck> HealthcheckAgent<T> {
             HealthcheckAgentState::Ready => HealthCheckStatus::Ok,
         };
 
-        self.buffer.push_back(healthcheck_result);
+        self.record_result(healthcheck_result);
     }
 
     fn serve_healthcheck_request(&mut self, request: HealthcheckStatusRequest) {
