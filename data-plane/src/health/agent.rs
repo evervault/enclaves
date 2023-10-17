@@ -41,7 +41,7 @@ pub struct HealthcheckAgent<T: InitializedHealthcheck> {
     state: HealthcheckAgentState,
     recv: UnboundedReceiver<HealthcheckStatusRequest>,
     initialized_check: T,
-    buffer_size_limit: usize
+    buffer_size_limit: usize,
 }
 
 pub fn default_agent(
@@ -77,16 +77,16 @@ impl<T: InitializedHealthcheck> HealthcheckAgent<T> {
             interval,
             recv,
             initialized_check: init_health_checker,
-            buffer_size_limit: DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT
+            buffer_size_limit: DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT,
         };
         (healthcheck_agent, sender)
     }
 
     fn record_result(&mut self, healthcheck_status: HealthCheckStatus) {
-      self.buffer.push_back(healthcheck_status);
-      if self.buffer.len() >= self.buffer_size_limit {
-        self.buffer.pop_front();
-      }
+        self.buffer.push_back(healthcheck_status);
+        if self.buffer.len() >= self.buffer_size_limit {
+            self.buffer.pop_front();
+        }
     }
 
     #[cfg(feature = "tls_termination")]
