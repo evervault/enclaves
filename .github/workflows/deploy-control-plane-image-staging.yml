@@ -40,6 +40,11 @@ jobs:
           cmd: cargo build -p control-plane --features enclave,network_egress,release_logging --release --target ${{ env.LINUX_TARGET }}
         env:
           RUSTFLAGS: "--cfg staging"
+      - name: Get control plane version
+        id: get_version
+        run: |
+          version=$(cargo metadata | jq -r ".packages[] | select(.name == \"control-plane\") | .version")
+          echo ::set-output name=version::${version}
       - name: Move control-plane binary to root
         run: cp ./target/${{ env.LINUX_TARGET }}/release/control-plane ./control-plane
       - name: Configure Staging AWS Credentials
@@ -57,8 +62,9 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: evervault/control-plane
           IMAGE_TAG: ${{ github.sha }}
+          SEMVER: ${{ steps.get_version.outputs.version }}}
         run: |
-          docker build -f ./control-plane/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-latest --pull --no-cache .
+          docker build -f ./control-plane/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$SEMVER --pull --no-cache .
       - name: Push control plane image to Amazon ECR
         id: push-control-plane
         env:
@@ -67,7 +73,7 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$SEMVER
 
   deploy_control_plane_image_without_egress:
     runs-on: ubuntu-latest
@@ -82,6 +88,11 @@ jobs:
           cmd: cargo build -p control-plane --features enclave,release_logging --release --target ${{ env.LINUX_TARGET }}
         env:
           RUSTFLAGS: "--cfg staging"
+      - name: Get control plane version
+        id: get_version
+        run: |
+          version=$(cargo metadata | jq -r ".packages[] | select(.name == \"control-plane\") | .version")
+          echo ::set-output name=version::${version}
       - name: Move control-plane binary to root
         run: cp ./target/${{ env.LINUX_TARGET }}/release/control-plane ./control-plane
       - name: Configure Staging AWS Credentials
@@ -99,8 +110,9 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: evervault/control-plane
           IMAGE_TAG: ${{ github.sha }}
+          SEMVER: ${{ steps.get_version.outputs.version }}}
         run: |
-          docker build -f ./control-plane/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-latest --pull --no-cache .
+          docker build -f ./control-plane/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$SEMVER --pull --no-cache .
       - name: Push control plane image to Amazon ECR
         id: push-control-plane
         env:
@@ -109,4 +121,4 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$SEMVER
