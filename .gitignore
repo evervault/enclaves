@@ -5,6 +5,7 @@ e2e-tests/node_modules
 e2e-tests/customer-process/node_modules
 data-plane/*.pem
 .cargo
+e2e-tests/sample-ca
 e2e-tests/testing-certs/*
 e2e-tests/mtls-testing-certs/ca/*
 !e2e-tests/mtls-testing-certs/ca/*.sh
