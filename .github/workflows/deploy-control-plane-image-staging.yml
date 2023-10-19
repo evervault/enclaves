@@ -43,8 +43,8 @@ jobs:
       - name: Get control plane version
         id: get_version
         run: |
-          version=$(cargo metadata | jq -r ".packages[] | select(.name == \"control-plane\") | .version")
-          echo ::set-output name=version::${version}
+          VERSION=$(cargo metadata | jq -r ".packages[] | select(.name == \"control-plane\") | .version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
       - name: Move control-plane binary to root
         run: cp ./target/${{ env.LINUX_TARGET }}/release/control-plane ./control-plane
       - name: Configure Staging AWS Credentials
@@ -62,7 +62,7 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: evervault/control-plane
           IMAGE_TAG: ${{ github.sha }}
-          SEMVER: ${{ steps.get_version.outputs.version }}}
+          SEMVER: ${{ steps.get_version.outputs.version }}
         run: |
           docker build -f ./control-plane/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$SEMVER --pull --no-cache .
       - name: Push control plane image to Amazon ECR
@@ -91,8 +91,8 @@ jobs:
       - name: Get control plane version
         id: get_version
         run: |
-          version=$(cargo metadata | jq -r ".packages[] | select(.name == \"control-plane\") | .version")
-          echo ::set-output name=version::${version}
+          VERSION=$(cargo metadata | jq -r ".packages[] | select(.name == \"control-plane\") | .version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
       - name: Move control-plane binary to root
         run: cp ./target/${{ env.LINUX_TARGET }}/release/control-plane ./control-plane
       - name: Configure Staging AWS Credentials
@@ -110,7 +110,7 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: evervault/control-plane
           IMAGE_TAG: ${{ github.sha }}
-          SEMVER: ${{ steps.get_version.outputs.version }}}
+          SEMVER: ${{ steps.get_version.outputs.version }}
         run: |
           docker build -f ./control-plane/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$SEMVER --pull --no-cache .
       - name: Push control plane image to Amazon ECR
