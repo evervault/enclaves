@@ -52,6 +52,11 @@ Generate test certs:
 ./e2e-tests/mtls-testing-certs/ca/generate-certs.sh
 ```
 
+Generate the Root and Intermediate CA for cert provisioning in tests:
+```sh
+sh ./e2e-tests/generate-sample-ca.sh
+```
+
 Generate certs for TLS in the mock API:
 ```sh
 mkdir e2e-tests/testing-certs && mkcd e2e-tests/testing-certs
