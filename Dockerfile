@@ -1,4 +1,4 @@
-FROM node:16-alpine3.15
+FROM node:16-alpine3.18
 
 ENV DATA_PLANE_EXECUTABLE_PATH=/data-plane
 ENV DATA_PLANE_SERVICE_PATH=/etc/service/data-plane
@@ -9,7 +9,7 @@ ENV START_EV_SERVICES_PATH=/etc/service/ev-services-entrypoint
 EXPOSE 443
 
 RUN apk update &&\
-    apk add runit && apk add curl \
+    apk add runit && apk add curl && \
     rm -rf /var/cache/apk/*
 
 COPY ./target/x86_64-unknown-linux-musl/release/data-plane $DATA_PLANE_EXECUTABLE_PATH

@@ -1,7 +1,6 @@
 #!/bin/bash
 set -e 
 
-
 # kill container if it is left running by hanging test, then generate local testing certs
 if [ "${CI:-unset}" = "unset" ];
 then
@@ -26,7 +25,6 @@ else
   ACME_ACCOUNT_EC_KEY=`cat ./e2e-tests/acme-key/key.pem` && export ACME_ACCOUNT_EC_KEY
   ACME_ACCOUNT_HMAC_KEY="cGxhY2Vob2xkZXI=" && export ACME_ACCOUNT_HMAC_KEY
   ACME_ACCOUNT_HMAC_KEY_ID="placeholder_id" && export ACME_ACCOUNT_HMAC_KEY_ID
-
 fi
 
 # install the node modules for customer process and test script
@@ -87,7 +85,6 @@ npm run websocket-tests
 
 echo "Testing that Cage is serving trustable cert chain"
 echo "Q" | openssl s_client -verifyCAfile sample-ca/sample-root-ca-cert.pem -showcerts -connect 0.0.0.0:443 | grep "Verification: OK"
-
 
 echo "Tests complete"
 docker compose down

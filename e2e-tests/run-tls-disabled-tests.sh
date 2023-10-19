@@ -1,7 +1,6 @@
 #!/bin/bash
 set -e 
 
-
 # kill container if it is left running by hanging test, then generate local testing certs
 if [ "${CI:-unset}" = "unset" ];
 then
