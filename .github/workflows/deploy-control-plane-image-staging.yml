@@ -71,6 +71,7 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: evervault/control-plane
           IMAGE_TAG: ${{ github.sha }}
+          SEMVER: ${{ steps.get_version.outputs.version }}
         run: |
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$SEMVER
@@ -119,6 +120,7 @@ jobs:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: evervault/control-plane
           IMAGE_TAG: ${{ github.sha }}
+          SEMVER: ${{ steps.get_version.outputs.version }}
         run: |
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$SEMVER
