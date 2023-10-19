@@ -1,12 +1,6 @@
 #!/bin/bash
 set -e 
 
-
-# If sample-ca directory doesn't exist, create it (required as tls enabled and disabled tests share a Dockerfile)
-if [ ! -d "e2e-tests/sample-ca" ]; then
-  mkdir -p e2e-tests/sample-ca
-fi
-
 # kill container if it is left running by hanging test, then generate local testing certs
 if [ "${CI:-unset}" = "unset" ];
 then

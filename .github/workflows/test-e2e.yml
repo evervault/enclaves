@@ -32,7 +32,9 @@ jobs:
       - name: Run end-to-end test script
         env:
           CI: true
-        run: sh e2e-tests/run-all-feature-tests.sh
+        run: |
+          sh e2e-tests/generate-sample-ca.sh
+          sh e2e-tests/run-all-feature-tests.sh
   run_e2e_tests_no_tls_termination:
     runs-on: ubuntu-latest
     steps:
@@ -57,4 +59,6 @@ jobs:
       - name: Run end-to-end test script
         env:
           CI: true
-        run: sh e2e-tests/run-tls-disabled-tests.sh
+        run: |
+          sh e2e-tests/generate-sample-ca.sh
+          sh e2e-tests/run-tls-disabled-tests.sh
