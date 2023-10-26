@@ -1,12 +1,20 @@
 on:
   push:
-    paths:
-      - installer/**
-      - .github/workflows/deploy-runtime-installer.yml
-    branches:
-      - main
+    tags:
+      - "installer/v*.*.*"
+
 name: Build and deploy runtime installer bundle
 jobs:
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+    steps:
+      - id: get-version
+        run: |
+          echo "using version tag ${GITHUB_REF:11}"
+          echo ::set-output name=version::${GITHUB_REF:11}
+
   build-runtime-bundle:
     runs-on: ubuntu-latest
     outputs:
@@ -89,6 +97,9 @@ jobs:
         env:
           STAGE: production
           CHECKSUM: ${{ needs.build-runtime-bundle.outputs.checksum }}
+          VERSION_TAG: ${{ needs.get-version.outputs.version }}
         run: |
           echo "${{ env.CHECKSUM }}" > latest.txt
           aws s3 cp ./latest.txt s3://cage-build-assets-${{ env.STAGE }}/installer/latest
+          sh ./scripts/update-installer-version.sh ${{ env.VERSION_TAG  }} ${{ env.CHECKSUM }}
+          aws s3 cp scripts/versions s3://cage-build-assets-${{ env.STAGE }}/runtime/versions
