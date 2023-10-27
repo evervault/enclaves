@@ -20,12 +20,13 @@ if [ -z "$1" ]; then
 fi
 
 release_version="$1"
+ev_domain=${2:-evervault.com}
 
 major_version=$(echo "$release_version" | cut -d '.' -f 1)
 
 echo "Release major version: $major_version"
 
-version_json=$(curl -s "https://cage-build-assets.evervault.com/runtime/versions")
+version_json=$(curl -s "https://cage-build-assets.${ev_domain}/runtime/versions")
 echo "Version response: $version_json"
 
 if [ $? -eq 0 ]; then
