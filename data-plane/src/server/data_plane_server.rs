@@ -165,7 +165,7 @@ where
                         }
                     }
                 }
-                // When we need to continue parsing the request, we will skip this line. 
+                // When we need to continue parsing the request, we will skip this line.
                 // So this will reset the buffer when the request has been consumed.
                 buffer.clear();
             }
