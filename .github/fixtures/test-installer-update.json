@@ -1,0 +1,14 @@
+{
+  "after": "",
+  "base_ref": "",
+  "before": "",
+  "commits": [],
+  "compare": "",
+  "created": "",
+  "deleted": "",
+  "forced": "",
+  "head_commit": null,
+  "pusher": {},
+  "ref": "refs/tags/installer/v1.0.0",
+  "repository": {}
+}
