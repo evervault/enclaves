@@ -12,8 +12,8 @@ jobs:
     steps:
       - id: get-version
         run: |
-          echo "using version tag ${GITHUB_REF:11}"
-          echo ::set-output name=version::${GITHUB_REF:11}
+          echo "using version tag ${GITHUB_REF:21}"
+          echo ::set-output name=version::${GITHUB_REF:21}
 
   build-runtime-bundle:
     runs-on: ubuntu-latest
