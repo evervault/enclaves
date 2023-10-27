@@ -88,6 +88,8 @@ where
                 let mut temp_chunk = [0; 1024];
                 let mut req = httparse::Request::new(&mut headers);
                 let chunk_size = match stream.read(&mut temp_chunk).await {
+                    // we've reached EOF
+                    Ok(chunk_size) if chunk_size == 0 => break,
                     Ok(chunk_size) => chunk_size,
                     Err(e) => {
                         log::error!("Connection read error - {e:?}");
@@ -163,6 +165,9 @@ where
                         }
                     }
                 }
+                // When we need to continue parsing the request, we will skip this line. 
+                // So this will reset the buffer when the request has been consumed.
+                buffer.clear();
             }
         });
     }
