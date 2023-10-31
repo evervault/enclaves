@@ -87,6 +87,7 @@ jobs:
     environment:
       name: production
     steps:
+      - uses: actions/checkout@v4
       - name: Configure Production AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
