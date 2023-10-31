@@ -83,7 +83,7 @@ jobs:
 
   release-runtime-bundle-production:
     runs-on: ubuntu-latest
-    needs: [build-runtime-bundle, upload-runtime-bundle-production]
+    needs: [build-runtime-bundle, upload-runtime-bundle-production, get-version]
     environment:
       name: production
     steps:
