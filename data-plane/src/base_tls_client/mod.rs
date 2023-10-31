@@ -70,9 +70,9 @@ impl BaseClient {
         // if headers have been passed, seed the request with the provided set of headers,
         // but override with required headers to avoid failed reqs.
         if let Some(headers) = headers {
-            request
-                .headers_mut()
-                .map(|header_map| *header_map = headers);
+            if let Some(req_header_map) = request.headers_mut() {
+                *req_header_map = headers
+            }
         }
         let mut request = request
             .header("Content-Type", "application/json")
