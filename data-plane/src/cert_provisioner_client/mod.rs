@@ -77,7 +77,7 @@ impl CertProvisionerClient {
 
         let response = self
             .base_client
-            .send(None, "POST", &self.uri("/cert"), body)
+            .send(None, "POST", &self.uri("/cert"), body, None)
             .await?;
 
         self.parse_response(response).await
@@ -95,7 +95,7 @@ impl CertProvisionerClient {
 
         let response = self
             .base_client
-            .send(None, "POST", &self.uri("/secrets"), body)
+            .send(None, "POST", &self.uri("/secrets"), body, None)
             .await?;
 
         self.parse_response(response).await

@@ -6,7 +6,7 @@ pub use server_cert_verifier::OpenServerCertVerifier;
 
 use hyper::client::conn::{Connection as HyperConnection, SendRequest};
 use hyper::header::HeaderValue;
-use hyper::{Body, Response};
+use hyper::{Body, HeaderMap, Response};
 use tokio_rustls::rustls::ServerName;
 use tokio_rustls::{client::TlsStream, TlsConnector};
 
@@ -64,9 +64,17 @@ impl BaseClient {
         method: &str,
         uri: &str,
         payload: hyper::Body,
+        headers: Option<HeaderMap>,
     ) -> Result<Response<Body>, ClientError> {
-        let mut request = hyper::Request::builder()
-            .uri(uri)
+        let mut request = hyper::Request::builder().uri(uri);
+        // if headers have been passed, seed the request with the provided set of headers,
+        // but override with required headers to avoid failed reqs.
+        if let Some(headers) = headers {
+            request
+                .headers_mut()
+                .map(|header_map| *header_map = headers);
+        }
+        let mut request = request
             .header("Content-Type", "application/json")
             .header(
                 "User-Agent",

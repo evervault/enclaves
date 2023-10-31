@@ -200,9 +200,12 @@ impl AcmeKeyRetreiver {
         raw_acme_key_pair: RawAcmeKeyPair,
     ) -> Result<RawAcmeKeyPair, AcmeError> {
         let e3_response: CryptoResponse = e3_client
-            .encrypt(CryptoRequest {
-                data: json!(raw_acme_key_pair),
-            })
+            .encrypt(
+                CryptoRequest {
+                    data: json!(raw_acme_key_pair),
+                },
+                None,
+            )
             .await?;
 
         let encrypted_acme_key_pair: RawAcmeKeyPair = serde_json::from_value(e3_response.data)?;
