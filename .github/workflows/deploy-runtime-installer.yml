@@ -104,3 +104,7 @@ jobs:
           aws s3 cp ./latest.txt s3://cage-build-assets-${{ env.STAGE }}/installer/latest
           sh ./scripts/update-installer-version.sh ${{ env.VERSION_TAG  }} ${{ env.CHECKSUM }}
           aws s3 cp scripts/versions s3://cage-build-assets-${{ env.STAGE }}/runtime/versions
+       
+      - name: Cloudfront Cache Invalidation
+        run: |
+          aws cloudfront create-invalidation --distribution-id ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION }} --paths "/runtime/versions"    
