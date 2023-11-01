@@ -69,6 +69,7 @@ impl E3Client {
                 "POST",
                 &self.uri("/decrypt"),
                 payload.try_into_body()?,
+                None,
             )
             .await?;
         StatsClient::record_decrypt();
@@ -97,10 +98,22 @@ impl E3Client {
         .await
     }
 
-    pub async fn encrypt<T, P: E3Payload>(&self, payload: P) -> Result<T, E3Error>
+    pub async fn encrypt<T, P: E3Payload>(
+        &self,
+        payload: P,
+        data_role: Option<String>,
+    ) -> Result<T, E3Error>
     where
         T: DeserializeOwned,
     {
+        let request_headers = data_role
+            .as_ref()
+            .and_then(|role| hyper::header::HeaderValue::from_str(role).ok())
+            .map(|role| {
+                let mut header_map = hyper::HeaderMap::new();
+                header_map.insert("x-evervault-data-role", role);
+                header_map
+            });
         let token = self
             .token_client
             .get_token()
@@ -113,6 +126,7 @@ impl E3Client {
                 "POST",
                 &self.uri("/encrypt"),
                 payload.try_into_body()?,
+                request_headers,
             )
             .await?;
         StatsClient::record_encrypt();
@@ -123,6 +137,7 @@ impl E3Client {
         &self,
         retries: usize,
         payload: P,
+        data_role: Option<String>,
     ) -> Result<T, E3Error>
     where
         T: DeserializeOwned,
@@ -133,7 +148,7 @@ impl E3Client {
             .take(retries);
 
         Retry::spawn(retry_strategy, || async {
-            self.encrypt(payload.clone()).await
+            self.encrypt(payload.clone(), data_role.clone()).await
         })
         .await
     }
@@ -150,6 +165,7 @@ impl E3Client {
                 "POST",
                 &self.uri("/authenticate"),
                 payload.try_into_body()?,
+                None,
             )
             .await?;
         log::debug!("{response:?}");

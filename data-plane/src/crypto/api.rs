@@ -121,8 +121,16 @@ impl CryptoApi {
     }
 
     async fn encrypt(&mut self, req: Request<Body>) -> Result<Body, CryptoApiError> {
+        let data_role = req
+            .headers()
+            .get("x-evervault-data-role")
+            .and_then(|role| role.to_str().ok())
+            .map(|role_str| role_str.to_string());
         let request = self.build_request(req).await?;
-        let e3_response: CryptoResponse = self.e3_client.encrypt_with_retries(2, request).await?;
+        let e3_response: CryptoResponse = self
+            .e3_client
+            .encrypt_with_retries(2, request, data_role)
+            .await?;
         Ok(hyper::Body::from(serde_json::to_vec(&e3_response.data)?))
     }
 
