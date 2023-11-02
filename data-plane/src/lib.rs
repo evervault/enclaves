@@ -22,7 +22,7 @@ pub mod stats;
 pub mod stats_client;
 pub mod utils;
 #[cfg(feature = "network_egress")]
-use shared::server::egress::{get_egress_ports_from_env, EgressConfig};
+use shared::server::egress::EgressConfig;
 #[cfg(feature = "tls_termination")]
 pub mod server;
 

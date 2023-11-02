@@ -1,6 +1,7 @@
 use super::error::DNSError;
-use crate::dns::cache::Cache;
+use crate::cache::DnsCacheEntry;
 use bytes::Bytes;
+use cached::Cached;
 use dns_message_parser::rr::A;
 use dns_message_parser::Dns;
 use shared::server::get_vsock_client;
@@ -15,6 +16,7 @@ use tokio::net::UdpSocket;
 use tokio::sync::{mpsc::Receiver, Semaphore};
 use tokio::time::timeout;
 
+const DEFAULT_DNS_TIMEOUT: u32 = 60;
 /// Empty struct for the DNS proxy that runs in the data plane
 pub struct EnclaveDnsProxy;
 
@@ -140,16 +142,30 @@ impl EnclaveDnsDriver {
             .to_string();
 
         // Extract returned records from response
-        let rr = dns
+        let a_records: Vec<dns_message_parser::rr::A> = dns
             .answers
             .iter()
             .filter_map(|rr| match rr {
-                dns_message_parser::rr::RR::A(a) => Some(a.ipv4_addr.to_string()),
+                dns_message_parser::rr::RR::A(a) => Some(a.clone()),
                 _ => None,
             })
             .collect();
 
-        Cache::store_ip(&domain_name, rr);
+        let ips: Vec<Ipv4Addr> = a_records.iter().map(|record| record.ipv4_addr).collect();
+
+        let min_ttl = a_records
+            .iter()
+            .min_by(|&record_a, &record_b| record_a.ttl.cmp(&record_b.ttl))
+            .map(|record| record.ttl);
+
+        match DnsCacheEntry::try_from((ips, min_ttl.unwrap_or(DEFAULT_DNS_TIMEOUT))) {
+            Ok(dns_cache_entry) => {
+              crate::cache::HOST_TO_IP.lock().await.cache_set(domain_name, dns_cache_entry);
+            },
+            Err(e) => {
+                log::warn!("Failed to create DNS cache entry: {e:?}");
+            }
+        };
 
         Self::create_loopback_dns_response(dns)
     }

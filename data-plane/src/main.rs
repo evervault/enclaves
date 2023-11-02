@@ -96,7 +96,14 @@ async fn start(data_plane_port: u16) {
     use data_plane::{crypto::api::CryptoApi, stats::StatsProxy};
 
     StatsClient::init();
-    let ports = FeatureContext::get().egress.ports;
+    let ports = match FeatureContext::get() {
+      Ok(context) => context.egress.ports,
+      Err(e) => {
+        log::error!("Failed to access context in enclave - {e}");
+        return;
+      }
+    };
+
     let egress_proxies = join_all(ports.into_iter().map(EgressProxy::listen));
 
     let (_, dns_result, e3_api_result, egress_results, stats_result) = tokio::join!(
