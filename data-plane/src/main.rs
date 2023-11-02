@@ -97,11 +97,11 @@ async fn start(data_plane_port: u16) {
 
     StatsClient::init();
     let ports = match FeatureContext::get() {
-      Ok(context) => context.egress.ports,
-      Err(e) => {
-        log::error!("Failed to access context in enclave - {e}");
-        return;
-      }
+        Ok(context) => context.egress.ports,
+        Err(e) => {
+            log::error!("Failed to access context in enclave - {e}");
+            return;
+        }
     };
 
     let egress_proxies = join_all(ports.into_iter().map(EgressProxy::listen));

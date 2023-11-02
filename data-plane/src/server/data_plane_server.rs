@@ -100,31 +100,26 @@ where
                 buffer.extend_from_slice(&temp_chunk[..chunk_size]);
 
                 match req.parse(&buffer) {
-                    Ok(Status::Complete(body_offset)) => {
-                        #[cfg(feature = "enclave")]
-                        if req.path == Some("/.well-known/attestation") {
-                            let response_bytes = match handle_attestation_request(req).await {
-                                Ok(response) => response_to_bytes(response).await,
-                                Err(err) => {
-                                    log::error!("Failed to handle attestation request - {err:?}");
-                                    match build_attestation_err_response(err) {
-                                        Ok(response) => response_to_bytes(response).await,
-                                        Err(err) => {
-                                            log::error!("Failed to build attesation error response - {err:?}");
-                                            shutdown_conn(&mut stream).await;
-                                            break;
-                                        }
-                                    }
-                                }
-                            };
-
-                            if let Err(err) = stream.write_all(&response_bytes).await {
-                                log::error!("Failed to write attestation response to control plane - {err:?}");
+                    #[cfg(feature = "enclave")]
+                    Ok(Status::Complete(_)) if is_attestation_request(&req) => {
+                        let response_bytes = match handle_attestation_request(req).await {
+                            Ok(response) => response_to_bytes(response).await,
+                            Err(err) => {
+                                log::error!("Failed to build attesation error response - {err:?}");
                                 shutdown_conn(&mut stream).await;
-                            };
-                            break;
-                        }
+                                break;
+                            }
+                        };
 
+                        if let Err(err) = stream.write_all(&response_bytes).await {
+                            log::error!(
+                                "Failed to write attestation response to control plane - {err:?}"
+                            );
+                            shutdown_conn(&mut stream).await;
+                        };
+                        break;
+                    }
+                    Ok(Status::Complete(body_offset)) => {
                         if let Err(err) = handle_full_parsed_http_request(
                             req,
                             port,
@@ -171,6 +166,11 @@ where
             }
         });
     }
+}
+
+#[cfg(feature = "enclave")]
+fn is_attestation_request(req: &httparse::Request) -> bool {
+    req.path.as_deref() == Some("/.well-known/attestation")
 }
 
 async fn handle_non_http_request<L>(
@@ -490,8 +490,17 @@ struct AttestationResponse {
 async fn handle_attestation_request(_req: httparse::Request<'_, '_>) -> Result<Response<Body>> {
     let challenge = TRUSTED_PUB_CERT.get();
 
-    let attestation_doc = attest::get_attestation_doc(challenge.cloned(), None)
-        .map_err(|err| Error::AttestationRequestError(err.to_string()))?;
+    let attestation_doc_result = attest::get_attestation_doc(challenge.cloned(), None)
+        .map_err(|err| Error::AttestationRequestError(err.to_string()));
+
+    let attestation_doc = match attestation_doc_result {
+        Ok(ad_bytes) => ad_bytes,
+        Err(e) => {
+            log::error!("Failed to handle attestation request - {err:?}");
+            let response = build_attestation_err_response(e)?;
+            return Ok(response);
+        }
+    };
 
     let base64_doc = base64::encode(attestation_doc);
 
@@ -499,9 +508,13 @@ async fn handle_attestation_request(_req: httparse::Request<'_, '_>) -> Result<R
         attestation_doc: base64_doc,
     };
 
-    Ok(Response::builder()
+    let attestation_response_payload =
+        serde_json::to_string(&response).expect("Failed to serialize attestation response payload");
+
+    let response = Response::builder()
         .status(200)
-        .body(Body::from(serde_json::to_string(&response).unwrap()))?)
+        .body(Body::from(attestation_response_payload))?;
+    Ok(response)
 }
 
 #[cfg(feature = "enclave")]

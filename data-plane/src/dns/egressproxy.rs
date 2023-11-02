@@ -3,25 +3,25 @@ use crate::dns::error::DNSError::MissingIP;
 use crate::FeatureContext;
 use cached::Cached;
 use shared::rpc::request::ExternalRequest;
-use shared::server::egress::{EgressDomains, check_allow_list, get_hostname};
+use shared::server::egress::{check_allow_list, get_hostname, EgressDomains};
 use shared::server::error::ServerError;
 use shared::server::tcp::TcpServer;
 use shared::server::CID::Parent;
 use shared::server::{get_vsock_client, Listener};
 use shared::utils::pipe_streams;
 use shared::EGRESS_PROXY_VSOCK_PORT;
-use thiserror::Error;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use rand::seq::SliceRandom;
 
 #[derive(Debug, Error)]
 pub enum EgressProxyError {
-  #[error("Failed to get context in egress proxy - {0}")]
-  ContextError(#[from] crate::ContextError),
-  #[error("An error occurred while launching the egress proxy - {0}")]
-  ServerError(#[from] ServerError)
+    #[error("Failed to get context in egress proxy - {0}")]
+    ContextError(#[from] crate::ContextError),
+    #[error("An error occurred while launching the egress proxy - {0}")]
+    ServerError(#[from] ServerError),
 }
 
 pub struct EgressProxy;

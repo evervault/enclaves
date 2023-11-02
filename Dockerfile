@@ -91,4 +91,6 @@ RUN mkdir /mock_cert_provisioner
 COPY ./e2e-tests/scripts/start_mock_cert_provisioner /mock_cert_provisioner/start_mock_cert_provisioner
 RUN chmod +x /mock_cert_provisioner/start_mock_cert_provisioner
 
+COPY ./e2e-tests/feature-context.json /etc/dataplane-config.json
+
 CMD ["runsvdir", "/etc/service"]

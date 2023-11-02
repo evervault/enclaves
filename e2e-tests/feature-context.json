@@ -1,0 +1,8 @@
+{
+  "api_key_auth": true,
+  "egress": {
+    "allow_list": "*",
+    "ports": "443"
+  },
+  "trx_logging_enabled": true
+}

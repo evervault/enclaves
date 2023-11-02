@@ -160,8 +160,11 @@ impl EnclaveDnsDriver {
 
         match DnsCacheEntry::try_from((ips, min_ttl.unwrap_or(DEFAULT_DNS_TIMEOUT))) {
             Ok(dns_cache_entry) => {
-              crate::cache::HOST_TO_IP.lock().await.cache_set(domain_name, dns_cache_entry);
-            },
+                crate::cache::HOST_TO_IP
+                    .lock()
+                    .await
+                    .cache_set(domain_name, dns_cache_entry);
+            }
             Err(e) => {
                 log::warn!("Failed to create DNS cache entry: {e:?}");
             }
