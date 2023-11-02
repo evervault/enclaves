@@ -265,7 +265,7 @@ fn try_log_non_http_trx(
     remote_ip: Option<String>,
 ) -> Result<()> {
     let cage_context = CageContext::get()?;
-    let feature_context = FeatureContext::get();
+    let feature_context = FeatureContext::get()?;
     let mut context_builder = init_trx(&cage_context, &feature_context, None, request_type);
     context_builder.add_httparse_to_trx(authorized, request, remote_ip);
     let trx_context = context_builder.build()?;
@@ -291,7 +291,7 @@ async fn auth_request_non_http(
         .find(|header| header.name.to_ascii_lowercase() == "api-key")
         .ok_or(MissingApiKey)?;
     let header_value = HeaderValue::from_bytes(api_key.value)?;
-    if FeatureContext::get().api_key_auth
+    if FeatureContext::get()?.api_key_auth
         && auth_request(header_value, CageContext::get()?, e3_client.clone())
             .await
             .is_some()
@@ -413,7 +413,7 @@ async fn handle_http_request(
     http_client: hyper::Client<HttpConnector, Body>,
 ) -> Result<Response<Body>> {
     let e3_client_for_req = e3_client_for_tcp.clone();
-    let feature_context = FeatureContext::get();
+    let feature_context = FeatureContext::get()?;
     let cage_context = CageContext::get()?;
     let tx_for_req = tx_for_tcp.clone();
     let remote_ip = remote_ip.clone();
@@ -447,7 +447,7 @@ async fn handle_http_request(
     )
     .await;
 
-    let trusted_headers = FeatureContext::get().trusted_headers;
+    let trusted_headers = FeatureContext::get()?.trusted_headers;
     trx_context.add_res_to_trx_context(&response, trusted_headers.as_ref());
     let built_context = trx_context.stop_timer_and_build(request_timer);
 
