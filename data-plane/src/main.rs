@@ -53,8 +53,15 @@ fn main() {
         .build()
         .expect("Failed to build tokio runtime in data plane");
 
-    FeatureContext::set();
-    let ctx = FeatureContext::get();
+    let ctx = match FeatureContext::set() {
+        Ok(_) => FeatureContext::get()
+            .expect("Infallible - feature context read after context is set successfully"),
+        Err(e) => {
+            log::error!("Failed to set context in enclave, cannot proceed - {e:?}");
+            return;
+        }
+    };
+
     runtime.block_on(async move {
         tokio::join!(
             start(data_plane_port),

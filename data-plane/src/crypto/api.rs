@@ -14,7 +14,7 @@ use hyper::{
 use crate::base_tls_client::ClientError;
 use crate::e3client::{CryptoRequest, CryptoResponse, E3Client};
 use crate::error::Error;
-use crate::CageContextError;
+use crate::ContextError;
 
 #[cfg(feature = "enclave")]
 use super::attest;
@@ -47,8 +47,8 @@ pub enum CryptoApiError {
     NotFound,
     #[error("Could not deserialize your payload")]
     SerializationError,
-    #[error("Couldn't get cage context")]
-    CageContextError(#[from] CageContextError),
+    #[error("Failed to read context - {0}")]
+    ContextError(#[from] ContextError),
     #[error("Error — {0:?}")]
     Error(#[from] Error),
 }

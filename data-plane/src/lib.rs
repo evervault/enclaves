@@ -1,8 +1,6 @@
-use std::fs;
-
-use configuration::should_forward_proxy_protocol;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
+use std::fs;
 
 #[cfg(test)]
 pub mod mocks;
@@ -43,17 +41,21 @@ pub struct CageContext {
 }
 
 #[derive(Error, Debug)]
-pub enum CageContextError {
-    #[error("Cage context has not yet been initialized")]
-    ContextNotInitialized,
+pub enum ContextError {
+    #[error("Failed to read context from file - {0}")]
+    FailedToRead(#[from] std::io::Error),
+    #[error("Failed to parse read context - {0}")]
+    FailedToParse(#[from] serde_json::error::Error),
+    #[error("Attempted to read the context in the enclave before it was set.")]
+    Uninitialized,
 }
 
 impl CageContext {
-    fn get() -> Result<CageContext, CageContextError> {
+    fn get() -> Result<CageContext, ContextError> {
         CAGE_CONTEXT
             .get()
             .map(|context| context.to_owned())
-            .ok_or(CageContextError::ContextNotInitialized)
+            .ok_or(ContextError::Uninitialized)
     }
 
     fn set(ctx: CageContext) {
@@ -154,58 +156,6 @@ impl From<ProvisionerContext> for CageContext {
     }
 }
 
-impl FeatureContext {
-    pub fn set() {
-        match Self::read_dataplane_context() {
-            Some(context) => FEATURE_CONTEXT.get_or_init(|| context),
-            None => FEATURE_CONTEXT.get_or_init(Self::from_env),
-        };
-    }
-    pub fn get() -> FeatureContext {
-        FEATURE_CONTEXT
-            .get()
-            .expect("Couldn't get feature context")
-            .clone()
-    }
-
-    // Need to support from env for older versions of CLI - Remove after beta
-    fn from_env() -> FeatureContext {
-        let api_key_auth = std::env::var("EV_API_KEY_AUTH")
-            .unwrap_or_else(|_| "true".to_string())
-            .parse()
-            .unwrap_or(true);
-        let trx_logging_enabled = std::env::var("EV_TRX_LOGGING_ENABLED")
-            .unwrap_or_else(|_| "true".to_string())
-            .parse()
-            .unwrap_or(true);
-        FeatureContext {
-            api_key_auth,
-            healthcheck: None,
-            trx_logging_enabled,
-            forward_proxy_protocol: should_forward_proxy_protocol(),
-            trusted_headers: vec![],
-            #[cfg(feature = "network_egress")]
-            egress: EgressConfig {
-                ports: get_egress_ports_from_env(),
-                allow_list: shared::server::egress::get_egress_allow_list_from_env(),
-            },
-        }
-    }
-
-    fn read_dataplane_context() -> Option<FeatureContext> {
-        let mut feature_context: FeatureContext = fs::read_to_string("/etc/dataplane-config.json")
-            .ok()
-            .and_then(|contents| serde_json::from_str(&contents).ok())?;
-        // map trusted headers to lowercase
-        feature_context.trusted_headers = feature_context
-            .trusted_headers
-            .iter()
-            .map(|header| header.to_lowercase())
-            .collect();
-        Some(feature_context)
-    }
-}
-
 #[derive(Clone, Deserialize)]
 pub struct FeatureContext {
     pub api_key_auth: bool,
@@ -217,6 +167,34 @@ pub struct FeatureContext {
     pub trusted_headers: Vec<String>,
     #[cfg(feature = "network_egress")]
     pub egress: EgressConfig,
+}
+
+impl FeatureContext {
+    pub fn set() -> Result<(), ContextError> {
+        Self::read_dataplane_context().map(|context| {
+            FEATURE_CONTEXT.get_or_init(|| context);
+        })
+    }
+
+    pub fn get() -> Result<FeatureContext, ContextError> {
+        FEATURE_CONTEXT
+            .get()
+            .map(|context| context.clone())
+            .ok_or(ContextError::Uninitialized)
+    }
+
+    fn read_dataplane_context() -> Result<FeatureContext, ContextError> {
+        let feature_context_file_contents = fs::read_to_string("/etc/dataplane-config.json")?;
+        let mut feature_context: FeatureContext =
+            serde_json::from_str(&feature_context_file_contents)?;
+        // map trusted headers to lowercase
+        feature_context.trusted_headers = feature_context
+            .trusted_headers
+            .iter()
+            .map(|header| header.to_lowercase())
+            .collect();
+        Ok(feature_context)
+    }
 }
 
 #[cfg(test)]

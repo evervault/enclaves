@@ -2,7 +2,7 @@ use hyper::header::{InvalidHeaderName, InvalidHeaderValue};
 use shared::{logging::TrxContextBuilderError, server::error::ServerError};
 use thiserror::Error;
 
-use crate::{base_tls_client::ClientError, env::EnvError, CageContextError};
+use crate::{base_tls_client::ClientError, env::EnvError, ContextError};
 
 #[derive(Debug, Error)]
 pub enum AuthError {
@@ -53,8 +53,8 @@ pub enum Error {
     SerdeError(#[from] serde_json::Error),
     #[error("Error initializing environment — {0:?}")]
     EnvError(#[from] EnvError),
-    #[error("Couldn't get cage context")]
-    CageContextError(#[from] CageContextError),
+    #[error("Couldn't get context")]
+    ContextError(#[from] ContextError),
     #[cfg(feature = "enclave")]
     #[error("Failed to get connection to nsm")]
     NsmConnectionError(#[from] crate::utils::nsm::NsmConnectionError),
