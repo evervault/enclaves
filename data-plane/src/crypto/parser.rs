@@ -203,7 +203,13 @@ fn is_base64(input: u8) -> bool {
 fn version(input: &[u8]) -> IResult<&[u8], CiphertextVersion> {
     // match against any of the valid version tags
     map_res(
-        alt((tag(b"RFVC"), tag(b"T1JL"), tag(b"Tk9D"), tag(b"TENZ"), tag(b"QlJV"))),
+        alt((
+            tag(b"RFVC"),
+            tag(b"T1JL"),
+            tag(b"Tk9D"),
+            tag(b"TENZ"),
+            tag(b"QlJV"),
+        )),
         CiphertextVersion::try_from,
     )(input)
 }
