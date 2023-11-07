@@ -58,6 +58,7 @@ impl From<CryptoApiError> for hyper::Response<hyper::Body> {
         match err {
             CryptoApiError::SerdeError(error) => build_response(400, error.to_string()),
             CryptoApiError::SerializationError => build_response(400, err.to_string()),
+            CryptoApiError::ClientError(ClientError::FailedRequest(status_code)) if status_code.as_u16() == 403 => build_response(403, format!("Forbidden - you do not have the required permissions to perform this action")),
             _ => build_response(500, err.to_string()),
         }
     }

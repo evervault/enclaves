@@ -9,7 +9,7 @@ use tokio_rustls::TlsConnector;
 type E3Error = ClientError;
 
 use tokio_retry::strategy::{jitter, ExponentialBackoff};
-use tokio_retry::Retry;
+use tokio_retry::{Retry, RetryIf};
 
 #[derive(Clone)]
 pub struct E3Client {
@@ -89,12 +89,19 @@ impl E3Client {
             .map(jitter)
             .take(retries);
 
-        Retry::spawn(retry_strategy, || async {
-            self.decrypt(payload.clone()).await.map_err(|e| {
-                log::error!("Error attempting decryption {e:?}");
-                e
-            })
-        })
+        RetryIf::spawn(
+            retry_strategy,
+            || async {
+                self.decrypt(payload.clone()).await.map_err(|e| {
+                    log::error!("Error attempting decryption {e:?}");
+                    e
+                })
+            },
+            |err: &ClientError| match err {
+                ClientError::FailedRequest(req_err) => req_err.as_u16() != 403,
+                _ => true,
+            },
+        )
         .await
     }
 
