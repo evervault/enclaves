@@ -203,7 +203,7 @@ fn is_base64(input: u8) -> bool {
 fn version(input: &[u8]) -> IResult<&[u8], CiphertextVersion> {
     // match against any of the valid version tags
     map_res(
-        alt((tag(b"RFVC"), tag(b"T1JL"), tag(b"Tk9D"))),
+        alt((tag(b"RFVC"), tag(b"T1JL"), tag(b"Tk9D"), tag(b"TENZ"), tag(b"QlJV"))),
         CiphertextVersion::try_from,
     )(input)
 }
@@ -225,6 +225,8 @@ enum CiphertextVersion {
     Rfvc,
     T1jl,
     Tk9d,
+    Tenz,
+    Qljv,
 }
 
 impl std::convert::TryFrom<&[u8]> for CiphertextVersion {
@@ -235,6 +237,8 @@ impl std::convert::TryFrom<&[u8]> for CiphertextVersion {
             b"RFVC" => CiphertextVersion::Rfvc,
             b"T1JL" => CiphertextVersion::T1jl,
             b"Tk9D" => CiphertextVersion::Tk9d,
+            b"TENZ" => CiphertextVersion::Tenz,
+            b"QlJV" => CiphertextVersion::Qljv,
             _ => return Err(()),
         };
         Ok(version)
@@ -250,6 +254,8 @@ impl std::fmt::Display for CiphertextVersion {
                 Self::Rfvc => "RFVC",
                 Self::T1jl => "T1JL",
                 Self::Tk9d => "Tk9D",
+                Self::Tenz => "TENZ",
+                Self::Qljv => "QlJV",
             }
         )
     }
@@ -384,6 +390,16 @@ mod test {
         build_ciphertext_test!(rfvc, Datatype::Boolean);
         build_ciphertext_test!(rfvc, Datatype::Number);
         build_ciphertext_test!(rfvc, Datatype::Number, true);
+        let tenz = Some(CiphertextVersion::Tenz);
+        build_ciphertext_test!(tenz);
+        build_ciphertext_test!(tenz, Datatype::Boolean);
+        build_ciphertext_test!(tenz, Datatype::Number);
+        build_ciphertext_test!(tenz, Datatype::Number, true);
+        let qljv = Some(CiphertextVersion::Qljv);
+        build_ciphertext_test!(qljv);
+        build_ciphertext_test!(qljv, Datatype::Boolean);
+        build_ciphertext_test!(qljv, Datatype::Number);
+        build_ciphertext_test!(qljv, Datatype::Number, true);
     }
 
     #[test]
