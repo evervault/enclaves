@@ -38,13 +38,13 @@ then
   cd ../..
 fi
 
-export CUSTOMER_PROCESS=httpCustomerProcess.js
 echo "Building cage container"
 docker compose build
 
 echo "Running cage container"
 # run the container
 export EV_API_KEY_AUTH=true
+export CUSTOMER_PROCESS=httpCustomerProcess.js
 docker compose up -d
 echo "SLEEPING 15 SECONDS to let cage initialize..."
 sleep 15
@@ -78,9 +78,9 @@ sleep 10
 npm run no-auth-tests
 
 echo "Websocket Tests"
-export CUSTOMER_PROCESS=wsCustomerProcess.js
 docker compose down
 docker compose build
+export CUSTOMER_PROCESS=wsCustomerProcess.js
 docker compose up -d
 docker compose logs --tail cages-cages
 sleep 10

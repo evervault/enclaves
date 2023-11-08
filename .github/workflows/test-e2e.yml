@@ -30,11 +30,12 @@ jobs:
         with:
           node-version: "16.x"
       - name: Run end-to-end test script
+        shell: bash
         env:
           CI: true
         run: |
-          sh e2e-tests/generate-sample-ca.sh
-          sh e2e-tests/run-all-feature-tests.sh
+          ./e2e-tests/generate-sample-ca.sh
+          ./e2e-tests/run-all-feature-tests.sh
   run_e2e_tests_no_tls_termination:
     runs-on: ubuntu-latest
     steps:
