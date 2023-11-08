@@ -160,11 +160,11 @@ where
     use tokio::io::AsyncWriteExt;
     log::info!("Piping TCP streams directly to user process");
     let should_forward_proxy_protocol = match FeatureContext::get() {
-      Ok(context) => context.forward_proxy_protocol,
-      Err(e) => {
-        log::error!("Failed to access context in TCP Passthrough - {e}");
-        return;
-      }
+        Ok(context) => context.forward_proxy_protocol,
+        Err(e) => {
+            log::error!("Failed to access context in TCP Passthrough - {e}");
+            return;
+        }
     };
 
     let env_result = Environment::new().init_without_certs().await;
