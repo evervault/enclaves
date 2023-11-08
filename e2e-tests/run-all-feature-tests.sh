@@ -44,7 +44,8 @@ docker compose build --build-arg CUSTOMER_PROCESS=httpCustomerProcess.js
 
 echo "Running cage container"
 # run the container
-EV_API_KEY_AUTH=true docker compose up -d
+export EV_API_KEY_AUTH=true
+docker compose up -d
 echo "SLEEPING 15 SECONDS to let cage initialize..."
 sleep 15
 
@@ -64,13 +65,14 @@ npm run health-check-tests "should fail"
 
 echo "API Key Auth Tests"
 docker compose down
-EV_API_KEY_AUTH=true docker compose up -d
+docker compose up -d
 sleep 10
 npm run api-key-auth-tests
 
 echo "No API Key Auth Tests"
 docker compose down
-EV_API_KEY_AUTH=false docker compose up -d
+export EV_API_KEY_AUTH=false
+docker compose up -d
 sleep 10
 npm run no-auth-tests
 
