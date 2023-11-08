@@ -496,7 +496,7 @@ async fn handle_attestation_request(_req: httparse::Request<'_, '_>) -> Result<R
     let attestation_doc = match attestation_doc_result {
         Ok(ad_bytes) => ad_bytes,
         Err(e) => {
-            log::error!("Failed to handle attestation request - {err:?}");
+            log::error!("Failed to handle attestation request - {e:?}");
             let response = build_attestation_err_response(e)?;
             return Ok(response);
         }
