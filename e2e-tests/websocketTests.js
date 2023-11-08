@@ -4,7 +4,7 @@ const WebSocket = require('ws');
 
 describe('Make websocket request', () => {
 
-    it("should start websocket session when authorised", async () => {
+    it("should start websocket session when authorised", (done) => {
       const options = {
         rejectUnauthorized: false,
         headers: {
@@ -26,11 +26,18 @@ describe('Make websocket request', () => {
         expect(data.toString("utf8")).to.equal(
           "SERVER RECIEVED MESSAGE: test connection"
         );
+        console.log("message received");
         socket.close();
+        done();
+      });
+
+      socket.on("error", (e) => {
+        console.error("error in first test", e);
+        done(e);
       });
     });
 
-    it("should not start websocket session when not authorised", async () => {
+    it("should not start websocket session when not authorised", (done) => {
       const options = {
         rejectUnauthorized: false,
       };
@@ -38,6 +45,10 @@ describe('Make websocket request', () => {
       const serverUrl = "wss://localhost:443/hello";
 
       const socket = new WebSocket(serverUrl, options);
+
+      socket.on("close", () => {
+        console.log("websocket closed");
+      });
 
       socket.on("open", () => {
         console.log("Connected to WebSocket server");
@@ -50,6 +61,8 @@ describe('Make websocket request', () => {
 
       socket.on("error", (err) => {
         expect(err.message).to.equal("Unexpected server response: 401");
+        socket.close();
+        done();
       });
 
       socket.on("message", () => {

@@ -78,10 +78,11 @@ npm run no-auth-tests
 
 echo "Websocket Tests"
 docker compose down
+export CUSTOMER_PROCESS=wsCustomerProcess.js
 docker compose build --build-arg CUSTOMER_PROCESS=wsCustomerProcess.js
 docker compose up -d
 docker compose logs --tail cages-cages
-sleep 10
+sleep 15
 npm run websocket-tests
 
 echo "Testing that Cage is serving trustable cert chain"
