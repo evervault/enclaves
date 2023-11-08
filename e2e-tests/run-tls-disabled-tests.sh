@@ -41,11 +41,11 @@ fi
 export CUSTOMER_PROCESS=httpCustomerProcess.js
 
 echo "Building cage container CI"
+export EV_API_KEY_AUTH=true
 docker compose build --build-arg CUSTOMER_PROCESS=httpCustomerProcess.js
 
 echo "Running cage container"
 # run the container
-export EV_API_KEY_AUTH=true
 docker compose up -d
 echo "SLEEPING 15 SECONDS to let cage initialize..."
 sleep 15
