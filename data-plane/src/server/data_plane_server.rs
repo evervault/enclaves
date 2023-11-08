@@ -170,7 +170,7 @@ where
 
 #[cfg(feature = "enclave")]
 fn is_attestation_request(req: &httparse::Request) -> bool {
-    req.path.as_deref() == Some("/.well-known/attestation")
+    req.path == Some("/.well-known/attestation")
 }
 
 async fn handle_non_http_request<L>(
