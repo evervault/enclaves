@@ -1,8 +1,5 @@
 {
   "api_key_auth": true,
-  "egress": {
-    "allow_list": "*",
-    "ports": "443"
-  },
+  "egress": { "ports": "443", "allow_list": "jsonplaceholder.typicode.com" },
   "trx_logging_enabled": true
 }

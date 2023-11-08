@@ -109,7 +109,7 @@ where
     Ok(get_egress_ports(ports))
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct EgressConfig {
     #[serde(deserialize_with = "deserialize_ports")]
     pub ports: Vec<u16>,

@@ -19,10 +19,10 @@ use shared::ENCLAVE_CONNECT_PORT;
 #[cfg(feature = "enclave")]
 fn try_update_fd_limit(soft_limit: u64, hard_limit: u64) {
     if let Err(e) = rlimit::setrlimit(rlimit::Resource::NOFILE, soft_limit, hard_limit) {
-        eprintln!("Failed to set enclave file descriptor limit on startup - {e:?}");
+        log::error!("Failed to set enclave file descriptor limit on startup - {e:?}");
     }
     if let Ok((soft_limit, hard_limit)) = rlimit::getrlimit(rlimit::Resource::NOFILE) {
-        println!(
+        log::debug!(
             "RLIMIT_NOFILE: SoftLimit={}, HardLimit={}",
             soft_limit, hard_limit
         );
@@ -30,7 +30,7 @@ fn try_update_fd_limit(soft_limit: u64, hard_limit: u64) {
 }
 
 #[cfg(feature = "enclave")]
-const ENCLAVE_NOFILE_SOFT_LIMIT: u64 = 4096;
+const ENCLAVE_NOFILE_SOFT_LIMIT: u64 = 16384;
 #[cfg(feature = "enclave")]
 const ENCLAVE_NOFILE_HARD_LIMIT: u64 = 16384;
 

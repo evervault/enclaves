@@ -156,7 +156,7 @@ impl From<ProvisionerContext> for CageContext {
     }
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct FeatureContext {
     pub api_key_auth: bool,
     pub healthcheck: Option<String>,
@@ -185,6 +185,7 @@ impl FeatureContext {
 
     fn read_dataplane_context() -> Result<FeatureContext, ContextError> {
         let feature_context_file_contents = fs::read_to_string("/etc/dataplane-config.json")?;
+        println!("{feature_context_file_contents:?}");
         let mut feature_context: FeatureContext =
             serde_json::from_str(&feature_context_file_contents)?;
         // map trusted headers to lowercase
