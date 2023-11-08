@@ -24,7 +24,8 @@ fn try_update_fd_limit(soft_limit: u64, hard_limit: u64) {
     if let Ok((soft_limit, hard_limit)) = rlimit::getrlimit(rlimit::Resource::NOFILE) {
         log::debug!(
             "RLIMIT_NOFILE: SoftLimit={}, HardLimit={}",
-            soft_limit, hard_limit
+            soft_limit,
+            hard_limit
         );
     }
 }
