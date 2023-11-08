@@ -117,19 +117,6 @@ pub struct EgressConfig {
     pub allow_list: EgressDomains,
 }
 
-impl EgressConfig {
-    pub fn from_env() -> EgressConfig {
-        let ports = get_egress_ports_from_env();
-        let allow_list = get_egress_allow_list_from_env();
-        EgressConfig { ports, allow_list }
-    }
-}
-
-pub fn get_egress_ports_from_env() -> Vec<u16> {
-    let port_str = std::env::var("EGRESS_PORTS").unwrap_or("443".to_string());
-    get_egress_ports(port_str)
-}
-
 pub fn get_egress_ports(port_str: String) -> Vec<u16> {
     port_str
         .split(',')

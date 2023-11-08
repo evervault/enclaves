@@ -6,24 +6,33 @@ use shared::rpc::request::ExternalRequest;
 use shared::server::egress::check_allow_list;
 use shared::server::egress::get_hostname;
 use shared::server::egress::EgressDomains;
-use shared::server::error::ServerResult;
+use shared::server::error::ServerError;
 use shared::server::tcp::TcpServer;
 use shared::server::CID::Parent;
 use shared::server::{get_vsock_client, Listener};
 use shared::utils::pipe_streams;
 use shared::EGRESS_PROXY_VSOCK_PORT;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use rand::seq::SliceRandom;
 
+#[derive(Debug, Error)]
+pub enum EgressProxyError {
+    #[error("Failed to get context in egress proxy - {0}")]
+    ContextError(#[from] crate::ContextError),
+    #[error("An error occurred while launching the egress proxy - {0}")]
+    ServerError(#[from] ServerError),
+}
+
 pub struct EgressProxy;
 
 impl EgressProxy {
-    pub async fn listen(port: u16) -> ServerResult<()> {
+    pub async fn listen(port: u16) -> Result<(), EgressProxyError> {
         log::info!("Egress proxy started on port {port}");
-        let allowed_domains = FeatureContext::get().egress.allow_list;
+        let allowed_domains = FeatureContext::get()?.egress.allow_list;
         let mut server =
             TcpServer::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), port)).await?;
 
