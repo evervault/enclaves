@@ -179,7 +179,7 @@ impl FeatureContext {
     pub fn get() -> Result<FeatureContext, ContextError> {
         FEATURE_CONTEXT
             .get()
-            .map(|context| context.clone())
+            .cloned()
             .ok_or(ContextError::Uninitialized)
     }
 
