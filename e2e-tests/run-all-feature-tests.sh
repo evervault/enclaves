@@ -78,8 +78,7 @@ npm run no-auth-tests
 
 echo "Websocket Tests"
 docker compose down
-docker compose build
-export CUSTOMER_PROCESS=wsCustomerProcess.js
+docker compose build --build-arg CUSTOMER_PROCESS=wsCustomerProcess.js
 docker compose up -d
 docker compose logs --tail cages-cages
 sleep 10
