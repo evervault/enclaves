@@ -39,9 +39,11 @@ then
 fi
 
 export CUSTOMER_PROCESS=httpCustomerProcess.js
+# This config option is ignored when TLS termination is disabled, but is required to parse the config file.
+export EV_API_KEY_AUTH=false
 
 echo "Building cage container CI"
-docker compose build --build-arg CUSTOMER_PROCESS=httpCustomerProcess.js
+docker compose build
 
 echo "Running cage container"
 # run the container
