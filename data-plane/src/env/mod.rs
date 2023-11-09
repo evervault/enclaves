@@ -6,10 +6,10 @@ use std::{
 #[cfg(not(feature = "tls_termination"))]
 use crate::cert_provisioner_client::CertProvisionerClient;
 #[cfg(not(feature = "tls_termination"))]
+use crate::cert_provisioner_client::CertProvisionerError;
+#[cfg(not(feature = "tls_termination"))]
 use crate::config_client::ConfigClient;
-use crate::{
-    cert_provisioner_client::CertProvisionerError, crypto::e3client::E3Error, CageContextError,
-};
+use crate::{crypto::e3client::E3Error, CageContextError};
 use hyper::header::InvalidHeaderValue;
 use serde_json::json;
 use shared::server::config_server::requests::Secret;
