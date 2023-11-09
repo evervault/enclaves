@@ -4,7 +4,7 @@ use serde_json::json;
 
 use crate::{
     config_client::{ConfigClient, StorageConfigClientInterface},
-    e3client::{CryptoRequest, CryptoResponse, E3Client},
+    crypto::e3client::{CryptoRequest, CryptoResponse, E3Client},
 };
 
 use super::{error::AcmeError, lock::StorageLock};

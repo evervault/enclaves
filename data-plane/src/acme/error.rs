@@ -3,7 +3,7 @@ use std::string::FromUtf8Error;
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::{base_tls_client::ClientError, error, CageContextError};
+use crate::{error, CageContextError, crypto::e3client::E3Error};
 
 #[derive(Debug, Error)]
 pub enum AcmeError {
@@ -41,8 +41,8 @@ pub enum AcmeError {
     FieldNotFound(String),
     #[error("Config Client Error {0:?}")]
     ConfigClient(#[from] error::Error),
-    #[error("E3 Client Error {0:?}")]
-    E3ClientError(#[from] ClientError),
+    #[error(transparent)]
+    E3Error(#[from] E3Error),
     #[error("Chrono DataTime Parse Error - {0:?}")]
     ParseError(#[from] chrono::ParseError),
     #[error("PEM Error - {0:?}")]

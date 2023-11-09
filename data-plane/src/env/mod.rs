@@ -7,13 +7,13 @@ use std::{
 use crate::cert_provisioner_client::CertProvisionerClient;
 #[cfg(not(feature = "tls_termination"))]
 use crate::config_client::ConfigClient;
-use crate::{base_tls_client::ClientError, CageContextError};
+use crate::{crypto::e3client::E3Error, CageContextError};
 use hyper::header::InvalidHeaderValue;
 use serde_json::json;
 use shared::server::config_server::requests::Secret;
 use thiserror::Error;
 
-use crate::e3client::{CryptoRequest, CryptoResponse, E3Client};
+use crate::crypto::e3client::{CryptoRequest, CryptoResponse, E3Client};
 
 #[derive(Debug, Error)]
 pub enum EnvError {
@@ -25,8 +25,8 @@ pub enum EnvError {
     Hyper(#[from] hyper::Error),
     #[error("Deserialization Error — {0:?}")]
     SerdeError(#[from] serde_json::Error),
-    #[error("Client error — {0}")]
-    ClientError(#[from] ClientError),
+    #[error(transparent)]
+    E3Error(#[from] E3Error),
     #[error("Could not create header value — {0}")]
     InvalidHeaderValue(#[from] InvalidHeaderValue),
     #[error("Couldn't get cage context")]

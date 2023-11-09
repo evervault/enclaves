@@ -1,7 +1,7 @@
 use openssl::pkey::PKey;
 use tokio_rustls::rustls::sign::CertifiedKey;
 
-use crate::{config_client::ConfigClient, e3client::E3Client, CageContext};
+use crate::{config_client::ConfigClient, crypto::e3client::E3Client, CageContext};
 
 use self::{cert::AcmeCertificateRetreiver, error::AcmeError, key::AcmeKeyRetreiver};
 

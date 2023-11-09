@@ -11,8 +11,7 @@ use hyper::{
     Method, Request, Response, Server,
 };
 
-use crate::base_tls_client::ClientError;
-use crate::e3client::{CryptoRequest, CryptoResponse, E3Client};
+use super::e3client::{CryptoRequest, CryptoResponse, E3Client, E3Error};
 use crate::error::Error;
 use crate::CageContextError;
 
@@ -37,8 +36,8 @@ pub enum CryptoApiError {
     SerdeError(#[from] serde_json::Error),
     #[error("Hyper Error — {0:?}")]
     HyperError(#[from] hyper::Error),
-    #[error("Client Error — {0:?}")]
-    ClientError(#[from] ClientError),
+    #[error(transparent)]
+    E3Error(#[from] E3Error),
     #[cfg(feature = "enclave")]
     #[error("Attestation Error — {0:?}")]
     #[cfg(feature = "enclave")]

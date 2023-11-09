@@ -104,10 +104,6 @@ impl BaseClient {
         });
 
         let response = request_sender.send_request(request).await?;
-        if !response.status().is_success() {
-            return Err(ClientError::FailedRequest(response.status()));
-        }
-
         Ok(response)
     }
 }

@@ -1,7 +1,7 @@
 use openssl::pkey::{PKey, Private};
 use openssl::x509::X509;
 
-use crate::e3client::E3Client;
+use crate::crypto::e3client::E3Client;
 use crate::env::Environment;
 use crate::error::{Error, Result};
 use crate::{cert_provisioner_client, config_client, CageContext};

@@ -3,10 +3,28 @@ use hyper::{Body, Response};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::value::Value;
+use thiserror::Error;
 use tokio_rustls::rustls::ServerName;
 use tokio_rustls::TlsConnector;
 
-type E3Error = ClientError;
+#[derive(Clone, Debug, Deserialize)]
+pub struct E3ErrorDetails {
+    message: String,
+}
+
+impl E3ErrorDetails {
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum E3Error {
+    #[error(transparent)]
+    ClientError(#[from] ClientError),
+    #[error("Request to E3 failed with status code {code} - {}", .details.message)]
+    E3Error { details: E3ErrorDetails, code: u16 },
+}
 
 use tokio_retry::strategy::{jitter, ExponentialBackoff};
 use tokio_retry::Retry;
@@ -61,7 +79,7 @@ impl E3Client {
             .token_client
             .get_token()
             .await
-            .map_err(|e| E3Error::General(format!("Couldn't get E3 token {e}")))?;
+            .map_err(|e| ClientError::General(format!("Couldn't get E3 token {e}")))?;
         let response = self
             .base_client
             .send(
@@ -118,7 +136,7 @@ impl E3Client {
             .token_client
             .get_token()
             .await
-            .map_err(|e| E3Error::General(format!("Couldn't get E3 token {e}")))?;
+            .map_err(|e| ClientError::General(format!("Couldn't get E3 token {e}")))?;
         let response = self
             .base_client
             .send(
@@ -133,7 +151,7 @@ impl E3Client {
         self.parse_response(response).await
     }
 
-    pub async fn encrypt_with_retries<T, P: E3Payload>(
+    pub async fn encrypt_with_retries<T, P>(
         &self,
         retries: usize,
         payload: P,
@@ -141,7 +159,7 @@ impl E3Client {
     ) -> Result<T, E3Error>
     where
         T: DeserializeOwned,
-        P: Clone,
+        P: Clone + E3Payload,
     {
         let retry_strategy = ExponentialBackoff::from_millis(10)
             .map(jitter)
@@ -173,9 +191,20 @@ impl E3Client {
     }
 
     async fn parse_response<T: DeserializeOwned>(&self, res: Response<Body>) -> Result<T, E3Error> {
-        let response_body = res.into_body();
-        let response_body = hyper::body::to_bytes(response_body).await?;
-        Ok(serde_json::from_slice(&response_body)?)
+        let (res_info, body) = res.into_parts();
+        let response_body = hyper::body::to_bytes(body)
+            .await
+            .map_err(ClientError::from)?;
+        if res_info.status.is_success() {
+            Ok(serde_json::from_slice(&response_body).map_err(ClientError::from)?)
+        } else {
+            let error_details: E3ErrorDetails =
+                serde_json::from_slice(&response_body).map_err(ClientError::from)?;
+            Err(E3Error::E3Error {
+                details: error_details,
+                code: res_info.status.as_u16(),
+            })
+        }
     }
 }
 
@@ -254,7 +283,9 @@ impl CryptoRequest {
 
 pub trait E3Payload: Sized + Serialize {
     fn try_into_body(self) -> Result<hyper::Body, E3Error> {
-        Ok(hyper::Body::from(serde_json::to_vec(&self)?))
+        Ok(hyper::Body::from(
+            serde_json::to_vec(&self).map_err(ClientError::from)?,
+        ))
     }
 }
 

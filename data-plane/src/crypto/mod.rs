@@ -1,11 +1,9 @@
 pub mod api;
 #[cfg(feature = "enclave")]
 pub mod attest;
-#[cfg(feature = "enclave")]
-pub mod common;
+pub mod e3client;
 #[cfg(feature = "tls_termination")]
 pub mod parser;
-pub mod rand;
 #[cfg(feature = "tls_termination")]
 pub mod stream;
 pub mod token;
