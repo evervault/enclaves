@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::acme::error::AcmeError;
+use crate::base_tls_client::BaseClientError;
 use crate::configuration;
 use async_trait::async_trait;
 use hyper::client::conn::{Connection as HyperConnection, SendRequest};
@@ -67,15 +68,19 @@ impl AcmeClient {
         ),
         AcmeError,
     > {
-        let client_connection: Connection = connection::get_socket(self.port).await?;
+        let client_connection: Connection = connection::get_socket(self.port)
+            .await
+            .map_err(BaseClientError::from)?;
         let connection = self
             .tls_connector
             .connect(self.server_name.clone(), client_connection)
-            .await?;
+            .await
+            .map_err(BaseClientError::from)?;
 
         let connection_info = hyper::client::conn::Builder::new()
             .handshake::<TlsStream<Connection>, hyper::Body>(connection)
-            .await?;
+            .await
+            .map_err(BaseClientError::from)?;
 
         Ok(connection_info)
     }
@@ -91,7 +96,10 @@ impl AcmeClientInterface for AcmeClient {
             }
         });
 
-        let response = request_sender.send_request(request).await?;
+        let response = request_sender
+            .send_request(request)
+            .await
+            .map_err(BaseClientError::from)?;
 
         Ok(response)
     }

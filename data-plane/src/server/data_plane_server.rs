@@ -542,7 +542,7 @@ async fn auth_request(
                 None
             }
         }
-        Err(E3Error::E3Error { code, .. }) if code == 401 => {
+        Err(E3Error::E3Error { code: 401, .. }) => {
             //Temporary fallback to authenticate with APP api key -- remove this match when moving to just scoped api keys
             log::debug!("Failed to auth with scoped api key hash, attempting with app api key");
             match e3_client
@@ -558,7 +558,7 @@ async fn auth_request(
                         None
                     }
                 }
-                Err(E3Error::E3Error { code, details }) if code == 401 => {
+                Err(E3Error::E3Error { code: 401, details }) => {
                     log::warn!(
                         "Failed to authenticate with API Key - {}",
                         details.message()

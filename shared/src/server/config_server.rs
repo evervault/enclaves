@@ -48,12 +48,11 @@ pub mod routes {
 
 pub mod requests {
     use crate::{acme::jws::JwsResult, logging::TrxContext};
-
-    use super::error::ServerResult;
     use serde::{Deserialize, Serialize};
+    use serde_json::Error;
 
     pub trait ConfigServerPayload: Sized + Serialize {
-        fn into_body(self) -> ServerResult<hyper::Body> {
+        fn into_body(self) -> Result<hyper::Body, Error> {
             Ok(hyper::Body::from(serde_json::to_vec(&self)?))
         }
     }
@@ -74,7 +73,7 @@ pub mod requests {
     }
 
     impl ConfigServerPayload for GetTokenRequestDataPlane {
-        fn into_body(self) -> ServerResult<hyper::Body> {
+        fn into_body(self) -> Result<hyper::Body, Error> {
             Ok(hyper::Body::empty())
         }
     }

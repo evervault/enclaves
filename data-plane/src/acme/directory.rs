@@ -1,4 +1,5 @@
 use crate::acme::error::*;
+use crate::base_tls_client::BaseClientError;
 use crate::config_client::ConfigClient;
 use crate::configuration;
 use hyper::Body;
@@ -77,7 +78,9 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
             .body(Body::empty())?;
 
         let resp: Response<Body> = acme_http_client.send(request).await?;
-        let resp_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+        let resp_bytes = hyper::body::to_bytes(resp.into_body())
+            .await
+            .map_err(BaseClientError::from)?;
         let body_str = from_utf8(&resp_bytes)?;
 
         let mut directory: Directory<_> =
@@ -92,10 +95,7 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
 
     pub async fn get_nonce(&self) -> Result<String, AcmeError> {
         let maybe_nonce = {
-            let mut guard = self
-                .nonce
-                .lock()
-                .map_err(|err| AcmeError::General(err.to_string()))?;
+            let mut guard = self.nonce.lock().map_err(|_| AcmeError::NoncePoisonError)?;
             guard.take()
         };
 
@@ -138,7 +138,7 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
 
         let body: JwsResult = result.into();
 
-        let body = serde_json::to_vec(&body)?;
+        let body = serde_json::to_vec(&body).map_err(BaseClientError::from)?;
 
         let request = hyper::Request::builder()
             .method(method)
@@ -150,10 +150,7 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
         let resp = self.client.send(request).await?;
 
         if let Some(nonce) = extract_nonce_from_response(&resp)? {
-            let mut guard = self
-                .nonce
-                .lock()
-                .map_err(|err| AcmeError::PoisonError(err.to_string()))?;
+            let mut guard = self.nonce.lock().map_err(|_| AcmeError::NoncePoisonError)?;
             *guard = Some(nonce);
         }
 
@@ -170,7 +167,7 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
         //Handle empty body
         let payload_parsed = match payload {
             None => "".to_string(),
-            Some(payload) => serde_json::to_string(&payload)?,
+            Some(payload) => serde_json::to_string(&payload).map_err(BaseClientError::from)?,
         };
 
         let resp = self
@@ -178,10 +175,8 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
             .await?;
 
         if let Some(nonce) = extract_nonce_from_response(&resp)? {
-            let mut guard: std::sync::MutexGuard<'_, Option<String>> = self
-                .nonce
-                .lock()
-                .map_err(|err| AcmeError::PoisonError(err.to_string()))?;
+            let mut guard: std::sync::MutexGuard<'_, Option<String>> =
+                self.nonce.lock().map_err(|_| AcmeError::NoncePoisonError)?;
             *guard = Some(nonce);
         }
 

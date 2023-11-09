@@ -7,6 +7,12 @@ use thiserror::Error;
 use tokio_rustls::rustls::ServerName;
 use tokio_rustls::TlsConnector;
 
+use crate::base_tls_client::tls_client_config::get_tls_client_config;
+use crate::base_tls_client::{AuthType, BaseClient, BaseClientError, OpenServerCertVerifier};
+use crate::configuration;
+use crate::crypto::token::TokenClient;
+use crate::stats_client::StatsClient;
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct E3ErrorDetails {
     message: String,
@@ -21,13 +27,17 @@ impl E3ErrorDetails {
 #[derive(Debug, Error)]
 pub enum E3Error {
     #[error(transparent)]
-    ClientError(#[from] ClientError),
+    ClientError(#[from] BaseClientError),
+    #[error("Failed to obtain token to call E3 - {0}")]
+    TokenClientError(#[from] TokenError),
     #[error("Request to E3 failed with status code {code} - {}", .details.message)]
     E3Error { details: E3ErrorDetails, code: u16 },
 }
 
 use tokio_retry::strategy::{jitter, ExponentialBackoff};
 use tokio_retry::Retry;
+
+use super::token::TokenError;
 
 #[derive(Clone)]
 pub struct E3Client {
@@ -40,12 +50,6 @@ impl std::default::Default for E3Client {
         Self::new()
     }
 }
-
-use crate::base_tls_client::tls_client_config::get_tls_client_config;
-use crate::base_tls_client::{AuthType, BaseClient, ClientError, OpenServerCertVerifier};
-use crate::configuration;
-use crate::crypto::token::TokenClient;
-use crate::stats_client::StatsClient;
 
 impl E3Client {
     pub fn new() -> Self {
@@ -75,11 +79,7 @@ impl E3Client {
     where
         T: DeserializeOwned,
     {
-        let token = self
-            .token_client
-            .get_token()
-            .await
-            .map_err(|e| ClientError::General(format!("Couldn't get E3 token {e}")))?;
+        let token = self.token_client.get_token().await?;
         let response = self
             .base_client
             .send(
@@ -132,11 +132,7 @@ impl E3Client {
                 header_map.insert("x-evervault-data-role", role);
                 header_map
             });
-        let token = self
-            .token_client
-            .get_token()
-            .await
-            .map_err(|e| ClientError::General(format!("Couldn't get E3 token {e}")))?;
+        let token = self.token_client.get_token().await?;
         let response = self
             .base_client
             .send(
@@ -187,19 +183,32 @@ impl E3Client {
             )
             .await?;
         log::debug!("{response:?}");
-        Ok(response.status().is_success())
+        if response.status().is_success() {
+            Ok(true)
+        } else {
+            let status_code = response.status().as_u16();
+            let response_body = hyper::body::to_bytes(response)
+                .await
+                .map_err(BaseClientError::from)?;
+            let auth_error_details: E3ErrorDetails =
+                serde_json::from_slice(&response_body).map_err(BaseClientError::from)?;
+            Err(E3Error::E3Error {
+                details: auth_error_details,
+                code: status_code,
+            })
+        }
     }
 
     async fn parse_response<T: DeserializeOwned>(&self, res: Response<Body>) -> Result<T, E3Error> {
         let (res_info, body) = res.into_parts();
         let response_body = hyper::body::to_bytes(body)
             .await
-            .map_err(ClientError::from)?;
+            .map_err(BaseClientError::from)?;
         if res_info.status.is_success() {
-            Ok(serde_json::from_slice(&response_body).map_err(ClientError::from)?)
+            Ok(serde_json::from_slice(&response_body).map_err(BaseClientError::from)?)
         } else {
             let error_details: E3ErrorDetails =
-                serde_json::from_slice(&response_body).map_err(ClientError::from)?;
+                serde_json::from_slice(&response_body).map_err(BaseClientError::from)?;
             Err(E3Error::E3Error {
                 details: error_details,
                 code: res_info.status.as_u16(),
@@ -284,7 +293,7 @@ impl CryptoRequest {
 pub trait E3Payload: Sized + Serialize {
     fn try_into_body(self) -> Result<hyper::Body, E3Error> {
         Ok(hyper::Body::from(
-            serde_json::to_vec(&self).map_err(ClientError::from)?,
+            serde_json::to_vec(&self).map_err(BaseClientError::from)?,
         ))
     }
 }

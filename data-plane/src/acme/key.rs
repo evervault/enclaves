@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::{
+    base_tls_client::BaseClientError,
     config_client::{ConfigClient, StorageConfigClientInterface},
     crypto::e3client::{CryptoRequest, CryptoResponse, E3Client},
 };
@@ -103,7 +104,10 @@ impl AcmeKeyRetreiver {
             i += 1;
 
             if i >= max_checks {
-                return Err(AcmeError::General("Max retries for getting ".into()));
+                return Err(AcmeError::MaxRetriesReached {
+                    limit: max_checks,
+                    target_resource: "ACME key pair".into(),
+                });
             }
 
             match RawAcmeKeyPair::from_storage(self.config_client.clone()).await? {
@@ -153,9 +157,7 @@ impl AcmeKeyRetreiver {
             log::info!("[ACME] Key pair found after polling");
             Ok(persisted_key_pair)
         } else {
-            Err(AcmeError::General(
-                "[ACME] Key pair not found after polling".into(),
-            ))
+            Err(AcmeError::ResourceNotFound("ACME Key Pair".into()))
         }
     }
 
@@ -190,7 +192,8 @@ impl AcmeKeyRetreiver {
             })
             .await?;
 
-        let decrypted_acme_key_pair: RawAcmeKeyPair = serde_json::from_value(e3_response.data)?;
+        let decrypted_acme_key_pair: RawAcmeKeyPair =
+            serde_json::from_value(e3_response.data).map_err(BaseClientError::from)?;
 
         Ok(decrypted_acme_key_pair)
     }
@@ -208,7 +211,8 @@ impl AcmeKeyRetreiver {
             )
             .await?;
 
-        let encrypted_acme_key_pair: RawAcmeKeyPair = serde_json::from_value(e3_response.data)?;
+        let encrypted_acme_key_pair: RawAcmeKeyPair =
+            serde_json::from_value(e3_response.data).map_err(BaseClientError::from)?;
 
         Ok(encrypted_acme_key_pair)
     }

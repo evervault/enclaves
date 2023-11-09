@@ -1,11 +1,26 @@
 use openssl::pkey::{PKey, Private};
 use openssl::x509::X509;
+use thiserror::Error;
 
+use crate::cert_provisioner_client::{CertProvisionerClient, CertProvisionerError};
+use crate::config_client::{ConfigClient, ConfigClientError};
 use crate::crypto::e3client::E3Client;
-use crate::env::Environment;
-use crate::error::{Error, Result};
-use crate::{cert_provisioner_client, config_client, CageContext};
-use crate::{cert_provisioner_client::CertProvisionerClient, config_client::ConfigClient};
+use crate::env::{EnvError, Environment};
+use crate::CageContext;
+
+#[derive(Debug, Error)]
+pub enum CaRetrieverError {
+    #[error("An error occurred importing a cert or key.")]
+    OpensslError(#[from] openssl::error::ErrorStack),
+    #[error("Failed to decode a cert or key - {0}")]
+    DecodeError(#[from] base64::DecodeError),
+    #[error(transparent)]
+    ConfigClient(#[from] ConfigClientError),
+    #[error(transparent)]
+    CertProvisioner(#[from] CertProvisionerError),
+    #[error(transparent)]
+    Env(#[from] EnvError),
+}
 
 pub struct InterCaRetreiver {
     cert_provisioner_client: CertProvisionerClient,
@@ -15,8 +30,8 @@ pub struct InterCaRetreiver {
 
 impl InterCaRetreiver {
     pub fn new() -> Self {
-        let cert_provisioner_client = cert_provisioner_client::CertProvisionerClient::new();
-        let config_client = config_client::ConfigClient::new();
+        let cert_provisioner_client = CertProvisionerClient::new();
+        let config_client = ConfigClient::new();
         let e3_client = E3Client::new();
         let env = Environment { e3_client };
 
@@ -27,16 +42,12 @@ impl InterCaRetreiver {
         }
     }
 
-    pub async fn get_intermediate_ca(&self) -> Result<(X509, PKey<Private>)> {
+    pub async fn get_intermediate_ca(&self) -> Result<(X509, PKey<Private>), CaRetrieverError> {
         log::info!("Sending request to control plane for cert provisioner token.");
         let token = self.config_client.get_cert_token().await?.token();
 
         log::info!("Received token for cert provisioner. Requesting intermediate CA.");
-        let cert_response = self
-            .cert_provisioner_client
-            .get_cert(token)
-            .await
-            .map_err(|err| Error::CertServer(err.to_string()))?;
+        let cert_response = self.cert_provisioner_client.get_cert(token).await?;
         CageContext::set(cert_response.context.clone().into());
         self.env
             .clone()
@@ -50,12 +61,12 @@ impl InterCaRetreiver {
     }
 }
 
-fn parse_cert(raw_cert: String) -> Result<X509> {
-    let decoded_cert = base64::decode(raw_cert).map_err(|err| Error::Crypto(err.to_string()))?;
-    X509::from_pem(&decoded_cert).map_err(|err| Error::Crypto(err.to_string()))
+fn parse_cert(raw_cert: String) -> Result<X509, CaRetrieverError> {
+    let decoded_cert = base64::decode(raw_cert)?;
+    Ok(X509::from_pem(&decoded_cert)?)
 }
 
-fn parse_key(raw_key: String) -> Result<PKey<Private>> {
-    let decoded_key = base64::decode(raw_key).map_err(|err| Error::Crypto(err.to_string()))?;
-    PKey::private_key_from_pem(&decoded_key).map_err(|err| Error::Crypto(err.to_string()))
+fn parse_key(raw_key: String) -> Result<PKey<Private>, CaRetrieverError> {
+    let decoded_key = base64::decode(raw_key)?;
+    Ok(PKey::private_key_from_pem(&decoded_key)?)
 }

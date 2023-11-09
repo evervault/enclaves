@@ -1,5 +1,5 @@
 use crate::cache::E3_TOKEN;
-use crate::config_client::ConfigClient;
+use crate::config_client::{ConfigClient, ConfigClientError};
 #[cfg(feature = "enclave")]
 use crate::crypto::attest::AttestationError;
 use cached::Cached;
@@ -11,13 +11,13 @@ use thiserror::Error;
 pub enum TokenError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
-    #[error("Error - {0:?}")]
-    Error(#[from] crate::error::Error),
     #[cfg(feature = "enclave")]
     #[error("Attestation error - {0:?}")]
     AttestationError(#[from] AttestationError),
     #[error("Invalid header value - {0:?}")]
     InvalidHeaderValue(#[from] InvalidHeaderValue),
+    #[error(transparent)]
+    ConfigClient(#[from] ConfigClientError),
 }
 
 #[derive(Clone, Debug)]

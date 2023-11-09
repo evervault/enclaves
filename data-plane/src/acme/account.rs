@@ -1,5 +1,6 @@
 use crate::acme::directory::Directory;
 use crate::acme::error::*;
+use crate::base_tls_client::BaseClientError;
 
 use openssl::pkey::PKey;
 use openssl::pkey::Private;
@@ -75,7 +76,7 @@ impl<T: AcmeClientInterface> AccountBuilder<T> {
 
         let external_account_binding = if self.eab_required {
             let jwk_response = config_client.jwk().await?;
-            let payload = serde_json::to_string(&jwk_response)?;
+            let payload = serde_json::to_string(&jwk_response).map_err(BaseClientError::from)?;
 
             let jws = config_client
                 .jws(
@@ -108,15 +109,16 @@ impl<T: AcmeClientInterface> AccountBuilder<T> {
             .await?;
 
         let headers = res.headers().clone();
-        let resp_bytes = hyper::body::to_bytes(res.into_body()).await?;
+        let resp_bytes = hyper::body::to_bytes(res.into_body())
+            .await
+            .map_err(BaseClientError::from)?;
         let body_str = from_utf8(&resp_bytes)?;
-        let mut account: Account<_> = serde_json::from_str(body_str)?;
+        let mut account: Account<_> =
+            serde_json::from_str(body_str).map_err(BaseClientError::from)?;
 
         let account_id = headers
             .get(hyper::header::LOCATION)
-            .ok_or(AcmeError::General(String::from(
-                "No location header in newAccount request",
-            )))?
+            .ok_or(AcmeError::MissingLocationHeader)?
             .to_str()?
             .to_string();
 
@@ -128,8 +130,6 @@ impl<T: AcmeClientInterface> AccountBuilder<T> {
 
 impl<T: AcmeClientInterface> Account<T> {
     pub fn private_key(&self) -> Result<PKey<Private>, AcmeError> {
-        self.private_key.clone().ok_or(AcmeError::General(
-            "No private key found for account".to_string(),
-        ))
+        self.private_key.clone().ok_or(AcmeError::NoPrivateKey)
     }
 }

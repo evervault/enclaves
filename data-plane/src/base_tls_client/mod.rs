@@ -1,18 +1,29 @@
-pub mod error;
-pub use error::ClientError;
 pub mod server_cert_verifier;
 pub mod tls_client_config;
 pub use server_cert_verifier::OpenServerCertVerifier;
 
+use async_trait::async_trait;
 use hyper::client::conn::{Connection as HyperConnection, SendRequest};
 use hyper::header::HeaderValue;
 use hyper::{Body, HeaderMap, Response};
+use serde::de::DeserializeOwned;
+use thiserror::Error;
 use tokio_rustls::rustls::ServerName;
 use tokio_rustls::{client::TlsStream, TlsConnector};
 
 use crate::connection::{self, Connection};
 use crate::crypto::token::AttestationAuth;
 use shared::{CLIENT_MAJOR_VERSION, CLIENT_VERSION};
+
+#[derive(Debug, Error)]
+pub enum BaseClientError {
+    #[error("IO Error — {0:?}")]
+    IoError(#[from] std::io::Error),
+    #[error("Hyper Error — {0:?}")]
+    HyperError(#[from] hyper::Error),
+    #[error("Deserialization Error — {0:?}")]
+    SerdeError(#[from] serde_json::Error),
+}
 
 #[derive(Clone)]
 pub struct BaseClient {
@@ -43,7 +54,7 @@ impl BaseClient {
             SendRequest<hyper::Body>,
             HyperConnection<TlsStream<Connection>, hyper::Body>,
         ),
-        ClientError,
+        BaseClientError,
     > {
         let client_connection: Connection = connection::get_socket(self.port).await?;
         let connection = self
@@ -65,7 +76,7 @@ impl BaseClient {
         uri: &str,
         payload: hyper::Body,
         headers: Option<HeaderMap>,
-    ) -> Result<Response<Body>, ClientError> {
+    ) -> Result<Response<Body>, BaseClientError> {
         let mut request = hyper::Request::builder().uri(uri);
         // if headers have been passed, seed the request with the provided set of headers,
         // but override with required headers to avoid failed reqs.
@@ -105,5 +116,30 @@ impl BaseClient {
 
         let response = request_sender.send_request(request).await?;
         Ok(response)
+    }
+}
+
+#[async_trait]
+pub trait ApiClient {
+    type ApiErrorDetails: DeserializeOwned;
+    type Error: std::convert::From<BaseClientError>
+        + std::convert::From<(hyper::http::response::Parts, Self::ApiErrorDetails)>;
+
+    async fn parse_response<T: DeserializeOwned>(
+        response: Response<Body>,
+    ) -> Result<T, Self::Error> {
+        let (res_info, res_body) = response.into_parts();
+        let response_body = hyper::body::to_bytes(res_body)
+            .await
+            .map_err(BaseClientError::from)?;
+        if res_info.status.is_success() {
+            let parsed_response: T =
+                serde_json::from_slice(&response_body).map_err(BaseClientError::from)?;
+            Ok(parsed_response)
+        } else {
+            let error_details: Self::ApiErrorDetails =
+                serde_json::from_slice(&response_body).map_err(BaseClientError::from)?;
+            Err((res_info, error_details).into())
+        }
     }
 }

@@ -1,5 +1,6 @@
 use crate::acme::account::Account;
 use crate::acme::error::*;
+use crate::base_tls_client::BaseClientError;
 use openssl::hash::MessageDigest;
 use openssl::pkey::PKey;
 use openssl::pkey::Private;
@@ -116,15 +117,15 @@ impl<T: AcmeClientInterface> OrderBuilder<T> {
             .await?;
 
         let headers = response.headers().clone();
-        let resp_bytes = hyper::body::to_bytes(response.into_body()).await?;
+        let resp_bytes = hyper::body::to_bytes(response.into_body())
+            .await
+            .map_err(BaseClientError::from)?;
         let body_str = from_utf8(&resp_bytes)?;
-        let mut order: Order<_> = serde_json::from_str(body_str)?;
+        let mut order: Order<_> = serde_json::from_str(body_str).map_err(BaseClientError::from)?;
 
         let order_url = headers
             .get(hyper::header::LOCATION)
-            .ok_or(AcmeError::General(String::from(
-                "No location header in newOrder response",
-            )))?
+            .ok_or(AcmeError::MissingLocationHeader)?
             .to_str()?
             .to_string();
 
@@ -193,9 +194,11 @@ impl<T: AcmeClientInterface> Order<T> {
             )
             .await?;
 
-        let resp_bytes = hyper::body::to_bytes(response.into_body()).await?;
+        let resp_bytes = hyper::body::to_bytes(response.into_body())
+            .await
+            .map_err(BaseClientError::from)?;
         let body_str = from_utf8(&resp_bytes)?;
-        let mut order: Order<_> = serde_json::from_str(body_str)?;
+        let mut order: Order<_> = serde_json::from_str(body_str).map_err(BaseClientError::from)?;
 
         order.account = Some(account.clone());
         order.url = self.url.clone();
@@ -214,7 +217,9 @@ impl<T: AcmeClientInterface> Order<T> {
             .authenticated_request(&certificate_url, "POST", None, &Some(account.id.clone()))
             .await?;
 
-        let body_bytes = hyper::body::to_bytes(response.into_body()).await?;
+        let body_bytes = hyper::body::to_bytes(response.into_body())
+            .await
+            .map_err(BaseClientError::from)?;
 
         Ok(Some(X509::stack_from_pem(&body_bytes)?))
     }
@@ -226,10 +231,13 @@ impl<T: AcmeClientInterface> Order<T> {
             .authenticated_request(&self.url, "POST", None, &Some(account.id.clone()))
             .await?;
 
-        let resp_bytes = hyper::body::to_bytes(response.into_body()).await?;
+        let resp_bytes = hyper::body::to_bytes(response.into_body())
+            .await
+            .map_err(BaseClientError::from)?;
         let body_str = from_utf8(&resp_bytes)?;
 
-        let mut order: Order<_> = serde_json::from_str(body_str)?;
+        log::debug!("Deserializing order object");
+        let mut order: Order<_> = serde_json::from_str(body_str).map_err(BaseClientError::from)?;
 
         order.account = Some(account.clone());
         order.url = self.url.clone();
@@ -247,9 +255,10 @@ impl<T: AcmeClientInterface> Order<T> {
 
         while order.status.is_pending() {
             if i >= attempts {
-                return Err(AcmeError::General(
-                    "Max attempts reached for polling order.".into(),
-                ));
+                return Err(AcmeError::MaxRetriesReached {
+                    limit: attempts,
+                    target_resource: "order status".into(),
+                });
             }
             tokio::time::sleep(poll_interval).await;
             order = order.poll().await?;
@@ -270,9 +279,10 @@ impl<T: AcmeClientInterface> Order<T> {
 
         while !order.status.is_done() {
             if i >= attempts {
-                return Err(AcmeError::General(
-                    "Max attempts reached for polling order.".to_string(),
-                ));
+                return Err(AcmeError::MaxRetriesReached {
+                    limit: attempts,
+                    target_resource: "order status".into(),
+                });
             }
             tokio::time::sleep(poll_interval).await;
             order = order.poll().await?;

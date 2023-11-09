@@ -2,7 +2,10 @@ use chrono::{serde::ts_seconds, DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::config_client::{ConfigClient, StorageConfigClientInterface};
+use crate::{
+    base_tls_client::BaseClientError,
+    config_client::{ConfigClient, StorageConfigClientInterface},
+};
 
 use super::error::AcmeError;
 
@@ -41,7 +44,8 @@ impl StorageLock {
         let get_lock_response = config_client.get_object(format!("{}.lock", name)).await?;
         match get_lock_response {
             Some(response) => {
-                let mut lock: StorageLock = serde_json::from_str(&response.body())?;
+                let mut lock: StorageLock =
+                    serde_json::from_str(&response.body()).map_err(BaseClientError::from)?;
                 lock.config_client = config_client;
                 Ok(Some(lock))
             }
@@ -62,7 +66,7 @@ impl StorageLock {
     }
 
     pub async fn write_lock(&self) -> Result<(), AcmeError> {
-        let lock = serde_json::to_string(self)?;
+        let lock = serde_json::to_string(self).map_err(BaseClientError::from)?;
         self.config_client
             .put_object(self.lock_key_name(), lock)
             .await?;
@@ -74,7 +78,8 @@ impl StorageLock {
             self.config_client.get_object(self.lock_key_name()).await?;
         match persisted_lock_maybe_response {
             Some(response) => {
-                let lock: Self = serde_json::from_str(&response.body())?;
+                let lock: Self =
+                    serde_json::from_str(&response.body()).map_err(BaseClientError::from)?;
                 Ok(lock.has_uuid(self.uuid.clone()))
             }
             None => Ok(false),

@@ -2,7 +2,7 @@ use hyper::header::{InvalidHeaderName, InvalidHeaderValue};
 use shared::{logging::TrxContextBuilderError, server::error::ServerError};
 use thiserror::Error;
 
-use crate::{base_tls_client::ClientError, env::EnvError, CageContextError};
+use crate::{env::EnvError, CageContextError};
 
 #[derive(Debug, Error)]
 pub enum AuthError {
@@ -47,12 +47,10 @@ pub enum Error {
     CertServer(String),
     #[error("Could not create header value — {0}")]
     InvalidHeaderValue(#[from] InvalidHeaderValue),
-    #[error("Client error — {0}")]
-    ClientError(#[from] ClientError),
     #[error("Deserialization Error — {0:?}")]
     SerdeError(#[from] serde_json::Error),
     #[error("Error initializing environment — {0:?}")]
-    EnvError(#[from] EnvError),
+    EnvClientError(#[from] EnvError),
     #[error("Couldn't get cage context")]
     CageContextError(#[from] CageContextError),
     #[cfg(feature = "enclave")]

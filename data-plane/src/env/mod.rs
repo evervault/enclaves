@@ -26,7 +26,7 @@ pub enum EnvError {
     #[error("Deserialization Error — {0:?}")]
     SerdeError(#[from] serde_json::Error),
     #[error(transparent)]
-    E3Error(#[from] E3Error),
+    E3ClientError(#[from] E3Error),
     #[error("Could not create header value — {0}")]
     InvalidHeaderValue(#[from] InvalidHeaderValue),
     #[error("Couldn't get cage context")]

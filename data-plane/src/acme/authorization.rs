@@ -2,6 +2,7 @@ use crate::acme::account::Account;
 use crate::acme::error::*;
 use crate::acme::order::Order;
 use crate::acme::order::*;
+use crate::base_tls_client::BaseClientError;
 use openssl::hash::hash;
 use openssl::hash::MessageDigest;
 use serde::de::Visitor;
@@ -139,10 +140,13 @@ impl<T: AcmeClientInterface> Order<T> {
                 .authenticated_request(&authorization_url, "POST", None, &Some(account.id.clone()))
                 .await?;
 
-            let resp_bytes = hyper::body::to_bytes(response.into_body()).await?;
+            let resp_bytes = hyper::body::to_bytes(response.into_body())
+                .await
+                .map_err(BaseClientError::from)?;
             let body_str = from_utf8(&resp_bytes)?;
 
-            let mut authorization: Authorization<_> = serde_json::from_str(body_str)?;
+            let mut authorization: Authorization<_> =
+                serde_json::from_str(body_str).map_err(BaseClientError::from)?;
 
             authorization.account = Some(account.clone());
             authorization.url = authorization_url;
@@ -185,9 +189,12 @@ impl<T: AcmeClientInterface> Authorization<T> {
             .authenticated_request(&self.url, "POST", None, &Some(account.id.clone()))
             .await?;
 
-        let resp_bytes = hyper::body::to_bytes(response.into_body()).await?;
+        let resp_bytes = hyper::body::to_bytes(response.into_body())
+            .await
+            .map_err(BaseClientError::from)?;
         let body_str = from_utf8(&resp_bytes)?;
-        let mut authorization: Authorization<T> = serde_json::from_str(body_str)?;
+        let mut authorization: Authorization<T> =
+            serde_json::from_str(body_str).map_err(BaseClientError::from)?;
 
         authorization.url = self.url.clone();
         authorization.account = Some(account.clone());
@@ -207,9 +214,10 @@ impl<T: AcmeClientInterface> Authorization<T> {
         while authorization.status == AuthorizationStatus::Pending {
             log::debug!("[ACME] - Waiting for authorization to complete");
             if i >= attempts {
-                return Err(AcmeError::General(
-                    "Max attempts reached for checking authorization is complete".to_string(),
-                ));
+                return Err(AcmeError::MaxRetriesReached {
+                    limit: attempts,
+                    target_resource: "authorization status".into(),
+                });
             }
 
             tokio::time::sleep(poll_interval).await;
@@ -247,7 +255,9 @@ impl<T: AcmeClientInterface> Challenge<T> {
                 token,
                 b64(&hash(
                     MessageDigest::sha256(),
-                    &serde_json::to_string(&jwk_thumb)?.into_bytes()
+                    &serde_json::to_string(&jwk_thumb)
+                        .map_err(BaseClientError::from)?
+                        .into_bytes()
                 )?)
             );
 
@@ -269,9 +279,12 @@ impl<T: AcmeClientInterface> Challenge<T> {
             )
             .await?;
 
-        let resp_bytes = hyper::body::to_bytes(response.into_body()).await?;
+        let resp_bytes = hyper::body::to_bytes(response.into_body())
+            .await
+            .map_err(BaseClientError::from)?;
         let body_str = from_utf8(&resp_bytes)?;
-        let mut challenge: Challenge<_> = serde_json::from_str(body_str)?;
+        let mut challenge: Challenge<_> =
+            serde_json::from_str(body_str).map_err(BaseClientError::from)?;
 
         challenge.account = Some(account.clone());
 
@@ -285,10 +298,13 @@ impl<T: AcmeClientInterface> Challenge<T> {
             .authenticated_request(&self.url, "POST", None, &Some(account.id.clone()))
             .await?;
 
-        let resp_bytes = hyper::body::to_bytes(response.into_body()).await?;
+        let resp_bytes = hyper::body::to_bytes(response.into_body())
+            .await
+            .map_err(BaseClientError::from)?;
         let body_str = from_utf8(&resp_bytes)?;
 
-        let mut challenge: Challenge<_> = serde_json::from_str(body_str)?;
+        let mut challenge: Challenge<_> =
+            serde_json::from_str(body_str).map_err(BaseClientError::from)?;
 
         challenge.account = Some(account.clone());
         Ok(challenge)
@@ -307,9 +323,10 @@ impl<T: AcmeClientInterface> Challenge<T> {
             || challenge.status == ChallengeStatus::Processing
         {
             if i >= attempts {
-                return Err(AcmeError::General(
-                    "Max attempts polling challenge exceeded".to_string(),
-                ));
+                return Err(AcmeError::MaxRetriesReached {
+                    limit: attempts,
+                    target_resource: "challenge status".into(),
+                });
             }
 
             tokio::time::sleep(poll_interval).await;

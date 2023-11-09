@@ -13,6 +13,7 @@ use tokio_rustls::rustls::{
 };
 
 use crate::{
+    base_tls_client::BaseClientError,
     config_client::{ConfigClient, StorageConfigClientInterface},
     configuration,
     crypto::e3client::{CryptoRequest, CryptoResponse, E3Client},
@@ -180,9 +181,10 @@ impl AcmeCertificateRetreiver {
             i += 1;
 
             if i >= max_checks {
-                return Err(AcmeError::General(
-                    "Max retries for getting certificate reached".into(),
-                ));
+                return Err(AcmeError::MaxRetriesReached {
+                    limit: max_checks,
+                    target_resource: "ACME certificate".into(),
+                });
             }
 
             if let Some(decrypted_certificate) = self
@@ -217,9 +219,7 @@ impl AcmeCertificateRetreiver {
             log::info!("[ACME] Certificate found after polling");
             Ok(persisted_certificate)
         } else {
-            Err(AcmeError::General(
-                "[ACME] Certificate not found after polling".into(),
-            ))
+            Err(AcmeError::ResourceNotFound("ACME Certificate".into()))
         }
     }
 
@@ -415,7 +415,8 @@ impl AcmeCertificateRetreiver {
             })
             .await?;
 
-        let decrypted_acme_key_pair: RawAcmeCertificate = serde_json::from_value(e3_response.data)?;
+        let decrypted_acme_key_pair: RawAcmeCertificate =
+            serde_json::from_value(e3_response.data).map_err(BaseClientError::from)?;
 
         Ok(decrypted_acme_key_pair)
     }
@@ -433,7 +434,8 @@ impl AcmeCertificateRetreiver {
             )
             .await?;
 
-        let encrypted_acme_key_pair: RawAcmeCertificate = serde_json::from_value(e3_response.data)?;
+        let encrypted_acme_key_pair: RawAcmeCertificate =
+            serde_json::from_value(e3_response.data).map_err(BaseClientError::from)?;
 
         Ok(encrypted_acme_key_pair)
     }

@@ -11,10 +11,11 @@ use tokio_rustls::rustls::ServerName;
 use tokio_rustls::TlsConnector;
 
 use crate::base_tls_client::tls_client_config::get_tls_client_config;
-use crate::base_tls_client::{BaseClient, ClientError};
+use crate::base_tls_client::{BaseClient, BaseClientError};
 use crate::configuration;
 #[cfg(feature = "enclave")]
 use crate::crypto::attest;
+use crate::crypto::attest::AttestationError;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct ProvisionerErrorDetails {
@@ -24,7 +25,9 @@ pub struct ProvisionerErrorDetails {
 #[derive(Debug, Error)]
 pub enum CertProvisionerError {
     #[error(transparent)]
-    ClientError(#[from] ClientError),
+    ClientError(#[from] BaseClientError),
+    #[error("Failed to obtain attestation materials. {0}")]
+    AttestationError(#[from] AttestationError),
     #[error("Request to provisioner failed with status code {code} - {}", .details.message)]
     ProvisionerError {
         details: ProvisionerErrorDetails,
@@ -70,8 +73,7 @@ impl CertProvisionerClient {
         let token_bytes = token.as_bytes().to_vec();
 
         #[cfg(feature = "enclave")]
-        let attestation_doc = attest::get_attestation_doc(Some(token_bytes), None)
-            .map_err(|err| ClientError::General(err.to_string()))?;
+        let attestation_doc = attest::get_attestation_doc(Some(token_bytes), None)?;
 
         #[cfg(not(feature = "enclave"))]
         let attestation_doc: Vec<u8> = token_bytes;
@@ -89,7 +91,7 @@ impl CertProvisionerClient {
 
         let body = GetCertRequestDataPlane::new(attestation_doc)
             .into_body()
-            .map_err(|err| ClientError::General(err.to_string()))?;
+            .map_err(BaseClientError::from)?;
 
         let response = self
             .base_client
@@ -107,7 +109,7 @@ impl CertProvisionerClient {
 
         let body = GetCertRequestDataPlane::new(attestation_doc)
             .into_body()
-            .map_err(|err| ClientError::General(err.to_string()))?;
+            .map_err(BaseClientError::from)?;
 
         let response = self
             .base_client
@@ -122,12 +124,14 @@ impl CertProvisionerClient {
         res: Response<Body>,
     ) -> Result<T, CertProvisionerError> {
         let (res_info, body) = res.into_parts();
-        let response_body = hyper::body::to_bytes(body).await.map_err(ClientError::from)?;
+        let response_body = hyper::body::to_bytes(body)
+            .await
+            .map_err(BaseClientError::from)?;
         if res_info.status.is_success() {
-            Ok(serde_json::from_slice(&response_body).map_err(ClientError::from)?)
+            Ok(serde_json::from_slice(&response_body).map_err(BaseClientError::from)?)
         } else {
             let provisioner_err: ProvisionerErrorDetails =
-                serde_json::from_slice(&response_body).map_err(ClientError::from)?;
+                serde_json::from_slice(&response_body).map_err(BaseClientError::from)?;
             Err(CertProvisionerError::ProvisionerError {
                 details: provisioner_err,
                 code: res_info.status.as_u16(),
