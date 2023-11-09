@@ -7,7 +7,9 @@ use std::{
 use crate::cert_provisioner_client::CertProvisionerClient;
 #[cfg(not(feature = "tls_termination"))]
 use crate::config_client::ConfigClient;
-use crate::{crypto::e3client::E3Error, CageContextError};
+use crate::{
+    cert_provisioner_client::CertProvisionerError, crypto::e3client::E3Error, CageContextError,
+};
 use hyper::header::InvalidHeaderValue;
 use serde_json::json;
 use shared::server::config_server::requests::Secret;
@@ -31,6 +33,9 @@ pub enum EnvError {
     InvalidHeaderValue(#[from] InvalidHeaderValue),
     #[error("Couldn't get cage context")]
     CageContextError(#[from] CageContextError),
+    #[cfg(not(feature = "tls_termination"))]
+    #[error("Error calling cert provisioner - {0}")]
+    CertProvisioner(#[from] CertProvisionerError),
 }
 
 #[derive(Clone)]
