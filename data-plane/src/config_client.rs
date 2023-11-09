@@ -125,17 +125,7 @@ impl ConfigClient {
             .await?;
 
         if !response.status().is_success() {
-            let status_code = response.status().as_u16();
-            let body = response.into_body();
-            let body_bytes = hyper::body::to_bytes(body)
-                .await
-                .map_err(BaseClientError::from)?;
-            let message =
-                std::str::from_utf8(&body_bytes).unwrap_or("Failed to deserialize message");
-            return Err(ConfigClientError::FailedRequest {
-                code: status_code,
-                message: message.to_string(),
-            });
+            return Err(ConfigClientError::from_response(response).await);
         }
 
         let result: GetE3TokenResponseDataPlane = self.parse_response(response).await?;

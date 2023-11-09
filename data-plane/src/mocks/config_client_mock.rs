@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use mockall::mock;
 use shared::server::config_server::requests::GetObjectResponse;
 
-use crate::config_client::{StorageConfigClientInterface, ConfigClientError};
+use crate::config_client::{ConfigClientError, StorageConfigClientInterface};
 
 mock! {
   #[derive(Debug, Clone)]

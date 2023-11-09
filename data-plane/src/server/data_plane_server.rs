@@ -2,9 +2,11 @@ use super::error::TlsError;
 use super::http::ContentEncoding;
 use super::tls::TlsServerBuilder;
 
+use crate::base_tls_client::ClientError;
 #[cfg(feature = "enclave")]
 use crate::crypto::attest;
-use crate::crypto::e3client::{AuthRequest, CryptoRequest, DecryptRequest, E3Client, E3Error};
+use crate::e3client::DecryptRequest;
+use crate::e3client::{self, AuthRequest, E3Client};
 use crate::error::Error::{ApiKeyInvalid, MissingApiKey};
 use crate::error::{AuthError, Result};
 #[cfg(feature = "enclave")]
@@ -542,7 +544,7 @@ async fn auth_request(
                 None
             }
         }
-        Err(E3Error::E3Error { code: 401, .. }) => {
+        Err(ClientError::FailedRequest(status)) if status.as_u16() == 401 => {
             //Temporary fallback to authenticate with APP api key -- remove this match when moving to just scoped api keys
             log::debug!("Failed to auth with scoped api key hash, attempting with app api key");
             match e3_client
@@ -558,11 +560,7 @@ async fn auth_request(
                         None
                     }
                 }
-                Err(E3Error::E3Error { code: 401, details }) => {
-                    log::warn!(
-                        "Failed to authenticate with API Key - {}",
-                        details.message()
-                    );
+                Err(ClientError::FailedRequest(status)) if status.as_u16() == 401 => {
                     let response: Response<Body> = AuthError::FailedToAuthenticateApiKey.into();
                     Some(response)
                 }
@@ -667,7 +665,8 @@ pub async fn handle_standard_request(
 
     let mut bytes_vec = request_bytes.to_vec();
     if !decryption_payload.is_empty() {
-        let request_payload = CryptoRequest::new(serde_json::Value::Array(decryption_payload));
+        let request_payload =
+            e3client::CryptoRequest::new(serde_json::Value::Array(decryption_payload));
         let decrypted: DecryptRequest = match e3_client
             .decrypt_with_retries(2, request_payload)
             .await
