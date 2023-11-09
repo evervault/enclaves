@@ -22,6 +22,22 @@ use connection::Connection;
 pub enum ConfigClientError {
     #[error(transparent)]
     ClientError(#[from] BaseClientError),
+    #[error("Request to config server failed with status code {code} - {message}")]
+    FailedRequest { code: u16, message: String },
+}
+
+impl ConfigClientError {
+    async fn from_response(res: hyper::Response<hyper::Body>) -> Self {
+        let status_code = res.status().as_u16();
+        let body_bytes = hyper::body::to_bytes(res.into_body()).await.ok();
+        let body = body_bytes
+            .and_then(|body| String::from_utf8(body.to_vec()).ok())
+            .unwrap_or_else(|| "Failed to deserialize error message".into());
+        Self::FailedRequest {
+            code: status_code,
+            message: body,
+        }
+    }
 }
 
 #[async_trait]
@@ -109,7 +125,17 @@ impl ConfigClient {
             .await?;
 
         if !response.status().is_success() {
-            panic!("Need to add a meaningful error type here");
+            let status_code = response.status().as_u16();
+            let body = response.into_body();
+            let body_bytes = hyper::body::to_bytes(body)
+                .await
+                .map_err(BaseClientError::from)?;
+            let message =
+                std::str::from_utf8(&body_bytes).unwrap_or("Failed to deserialize message");
+            return Err(ConfigClientError::FailedRequest {
+                code: status_code,
+                message: message.to_string(),
+            });
         }
 
         let result: GetE3TokenResponseDataPlane = self.parse_response(response).await?;
@@ -127,7 +153,7 @@ impl ConfigClient {
             .await?;
 
         if !response.status().is_success() {
-            panic!("Proper error type needed");
+            return Err(ConfigClientError::from_response(response).await);
         }
 
         let result: GetCertTokenResponseDataPlane = self.parse_response(response).await?;
@@ -151,7 +177,7 @@ impl ConfigClient {
                 "Error in post_trx_logs request to control plane: {}",
                 response.status()
             );
-            panic!("Proper error type needed");
+            Err(ConfigClientError::from_response(response).await)
         }
     }
 
@@ -181,7 +207,7 @@ impl ConfigClient {
                 "Error sending jws request to control plane. Response Code: {}",
                 response.status()
             );
-            panic!("Proper error type needed")
+            Err(ConfigClientError::from_response(response).await)
         }
     }
 
@@ -198,7 +224,7 @@ impl ConfigClient {
                 "Error sending jwk request to control plane. Response Code: {}",
                 response.status()
             );
-            panic!("Proper error type needed");
+            Err(ConfigClientError::from_response(response).await)
         }
     }
 
@@ -237,7 +263,7 @@ impl ConfigClient {
                     key,
                     response.status()
                 );
-                panic!("Proper error type needed")
+                Err(ConfigClientError::from_response(response).await)
             }
         }
     }
@@ -256,7 +282,7 @@ impl ConfigClient {
                 key,
                 response.status()
             );
-            panic!("Proper error type needed")
+            Err(ConfigClientError::from_response(response).await)
         }
     }
 
@@ -276,7 +302,7 @@ impl ConfigClient {
                 key,
                 response.status()
             );
-            panic!("Proper error type needed")
+            Err(ConfigClientError::from_response(response).await)
         }
     }
 }

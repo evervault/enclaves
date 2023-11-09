@@ -15,7 +15,6 @@ use crate::base_tls_client::{BaseClient, BaseClientError};
 use crate::configuration;
 #[cfg(feature = "enclave")]
 use crate::crypto::attest;
-use crate::crypto::attest::AttestationError;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct ProvisionerErrorDetails {
@@ -26,8 +25,9 @@ pub struct ProvisionerErrorDetails {
 pub enum CertProvisionerError {
     #[error(transparent)]
     ClientError(#[from] BaseClientError),
+    #[cfg(feature = "enclave")]
     #[error("Failed to obtain attestation materials. {0}")]
-    AttestationError(#[from] AttestationError),
+    AttestationError(#[from] attest::AttestationError),
     #[error("Request to provisioner failed with status code {code} - {}", .details.message)]
     ProvisionerError {
         details: ProvisionerErrorDetails,
