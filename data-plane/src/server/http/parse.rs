@@ -24,7 +24,7 @@ pub enum ParseError {
 
 async fn read_from_stream<T: AsyncRead + Unpin>(
     stream: &mut T,
-    buffer: &mut Vec<u8>,
+    buffer: &mut [u8],
 ) -> Result<usize, ParseError> {
     let chunk_size = stream.read(buffer).await?;
     if chunk_size > 0 {
@@ -50,12 +50,13 @@ pub async fn try_parse_http_request_from_stream<T: AsyncRead + ProxiedConnection
     target_port: u16,
 ) -> Result<Incoming, ParseError> {
     let mut buffer = Vec::new();
-
     loop {
         // Declare our empty buffers to read the parsed data into
         let mut headers = [httparse::EMPTY_HEADER; 64];
         let mut req = httparse::Request::new(&mut headers);
-        let _ = read_from_stream(stream, &mut buffer).await?;
+        let mut temp = [0u8; 1024];
+        let bytes_read = read_from_stream(stream, &mut temp).await?;
+        buffer.extend_from_slice(&temp[..bytes_read]);
 
         match req.parse(&buffer) {
             Ok(Status::Complete(body_offset)) => {

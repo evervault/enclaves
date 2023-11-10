@@ -2,6 +2,7 @@ use hyper::header::InvalidHeaderValue;
 use hyper::http::{HeaderValue, Request, Response};
 use hyper::Body;
 use sha2::Digest;
+use shared::logging::TrxContextBuilder;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -44,7 +45,8 @@ impl std::convert::From<AuthError> for Response<Body> {
         .to_string();
         Response::builder()
             .status(err.to_status())
-            .header("content-length", msg.len())
+            .header("content-type", "appliction/json")
+            .header("content-length", body.len())
             .body(body.into())
             .expect("Failed to build auth error to response")
     }
@@ -100,21 +102,30 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
+    fn call(&mut self, mut req: Request<Body>) -> Self::Future {
         let clone = self.inner.clone();
         let mut inner = std::mem::replace(&mut self.inner, clone);
         let e3_client = self.e3_client.clone();
         let cage_context = self.context.clone();
         Box::pin(async move {
             let Some(api_key) = req.headers().get("api-key") else {
-              return Ok(AuthError::NoApiKeyGiven.into());
+              let mut error_response: Response<Body> = AuthError::NoApiKeyGiven.into();
+              if let Some(context) = req.extensions_mut().remove::<TrxContextBuilder>() {
+                error_response.extensions_mut().insert(context);
+              }
+              println!("{error_response:?}");
+              return Ok(error_response);
             };
 
             if let Err(err) = auth_request(api_key, cage_context, e3_client).await {
-                return Ok(err.into());
+                let mut error_response: Response<Body> = err.into();
+                if let Some(context) = req.extensions_mut().remove::<TrxContextBuilder>() {
+                    error_response.extensions_mut().insert(context);
+                }
+                return Ok(error_response);
             }
 
-            return inner.call(req).await;
+            inner.call(req).await
         })
     }
 }

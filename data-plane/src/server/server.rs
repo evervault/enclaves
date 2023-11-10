@@ -80,7 +80,11 @@ where
             feature_context.clone(),
             tx.clone(),
         ))
-        .layer(AuthLayer::new(e3_client.clone(), cage_context.clone()))
+        .option_layer(
+            feature_context
+                .api_key_auth
+                .then(|| AuthLayer::new(e3_client.clone(), cage_context.clone())),
+        )
         .layer(DecryptLayer::new(e3_client.clone()))
         .service(ForwardService);
     loop {

@@ -1,5 +1,5 @@
 use hyper::client::{Client, HttpConnector};
-use hyper::http::{Request, Response};
+use hyper::http::{header, Request, Response};
 use hyper::Body;
 use shared::logging::TrxContextBuilder;
 use std::future::Future;
@@ -58,6 +58,17 @@ impl Service<Request<Body>> for ForwardService {
             match http_client.call(req).await {
                 Ok(mut response) => {
                     response.extensions_mut().insert(context_builder);
+                    // Temporary fix: remove transfer encoding from response
+                    if let Some(_) = response.headers_mut().remove(header::TRANSFER_ENCODING) {
+                        let (mut parts, body) = response.into_parts();
+                        let body_bytes = hyper::body::to_bytes(body)
+                            .await
+                            .expect("Failed to read entire response body");
+                        parts
+                            .headers
+                            .append("content-length", body_bytes.len().into());
+                        return Ok(Response::from_parts(parts, Body::from(body_bytes)));
+                    }
                     return Ok(response);
                 }
                 Err(e) => {
