@@ -535,15 +535,7 @@ async fn auth_request(
         .authenticate(&hashed_api_key, auth_payload_for_hashed_api_key)
         .await
     {
-        Ok(auth_status) => {
-            if !auth_status {
-                log::debug!("Failed to authenticate request using provided API Key");
-                let response: Response<Body> = AuthError::FailedToAuthenticateApiKey.into();
-                Some(response)
-            } else {
-                None
-            }
-        }
+        Ok(auth_status) => None,
         Err(ClientError::FailedRequest(status)) if status.as_u16() == 401 => {
             //Temporary fallback to authenticate with APP api key -- remove this match when moving to just scoped api keys
             log::debug!("Failed to auth with scoped api key hash, attempting with app api key");
@@ -551,15 +543,7 @@ async fn auth_request(
                 .authenticate(&api_key, auth_payload_for_app_api_key)
                 .await
             {
-                Ok(auth_status) => {
-                    if !auth_status {
-                        log::debug!("Failed to authenticate request using provided API Key");
-                        let response: Response<Body> = AuthError::FailedToAuthenticateApiKey.into();
-                        Some(response)
-                    } else {
-                        None
-                    }
-                }
+                Ok(auth_status) => None,
                 Err(ClientError::FailedRequest(status)) if status.as_u16() == 401 => {
                     let response: Response<Body> = AuthError::FailedToAuthenticateApiKey.into();
                     Some(response)

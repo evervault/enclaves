@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use hyper::header::HeaderValue;
 use hyper::{Body, Response};
 use serde::de::DeserializeOwned;
@@ -157,7 +159,7 @@ impl E3Client {
         &self,
         api_key: &HeaderValue,
         payload: AuthRequest,
-    ) -> Result<bool, E3Error> {
+    ) -> Result<(), E3Error> {
         let response = self
             .base_client
             .send(
@@ -169,7 +171,7 @@ impl E3Client {
             )
             .await?;
         log::debug!("{response:?}");
-        Ok(response.status().is_success())
+        Ok(())
     }
 
     async fn parse_response<T: DeserializeOwned>(&self, res: Response<Body>) -> Result<T, E3Error> {
@@ -179,7 +181,7 @@ impl E3Client {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct AuthRequest {
     pub team_uuid: String,
     pub app_uuid: String,
@@ -188,8 +190,8 @@ pub struct AuthRequest {
 
 impl E3Payload for AuthRequest {}
 
-impl std::convert::From<&crate::CageContext> for AuthRequest {
-    fn from(context: &crate::CageContext) -> Self {
+impl<C: Deref<Target = crate::CageContext>> std::convert::From<C> for AuthRequest {
+    fn from(context: C) -> Self {
         Self {
             team_uuid: context.team_uuid().to_string(),
             app_uuid: context.app_uuid().to_string(),

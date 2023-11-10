@@ -1,3 +1,5 @@
+pub mod parse;
+
 use hyper::http::header::HeaderValue;
 
 pub enum EncodingError {

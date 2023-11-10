@@ -1088,6 +1088,7 @@ dependencies = [
  "tokio-test",
  "tokio-util 0.6.10",
  "tokio-vsock",
+ "tower",
  "uuid",
  "webpki-roots",
  "yup-hyper-mock",
