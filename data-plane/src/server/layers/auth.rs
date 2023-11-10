@@ -157,7 +157,7 @@ pub async fn auth_request<C: std::ops::Deref<Target = CageContext>>(
         ClientError::FailedRequest(status) if status.as_u16() == 401 => {
             log::debug!("Failed to auth with scoped api key hash, attempting with app api key");
             let Err(err) = e3_client.authenticate(api_key, auth_payload).await else {
-                return Ok(())
+                return Ok(());
             };
             match err {
                 ClientError::FailedRequest(status) if status.as_u16() == 401 => {
