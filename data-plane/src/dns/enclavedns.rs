@@ -86,7 +86,7 @@ impl EnclaveDnsDriver {
 
     async fn start_driver(mut self) {
         while let Some((dns_packet, src_addr)) = self.dns_lookup_receiver.recv().await {
-            let request_upper_bound = self.dns_request_upper_bound.clone();
+            let request_upper_bound = self.dns_request_upper_bound;
             let udp_socket = self.inner.clone();
 
             let permit = match self.concurrency_gate.clone().acquire_owned().await {
