@@ -4,52 +4,55 @@ const WebSocket = require('ws');
 
 describe('Make websocket request', () => {
 
-    it('should start websocket session when authorised', async () => {
-        const options = {
-            rejectUnauthorized: false,
-            headers: {
-                'api-key':'placeholder'
-            }
-        };
+    it("should start websocket session when authorised", (done) => {
+      const options = {
+        rejectUnauthorized: false,
+        headers: {
+          "api-key": "placeholder",
+        },
+      };
 
-        const serverUrl = 'wss://localhost:443/hello';
+      const serverUrl = "wss://localhost:443/hello";
 
-        const socket = new WebSocket(serverUrl, options);
+      const socket = new WebSocket(serverUrl, options);
 
-        socket.on('open', () => {
-            console.log('Connected to WebSocket server');
-            socket.send('test connection');
-        });
-        
-        socket.on('message', (data) => {
-            console.log('Received message from server:', data.toString('utf8'));
-            expect(data.toString('utf8')).to.equal("SERVER RECIEVED MESSAGE: test connection");
-            socket.close()
-        });
-        
-    })
+      socket.on("open", () => {
+        console.log("Connected to WebSocket server");
+        socket.send("test connection");
+      });
 
-    it('should not start websocket session when not authorised', async () => {
-        const options = {
-            rejectUnauthorized: false
-        };
+      socket.on("message", (data) => {
+        console.log("Received message from server:", data.toString("utf8"));
+        expect(data.toString("utf8")).to.equal(
+          "SERVER RECIEVED MESSAGE: test connection"
+        );
+        socket.close();
+        done();
+      });
+    });
 
-        const serverUrl = 'wss://localhost:443/hello';
+    it("should not start websocket session when not authorised", (done) => {
+      const options = {
+        rejectUnauthorized: false,
+      };
 
-        const socket = new WebSocket(serverUrl, options);
+      const serverUrl = "wss://localhost:443/hello";
 
-        socket.on('open', () => {
-            console.log('Connected to WebSocket server');
-            socket.send('test connection');
-        });
+      const socket = new WebSocket(serverUrl, options);
 
-        socket.on('error', (err) => {
-            expect(err.message).to.equal("Unexpected server response: 401");
-        });  
+      socket.on("open", () => {
+        console.log("Connected to WebSocket server");
+        socket.send("test connection");
+      });
 
-        socket.on('message', (data) => {
-            assert.fail('Connection was sucessful, 401 expected');
-        });
-    })
+      socket.on("error", (err) => {
+        expect(err.message).to.equal("Unexpected server response: 401");
+        done();
+      });
+
+      socket.on("message", (data) => {
+        assert.fail("Connection was sucessful, 401 expected");
+      });
+    });
 
 });

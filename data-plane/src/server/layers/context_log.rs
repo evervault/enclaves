@@ -117,7 +117,7 @@ where
     }
 }
 
-fn init_request_context<
+pub fn init_request_context<
     C: std::ops::Deref<Target = CageContext>,
     F: std::ops::Deref<Target = FeatureContext>,
 >(

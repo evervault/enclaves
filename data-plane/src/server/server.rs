@@ -6,7 +6,7 @@ use super::tls::TlsServerBuilder;
 use crate::e3client::E3Client;
 use crate::server::http::parse;
 use crate::server::layers::auth::AuthError;
-use crate::server::layers::context_log::ContextLogLayer;
+use crate::server::layers::context_log::{ContextLogLayer,init_request_context};
 use crate::{CageContext, FeatureContext};
 
 use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
@@ -110,6 +110,7 @@ where
                             &tx_for_connection,
                             remote_ip,
                             cage_context_clone.clone(),
+                            feature_context_clone.clone(),
                             e3_client_clone.clone(),
                             port,
                         )
@@ -125,7 +126,7 @@ where
                         log::info!(
                             "Non http request received with auth enabled, closing connection"
                         );
-                        log_non_http_trx(&tx_for_connection, false, remote_ip);
+                        log_non_http_trx(&tx_for_connection, false, remote_ip, None);
                         shutdown_conn(&mut stream).await;
                         return;
                     }
@@ -133,7 +134,7 @@ where
                         log::info!(
                             "Non http request received with auth enabled, closing connection"
                         );
-                        log_non_http_trx(&tx_for_connection, true, remote_ip);
+                        log_non_http_trx(&tx_for_connection, true, remote_ip, None);
                         let _ = pipe_to_customer_process(&mut stream, &bytes, port).await;
                         return;
                     }
@@ -154,9 +155,11 @@ async fn handle_websocket_request<S: AsyncRead + AsyncWrite + Unpin>(
     tx_for_connection: &UnboundedSender<LogHandlerMessage>,
     remote_ip: Option<String>,
     cage_context: Arc<CageContext>,
+    feature_context: Arc<FeatureContext>,
     e3_client: Arc<E3Client>,
     port: u16,
 ) {
+    let context_builder = init_request_context(&request, cage_context.clone(), feature_context.clone());
     let api_key = match request
         .headers()
         .get("api-key")
@@ -165,18 +168,18 @@ async fn handle_websocket_request<S: AsyncRead + AsyncWrite + Unpin>(
         Ok(api_key) => api_key,
         Err(e) => {
             let response_bytes = response_to_bytes(e.into()).await;
-            log_non_http_trx(tx_for_connection, false, remote_ip);
+            log_non_http_trx(tx_for_connection, false, remote_ip, Some(context_builder));
             let _ = stream.write_all(&response_bytes).await;
             return;
         }
     };
     if let Err(auth_err) = auth_request(api_key, cage_context, e3_client).await {
         let response_bytes = response_to_bytes(auth_err.into()).await;
-        log_non_http_trx(tx_for_connection, false, remote_ip);
+        log_non_http_trx(tx_for_connection, false, remote_ip, Some(context_builder));
         let _ = stream.write_all(&response_bytes).await;
         return;
     }
-    log_non_http_trx(tx_for_connection, true, remote_ip);
+    log_non_http_trx(tx_for_connection, true, remote_ip, Some(context_builder));
     let serialized_request = request_to_bytes(request).await;
     let _ = pipe_to_customer_process(stream, &serialized_request, port).await;
 }
@@ -208,15 +211,19 @@ fn log_non_http_trx(
     tx_sender: &UnboundedSender<LogHandlerMessage>,
     authorized: bool,
     remote_ip: Option<String>,
+    context_builder: Option<TrxContextBuilder>
 ) {
     let cage_context = CageContext::get().unwrap();
-    let mut context_builder = TrxContextBuilder::init_trx_context_with_cage_details(
-        &cage_context.cage_uuid,
-        &cage_context.cage_name,
-        &cage_context.app_uuid,
-        &cage_context.team_uuid,
-        RequestType::TCP,
-    );
+    let mut context_builder = match context_builder {
+      Some(context_builder) => context_builder,
+      _ => TrxContextBuilder::init_trx_context_with_cage_details(
+          &cage_context.cage_uuid,
+          &cage_context.cage_name,
+          &cage_context.app_uuid,
+          &cage_context.team_uuid,
+          RequestType::TCP,
+        )
+    };
     context_builder.add_httparse_to_trx(authorized, None, remote_ip);
     let trx_context = context_builder.build().unwrap();
     tx_sender
