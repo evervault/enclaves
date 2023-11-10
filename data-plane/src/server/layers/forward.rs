@@ -59,7 +59,11 @@ impl Service<Request<Body>> for ForwardService {
                 Ok(mut response) => {
                     response.extensions_mut().insert(context_builder);
                     // Temporary fix: remove transfer encoding from response
-                    if response.headers_mut().remove(header::TRANSFER_ENCODING).is_some() {
+                    if response
+                        .headers_mut()
+                        .remove(header::TRANSFER_ENCODING)
+                        .is_some()
+                    {
                         let (mut parts, body) = response.into_parts();
                         let body_bytes = hyper::body::to_bytes(body)
                             .await
