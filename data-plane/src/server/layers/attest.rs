@@ -9,7 +9,7 @@ use crate::crypto::attest;
 use crate::server::error::TlsError as Error;
 use crate::server::tls::TRUSTED_PUB_CERT;
 
-pub struct AttestLayer {}
+pub struct AttestLayer;
 
 impl<S> Layer<S> for AttestLayer {
     type Service = AttestService<S>;
@@ -24,6 +24,7 @@ struct AttestationResponse {
     attestation_doc: String,
 }
 
+#[derive(Clone)]
 pub struct AttestService<S> {
     inner: S,
 }
@@ -49,7 +50,9 @@ where
     fn call(&mut self, req: Request<Body>) -> Self::Future {
         // skip straight to inner if request is not for attestation path
         if req.uri() != "/.well-known/attestation" {
-            return Box::pin(self.inner.call(req));
+            let clone = self.inner.clone();
+            let mut inner = std::mem::replace(&mut self.inner, clone);
+            return Box::pin(inner.call(req));
         }
 
         Box::pin(async move {

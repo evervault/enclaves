@@ -5,6 +5,7 @@ use super::tls::TlsServerBuilder;
 #[cfg(feature = "enclave")]
 use crate::crypto::attest;
 use crate::e3client::E3Client;
+use crate::server::layers::decrypt::DecryptLayer;
 #[cfg(feature = "enclave")]
 use crate::server::tls::TRUSTED_PUB_CERT;
 use crate::{CageContext, FEATURE_CONTEXT};
@@ -20,6 +21,8 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio_rustls::server::TlsStream;
 use tower::Service;
 
+#[cfg(feature = "enclave")]
+use super::layers::attest::AttestLayer;
 use super::layers::{auth::AuthLayer, forward::ForwardService};
 
 pub async fn run<L: Listener + Send + Sync>(tcp_server: L, port: u16)
@@ -57,8 +60,16 @@ where
             return;
         }
     };
-    let mut service = tower::ServiceBuilder::new()
+    let mut service_builder = tower::ServiceBuilder::new();
+
+    // Only apply attestation layer in enclave mode
+    #[cfg(feature = "enclave")]
+    let mut service_builder = service_builder.layer(AttestLayer);
+
+    // layers are invoked in the order that they're registered to the service
+    let mut service = service_builder
         .layer(AuthLayer::new(e3_client.clone(), Arc::new(cage_context)))
+        .layer(DecryptLayer::new(e3_client.clone()))
         .service(ForwardService);
     loop {
         let mut stream = match server.accept().await {
