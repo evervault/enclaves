@@ -99,8 +99,8 @@ where
             context.add_res_to_trx_context(&response, &feature_context.trusted_headers);
             add_ev_ctx_to_headers(response.headers_mut(), &request_id);
             let Ok(built_context) = context.stop_timer_and_build(timer) else {
-              log::error!("Failed to build trx context for request");
-              return Ok(response);
+                log::error!("Failed to build trx context for request");
+                return Ok(response);
             };
 
             if feature_context.trx_logging_enabled {

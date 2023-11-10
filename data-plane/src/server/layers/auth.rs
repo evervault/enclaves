@@ -109,12 +109,11 @@ where
         let cage_context = self.context.clone();
         Box::pin(async move {
             let Some(api_key) = req.headers().get("api-key") else {
-              let mut error_response: Response<Body> = AuthError::NoApiKeyGiven.into();
-              if let Some(context) = req.extensions_mut().remove::<TrxContextBuilder>() {
-                error_response.extensions_mut().insert(context);
-              }
-              println!("{error_response:?}");
-              return Ok(error_response);
+                let mut error_response: Response<Body> = AuthError::NoApiKeyGiven.into();
+                if let Some(context) = req.extensions_mut().remove::<TrxContextBuilder>() {
+                  error_response.extensions_mut().insert(context);
+                }
+                return Ok(error_response);
             };
 
             if let Err(err) = auth_request(api_key, cage_context, e3_client).await {
@@ -147,14 +146,19 @@ pub async fn auth_request<C: std::ops::Deref<Target = CageContext>>(
 
     let auth_payload = AuthRequest::from(cage_context);
     // matching on error to handle retry with alternative key
-    let Err(err) = e3_client.authenticate(&hashed_api_key, auth_payload.clone()).await else {
+    let Err(err) = e3_client
+        .authenticate(&hashed_api_key, auth_payload.clone())
+        .await
+    else {
       return Ok(());
     };
 
     match err {
         ClientError::FailedRequest(status) if status.as_u16() == 401 => {
             log::debug!("Failed to auth with scoped api key hash, attempting with app api key");
-            let Err(err) = e3_client.authenticate(api_key, auth_payload).await else { return Ok(()) };
+            let Err(err) = e3_client.authenticate(api_key, auth_payload).await else {
+              return Ok(())
+            };
             match err {
                 ClientError::FailedRequest(status) if status.as_u16() == 401 => {
                     Err(AuthError::FailedToAuthenticateApiKey)
