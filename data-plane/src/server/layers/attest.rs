@@ -6,7 +6,6 @@ use std::pin::Pin;
 use tower::{Layer, Service};
 
 use crate::crypto::attest;
-use crate::server::error::TlsError as Error;
 use crate::server::tls::TRUSTED_PUB_CERT;
 
 #[derive(Clone)]

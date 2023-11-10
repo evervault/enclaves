@@ -45,7 +45,7 @@ log = { version = "0.4.19", features = ["max_level_debug"] }
 rlimit = { version = "0.10.1", optional = true }
 hyper-rustls = { version = "0.24.1", default-features = false, features = ["http1","http2","tls12","tokio-runtime"] }
 chrono-tz = { version = "0.8.3" }
-tower = "0.4.13"
+tower = { version = "0.4.13", features = ["util"] }
 
 [dev-dependencies]
 tokio-test = "0.4.2"

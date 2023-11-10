@@ -3,14 +3,10 @@ use super::http::parse::{try_parse_http_request_from_stream, Incoming};
 use super::http::{request_to_bytes, response_to_bytes};
 use super::tls::TlsServerBuilder;
 
-#[cfg(feature = "enclave")]
-use crate::crypto::attest;
 use crate::e3client::E3Client;
 use crate::server::http::parse;
 use crate::server::layers::auth::AuthError;
 use crate::server::layers::context_log::ContextLogLayer;
-#[cfg(feature = "enclave")]
-use crate::server::tls::TRUSTED_PUB_CERT;
 use crate::{CageContext, FeatureContext};
 
 use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
@@ -129,7 +125,7 @@ where
                         log::info!(
                             "Non http request received with auth enabled, closing connection"
                         );
-                        let _ = log_non_http_trx(&tx_for_connection, false, remote_ip);
+                        log_non_http_trx(&tx_for_connection, false, remote_ip);
                         shutdown_conn(&mut stream).await;
                         return;
                     }
@@ -137,7 +133,7 @@ where
                         log::info!(
                             "Non http request received with auth enabled, closing connection"
                         );
-                        let _ = log_non_http_trx(&tx_for_connection, true, remote_ip);
+                        log_non_http_trx(&tx_for_connection, true, remote_ip);
                         let _ = pipe_to_customer_process(&mut stream, &bytes, port).await;
                         return;
                     }
@@ -169,21 +165,20 @@ async fn handle_websocket_request<S: AsyncRead + AsyncWrite + Unpin>(
         Ok(api_key) => api_key,
         Err(e) => {
             let response_bytes = response_to_bytes(e.into()).await;
-            let _ = log_non_http_trx(&tx_for_connection, false, remote_ip);
+            log_non_http_trx(tx_for_connection, false, remote_ip);
             let _ = stream.write_all(&response_bytes).await;
             return;
         }
     };
     if let Err(auth_err) = auth_request(api_key, cage_context, e3_client).await {
         let response_bytes = response_to_bytes(auth_err.into()).await;
-        let _ = log_non_http_trx(&tx_for_connection, false, remote_ip);
+        log_non_http_trx(tx_for_connection, false, remote_ip);
         let _ = stream.write_all(&response_bytes).await;
         return;
     }
-    let _ = log_non_http_trx(&tx_for_connection, true, remote_ip);
+    log_non_http_trx(tx_for_connection, true, remote_ip);
     let serialized_request = request_to_bytes(request).await;
     let _ = pipe_to_customer_process(stream, &serialized_request, port).await;
-    return;
 }
 
 async fn shutdown_conn<L>(stream: &mut TlsStream<L>)

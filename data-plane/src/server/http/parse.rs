@@ -28,9 +28,9 @@ async fn read_from_stream<T: AsyncRead + Unpin>(
 ) -> Result<usize, ParseError> {
     let chunk_size = stream.read(buffer).await?;
     if chunk_size > 0 {
-        return Ok(chunk_size);
+        Ok(chunk_size)
     } else {
-        return Err(ParseError::UnexpectedEof);
+        Err(ParseError::UnexpectedEof)
     }
 }
 
@@ -62,7 +62,7 @@ pub async fn try_parse_http_request_from_stream<T: AsyncRead + ProxiedConnection
             Ok(Status::Complete(body_offset)) => {
                 let remote_ip = stream.get_remote_addr();
                 let request_header_map =
-                    build_header_map_for_request(&req.headers, remote_ip.as_deref())?;
+                    build_header_map_for_request(req.headers, remote_ip.as_deref())?;
                 let content_length = get_content_length_from_headers(&request_header_map);
                 let req_uri = format!(
                     "http://127.0.0.1:{}{}",
