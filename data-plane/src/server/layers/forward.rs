@@ -1,14 +1,12 @@
 use hyper::client::{Client, HttpConnector};
-use hyper::header::InvalidHeaderValue;
 use hyper::http::{Request, Response};
 use hyper::Body;
+use shared::logging::TrxContextBuilder;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::OnceLock;
 use thiserror::Error;
 use tower::Service;
-
-use crate::server::error::TlsError;
 
 static HTTP_CLIENT: OnceLock<Client<HttpConnector, hyper::Body>> = OnceLock::new();
 
@@ -45,18 +43,28 @@ impl Service<Request<Body>> for ForwardService {
     // Service is always ready to receive requests
     fn poll_ready(
         &mut self,
-        cx: &mut std::task::Context<'_>,
+        _: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
         std::task::Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
+    fn call(&mut self, mut req: Request<Body>) -> Self::Future {
         Box::pin(async move {
             let mut http_client = HTTP_CLIENT.get_or_init(Client::new).clone();
-
+            let context_builder = req
+                .extensions_mut()
+                .remove::<TrxContextBuilder>()
+                .expect("No context set on received request");
             match http_client.call(req).await {
-                Ok(response) => return Ok(response),
-                Err(e) => return Ok(ForwardError::from(e).into()),
+                Ok(mut response) => {
+                    response.extensions_mut().insert(context_builder);
+                    return Ok(response);
+                }
+                Err(e) => {
+                    let mut error_response: Response<Body> = ForwardError::from(e).into();
+                    error_response.extensions_mut().insert(context_builder);
+                    return Ok(error_response);
+                }
             };
         })
     }

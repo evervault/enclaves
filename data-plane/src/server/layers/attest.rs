@@ -9,6 +9,7 @@ use crate::crypto::attest;
 use crate::server::error::TlsError as Error;
 use crate::server::tls::TRUSTED_PUB_CERT;
 
+#[derive(Clone)]
 pub struct AttestLayer;
 
 impl<S> Layer<S> for AttestLayer {

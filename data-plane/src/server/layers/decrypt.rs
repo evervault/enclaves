@@ -1,8 +1,7 @@
 use futures::StreamExt;
-use hyper::header::InvalidHeaderValue;
-use hyper::http::{HeaderValue, Request, Response};
+use hyper::http::{Request, Response};
 use hyper::Body;
-use sha2::Digest;
+use shared::logging::TrxContextBuilder;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -10,10 +9,7 @@ use thiserror::Error;
 use tower::{Layer, Service};
 
 use crate::base_tls_client::ClientError;
-use crate::{
-    e3client::{AuthRequest, CryptoRequest, DecryptRequest, E3Client},
-    CageContext,
-};
+use crate::e3client::{CryptoRequest, DecryptRequest, E3Client};
 
 #[derive(Debug, Error)]
 pub enum DecryptError {
@@ -49,6 +45,7 @@ impl std::convert::From<DecryptError> for Response<Body> {
     }
 }
 
+#[derive(Clone)]
 pub struct DecryptLayer {
     e3_client: Arc<E3Client>,
 }
@@ -70,6 +67,7 @@ impl<S> Layer<S> for DecryptLayer {
     }
 }
 
+#[derive(Clone)]
 pub struct DecryptService<S> {
     e3_client: Arc<E3Client>,
     inner: S,
@@ -94,19 +92,28 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
+    fn call(&mut self, mut req: Request<Body>) -> Self::Future {
         let clone = self.inner.clone();
         let mut inner = std::mem::replace(&mut self.inner, clone);
         let e3_client = self.e3_client.clone();
         Box::pin(async move {
+            let mut context = req
+                .extensions_mut()
+                .remove::<TrxContextBuilder>()
+                .expect("No context set on received request");
             let (mut req_info, req_body) = req.into_parts();
             let request_bytes = match hyper::body::to_bytes(req_body).await {
                 Ok(body_bytes) => body_bytes,
                 Err(e) => {
                     log::error!("Failed to read entire body — {e}");
-                    return Ok(DecryptError::FailedToSerializeRequest.into());
+                    let mut error_response: Response<Body> =
+                        DecryptError::FailedToSerializeRequest.into();
+                    error_response.extensions_mut().insert(context);
+                    return Ok(error_response);
                 }
             };
+
+            req_info.headers.remove("transfer-encoding");
 
             let decryption_payload = match extract_ciphertexts_from_payload(&request_bytes).await {
                 Ok(decryption_res) => decryption_res,
@@ -114,7 +121,9 @@ where
                     log::error!(
                         "An error occurred while parsing the incoming stream for ciphertexts - {e}"
                     );
-                    return Ok(e.into());
+                    let mut error_response: Response<Body> = e.into();
+                    error_response.extensions_mut().insert(context);
+                    return Ok(error_response);
                 }
             };
 
@@ -129,15 +138,21 @@ where
                         Ok(decrypted) => decrypted,
                         Err(e) => {
                             log::error!("Failed to decrypt — {e}");
-                            return Ok(DecryptError::from(e).into());
+                            let mut error_response: Response<Body> = DecryptError::from(e).into();
+                            error_response.extensions_mut().insert(context);
+                            return Ok(error_response);
                         }
                     };
 
                 log::info!("Decryption complete, rebuilding request");
                 inject_decrypted_values_into_request_vec(&decrypted, &mut bytes_vec);
-                req_info.headers.insert("content-length", bytes_vec.len());
+                req_info
+                    .headers
+                    .insert("content-length", bytes_vec.len().into());
             }
-            let decrypted_request = hyper::Request::from_parts(req_info, Body::from(bytes_vec));
+            let mut decrypted_request = hyper::Request::from_parts(req_info, Body::from(bytes_vec));
+            context.n_decrypted_fields(n_decrypts);
+            decrypted_request.extensions_mut().insert(context);
             inner.call(decrypted_request).await
         })
     }

@@ -3,6 +3,7 @@
 
 use httparse::Status;
 use hyper::Body;
+use shared::server::proxy_protocol::ProxiedConnection;
 use std::str::FromStr;
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncReadExt};
@@ -33,12 +34,18 @@ async fn read_from_stream<T: AsyncRead + Unpin>(
     }
 }
 
+pub fn is_websocket_request(req: &hyper::Request<hyper::Body>) -> bool {
+    req.headers()
+        .get("upgrade")
+        .is_some_and(|upgrade_proto| upgrade_proto == "websocket")
+}
+
 pub enum Incoming {
     HttpRequest(hyper::Request<hyper::Body>),
     NonHttpRequest(Vec<u8>),
 }
 
-pub async fn try_parse_http_request_from_stream<T: AsyncRead + Unpin>(
+pub async fn try_parse_http_request_from_stream<T: AsyncRead + ProxiedConnection + Unpin>(
     stream: &mut T,
     target_port: u16,
 ) -> Result<Incoming, ParseError> {
@@ -52,7 +59,9 @@ pub async fn try_parse_http_request_from_stream<T: AsyncRead + Unpin>(
 
         match req.parse(&buffer) {
             Ok(Status::Complete(body_offset)) => {
-                let request_header_map = build_header_map_for_request(&req.headers)?;
+                let remote_ip = stream.get_remote_addr();
+                let request_header_map =
+                    build_header_map_for_request(&req.headers, remote_ip.as_deref())?;
                 let content_length = get_content_length_from_headers(&request_header_map);
                 let req_uri = format!(
                     "http://127.0.0.1:{}{}",
@@ -64,17 +73,22 @@ pub async fn try_parse_http_request_from_stream<T: AsyncRead + Unpin>(
                     .uri(req_uri)
                     .method(req.method.unwrap_or("GET"));
 
-                if let Some(content_length) = content_length {
+                let mut complete_request = if let Some(content_length) = content_length {
                     let mut body_buffer: Vec<u8> = buffer.drain(body_offset..).collect();
                     body_buffer.reserve(content_length - (buffer.len() - body_offset));
                     let request_body =
                         read_incoming_body_from_stream(content_length, stream, body_buffer).await?;
-                    let mut complete_request = complete_request.body(request_body)?;
-                    (*complete_request.headers_mut()) = request_header_map;
-                    return Ok(Incoming::HttpRequest(complete_request));
-                }
-                let mut complete_request = complete_request.body(Body::empty())?;
+                    complete_request.body(request_body)?
+                } else {
+                    complete_request.body(Body::empty())?
+                };
                 (*complete_request.headers_mut()) = request_header_map;
+
+                if let Some(remote_ip) = remote_ip {
+                    complete_request
+                        .extensions_mut()
+                        .insert(super::RemoteIp(remote_ip));
+                }
                 return Ok(Incoming::HttpRequest(complete_request));
             }
             Ok(Status::Partial) => continue,
@@ -88,6 +102,7 @@ pub async fn try_parse_http_request_from_stream<T: AsyncRead + Unpin>(
 
 fn build_header_map_for_request(
     headers: &[httparse::Header],
+    remote_ip: Option<&str>,
 ) -> Result<hyper::HeaderMap, hyper::http::Error> {
     let mut header_map = hyper::http::HeaderMap::new();
     for header in headers {
@@ -95,6 +110,9 @@ fn build_header_map_for_request(
             hyper::http::HeaderName::from_str(header.name)?,
             hyper::http::HeaderValue::from_bytes(header.value)?,
         );
+    }
+    if let Some(remote_ip) = remote_ip {
+        super::add_remote_ip_to_forwarded_for_header(&mut header_map, remote_ip);
     }
     Ok(header_map)
 }

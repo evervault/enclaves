@@ -50,6 +50,7 @@ impl std::convert::From<AuthError> for Response<Body> {
     }
 }
 
+#[derive(Clone)]
 pub struct AuthLayer {
     e3_client: Arc<E3Client>,
     context: Arc<CageContext>,
@@ -73,6 +74,7 @@ impl<S> Layer<S> for AuthLayer {
     }
 }
 
+#[derive(Clone)]
 pub struct AuthService<S> {
     e3_client: Arc<E3Client>,
     context: Arc<CageContext>,
@@ -109,7 +111,7 @@ where
             };
 
             if let Err(err) = auth_request(api_key, cage_context, e3_client).await {
-                return Ok(AuthError::FailedToAuthenticateApiKey.into());
+                return Ok(err.into());
             }
 
             return inner.call(req).await;
@@ -124,7 +126,7 @@ fn compute_base64_sha512(input: impl AsRef<[u8]>) -> Vec<u8> {
     hash_digest.as_bytes().to_vec()
 }
 
-async fn auth_request<C: std::ops::Deref<Target = CageContext>>(
+pub async fn auth_request<C: std::ops::Deref<Target = CageContext>>(
     api_key: &HeaderValue,
     cage_context: C,
     e3_client: Arc<E3Client>,
