@@ -161,9 +161,7 @@ pub struct FeatureContext {
     pub api_key_auth: bool,
     pub healthcheck: Option<String>,
     pub trx_logging_enabled: bool,
-    #[serde(default)]
     pub forward_proxy_protocol: bool,
-    #[serde(default)]
     pub trusted_headers: Vec<String>,
     #[cfg(feature = "network_egress")]
     pub egress: EgressConfig,
@@ -203,7 +201,7 @@ mod test {
     #[cfg(not(feature = "network_egress"))]
     #[test]
     fn test_config_deserialization_without_proxy_protocol() {
-        let raw_feature_context = r#"{ "api_key_auth": true, "trx_logging_enabled": false }"#;
+        let raw_feature_context = r#"{ "api_key_auth": true, "trx_logging_enabled": false, "forward_proxy_protocol": false, "trusted_headers": [] }"#;
         let parsed = serde_json::from_str(raw_feature_context);
         assert!(parsed.is_ok());
         let feature_context: FeatureContext = parsed.unwrap();
@@ -216,8 +214,7 @@ mod test {
     #[cfg(not(feature = "network_egress"))]
     #[test]
     fn test_config_deserialization_without_proxy_protocol_and_healthcheck() {
-        let raw_feature_context =
-            r#"{ "api_key_auth": true, "healthcheck": "/health", "trx_logging_enabled": false }"#;
+        let raw_feature_context = r#"{ "api_key_auth": true, "healthcheck": "/health", "trx_logging_enabled": false, "forward_proxy_protocol": false, "trusted_headers": [] }"#;
         let parsed = serde_json::from_str(raw_feature_context);
         assert!(parsed.is_ok());
         let feature_context: FeatureContext = parsed.unwrap();
@@ -230,13 +227,17 @@ mod test {
     #[cfg(feature = "network_egress")]
     #[test]
     fn test_config_deserialization_with_egress() {
-        let raw_feature_context = r#"{ "api_key_auth": true, "trx_logging_enabled": false, "forward_proxy_protocol": true, "egress": { "ports": "443,8080", "allow_list": "*.stripe.com" } }"#;
+        let raw_feature_context = r#"{ "api_key_auth": true, "trx_logging_enabled": false, "forward_proxy_protocol": true, "trusted_headers": ["X-Error-Code"], "egress": { "ports": "443,8080", "allow_list": "*.stripe.com" } }"#;
         let parsed = serde_json::from_str(raw_feature_context);
         assert!(parsed.is_ok());
         let feature_context: FeatureContext = parsed.unwrap();
         assert_eq!(feature_context.api_key_auth, true);
         assert_eq!(feature_context.trx_logging_enabled, false);
         assert_eq!(feature_context.forward_proxy_protocol, true);
+        assert_eq!(
+            feature_context.trusted_headers,
+            vec!["X-Error-Code".to_string()]
+        );
         assert_eq!(feature_context.egress.ports, vec![443, 8080]);
         assert!(feature_context.healthcheck.is_none());
         assert_eq!(
@@ -248,13 +249,15 @@ mod test {
     #[cfg(feature = "network_egress")]
     #[test]
     fn test_config_deserialization_with_egress_and_healthcheck() {
-        let raw_feature_context = r#"{ "api_key_auth": true, "healthcheck": "/health", "trx_logging_enabled": false, "forward_proxy_protocol": true, "egress": { "ports": "443,8080", "allow_list": "*.stripe.com" } }"#;
+        let raw_feature_context = r#"{ "api_key_auth": true, "healthcheck": "/health", "trx_logging_enabled": false, "forward_proxy_protocol": true, "trusted_headers": [], "egress": { "ports": "443,8080", "allow_list": "*.stripe.com" } }"#;
         let parsed = serde_json::from_str(raw_feature_context);
         assert!(parsed.is_ok());
         let feature_context: FeatureContext = parsed.unwrap();
         assert_eq!(feature_context.api_key_auth, true);
         assert_eq!(feature_context.trx_logging_enabled, false);
         assert_eq!(feature_context.forward_proxy_protocol, true);
+        let trusted_headers: Vec<String> = Vec::new();
+        assert_eq!(feature_context.trusted_headers, trusted_headers);
         assert_eq!(feature_context.egress.ports, vec![443, 8080]);
         assert_eq!(
             feature_context.egress.allow_list.wildcard,
