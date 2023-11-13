@@ -9,7 +9,7 @@ use thiserror::Error;
 use tower::{Layer, Service};
 
 use crate::base_tls_client::ClientError;
-use crate::e3client::{CryptoRequest, DecryptRequest, E3Client};
+use crate::e3client::{CryptoRequest, DecryptRequest, E3Api, E3Client};
 
 #[derive(Debug, Error)]
 pub enum DecryptError {

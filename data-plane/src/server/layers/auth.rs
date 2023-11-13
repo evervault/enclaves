@@ -11,7 +11,7 @@ use tower::{Layer, Service};
 
 use crate::base_tls_client::ClientError;
 use crate::{
-    e3client::{AuthRequest, E3Client},
+    e3client::{AuthRequest, E3Api},
     CageContext,
 };
 
@@ -53,19 +53,19 @@ impl std::convert::From<AuthError> for Response<Body> {
 }
 
 #[derive(Clone)]
-pub struct AuthLayer {
-    e3_client: Arc<E3Client>,
+pub struct AuthLayer<T: E3Api + Send + Sync + 'static> {
+    e3_client: Arc<T>,
     context: Arc<CageContext>,
 }
 
-impl AuthLayer {
-    pub fn new(e3_client: Arc<E3Client>, context: Arc<CageContext>) -> Self {
+impl<T: E3Api + Send + Sync + 'static> AuthLayer<T> {
+    pub fn new(e3_client: Arc<T>, context: Arc<CageContext>) -> Self {
         Self { e3_client, context }
     }
 }
 
-impl<S> Layer<S> for AuthLayer {
-    type Service = AuthService<S>;
+impl<S, T: E3Api + Send + Sync + 'static> Layer<S> for AuthLayer<T> {
+    type Service = AuthService<S, T>;
 
     fn layer(&self, inner: S) -> Self::Service {
         AuthService {
@@ -77,14 +77,15 @@ impl<S> Layer<S> for AuthLayer {
 }
 
 #[derive(Clone)]
-pub struct AuthService<S> {
-    e3_client: Arc<E3Client>,
+pub struct AuthService<S, T: E3Api + Send + Sync + 'static> {
+    e3_client: Arc<T>,
     context: Arc<CageContext>,
     inner: S,
 }
 
-impl<S> Service<Request<Body>> for AuthService<S>
+impl<S, T> Service<Request<Body>> for AuthService<S, T>
 where
+    T: E3Api + Send + Sync + 'static,
     S: Service<Request<Body>, Response = Response<Body>> + Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Response: 'static,
@@ -136,10 +137,13 @@ fn compute_base64_sha512(input: impl AsRef<[u8]>) -> Vec<u8> {
     hash_digest.as_bytes().to_vec()
 }
 
-pub async fn auth_request<C: std::ops::Deref<Target = CageContext>>(
+pub async fn auth_request<
+    C: std::ops::Deref<Target = CageContext>,
+    T: E3Api + Send + Sync + 'static,
+>(
     api_key: &HeaderValue,
     cage_context: C,
-    e3_client: Arc<E3Client>,
+    e3_client: Arc<T>,
 ) -> Result<(), AuthError> {
     log::debug!("Authenticating request");
     let hashed_api_key = HeaderValue::from_bytes(&compute_base64_sha512(api_key.as_bytes()))?;
@@ -167,5 +171,95 @@ pub async fn auth_request<C: std::ops::Deref<Target = CageContext>>(
             }
         }
         e => Err(e.into()),
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::sync::Arc;
+
+    use hyper::StatusCode;
+
+    use super::*;
+    use crate::e3client::mock::MockE3TestClient;
+
+    #[tokio::test]
+    async fn test_request_auth_success_with_hashed_key() {
+        let mut e3_test_client = MockE3TestClient::new();
+        e3_test_client
+            .expect_authenticate()
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        let api_key = HeaderValue::from_str("my-api-key").unwrap();
+        let context = CageContext::new(
+            "team_uuid".into(),
+            "app_uuid".into(),
+            "cage_uuid".into(),
+            "cage_name".into(),
+        );
+
+        let result = auth_request(&api_key, &context, Arc::new(e3_test_client)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_request_auth_success_with_second_attempt() {
+        let mut e3_test_client = MockE3TestClient::new();
+        let api_key = HeaderValue::from_str("my-api-key").unwrap();
+        e3_test_client
+            .expect_authenticate()
+            .times(2)
+            .returning(|received_api_key, _| {
+                // first request hashes the api key, second sends it in the clear
+                if received_api_key.to_str().unwrap() == "my-api-key" {
+                    Ok(())
+                } else {
+                    Err(ClientError::FailedRequest(
+                        StatusCode::from_u16(401).unwrap(),
+                    ))
+                }
+            });
+
+        let context = CageContext::new(
+            "team_uuid".into(),
+            "app_uuid".into(),
+            "cage_uuid".into(),
+            "cage_name".into(),
+        );
+
+        let result = auth_request(&api_key, &context, Arc::new(e3_test_client)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_request_does_not_retry_on_internal_error() {
+        let mut e3_test_client = MockE3TestClient::new();
+        let api_key = HeaderValue::from_str("my-api-key").unwrap();
+        e3_test_client
+            .expect_authenticate()
+            .times(1)
+            .returning(|_, _| {
+                Err(ClientError::FailedRequest(
+                    StatusCode::from_u16(500).unwrap(),
+                ))
+            });
+
+        let context = CageContext::new(
+            "team_uuid".into(),
+            "app_uuid".into(),
+            "cage_uuid".into(),
+            "cage_name".into(),
+        );
+
+        let result = auth_request(&api_key, &context, Arc::new(e3_test_client)).await;
+        assert!(result.is_err());
+        let returned_err = result.unwrap_err();
+        assert!(matches!(
+            AuthError::InternalError(ClientError::FailedRequest(
+                StatusCode::from_u16(500).unwrap()
+            )),
+            returned_err
+        ));
     }
 }

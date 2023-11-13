@@ -13,7 +13,7 @@ use serde_json::json;
 use shared::server::config_server::requests::Secret;
 use thiserror::Error;
 
-use crate::e3client::{CryptoRequest, CryptoResponse, E3Client};
+use crate::e3client::{CryptoRequest, CryptoResponse, E3Api, E3Client};
 
 #[derive(Debug, Error)]
 pub enum EnvError {

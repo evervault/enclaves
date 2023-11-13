@@ -15,7 +15,7 @@ use tokio_rustls::rustls::{
 use crate::{
     config_client::{ConfigClient, StorageConfigClientInterface},
     configuration,
-    e3client::{CryptoRequest, CryptoResponse, E3Client},
+    e3client::{CryptoRequest, CryptoResponse, E3Api, E3Client},
     CageContext,
 };
 

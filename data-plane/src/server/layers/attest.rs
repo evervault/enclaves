@@ -50,7 +50,7 @@ where
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
         // skip straight to inner if request is not for attestation path
-        if req.uri() != "/.well-known/attestation" {
+        if !is_attestation_request(&req) {
             let clone = self.inner.clone();
             let mut inner = std::mem::replace(&mut self.inner, clone);
             return Box::pin(inner.call(req));
@@ -79,5 +79,32 @@ where
 
             Ok(attestation_response)
         })
+    }
+}
+
+fn is_attestation_request(req: &Request<Body>) -> bool {
+    req.uri() == "/.well-known/attestation"
+}
+
+#[cfg(test)]
+mod test {
+    use super::is_attestation_request;
+
+    #[test]
+    fn correctly_identifies_attestation_requests() {
+        let req = hyper::Request::builder()
+            .uri("http://localhost:1234/.well-known/attestation")
+            .body(())
+            .unwrap();
+        assert!(is_attestation_request(&req));
+    }
+
+    #[test]
+    fn correctly_identifies_non_attestation_requests() {
+        let req = hyper::Request::builder()
+            .uri("http://localhost:1234/echo")
+            .body(())
+            .unwrap();
+        assert!(!is_attestation_request(&req));
     }
 }

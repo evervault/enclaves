@@ -6,7 +6,7 @@ use super::tls::TlsServerBuilder;
 use crate::e3client::E3Client;
 use crate::server::http::parse;
 use crate::server::layers::auth::AuthError;
-use crate::server::layers::context_log::{ContextLogLayer,init_request_context};
+use crate::server::layers::context_log::{init_request_context, ContextLogLayer};
 use crate::{CageContext, FeatureContext};
 
 use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
@@ -149,6 +149,7 @@ where
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn handle_websocket_request<S: AsyncRead + AsyncWrite + Unpin>(
     stream: &mut TlsStream<S>,
     request: Request<Body>,
@@ -159,7 +160,8 @@ async fn handle_websocket_request<S: AsyncRead + AsyncWrite + Unpin>(
     e3_client: Arc<E3Client>,
     port: u16,
 ) {
-    let context_builder = init_request_context(&request, cage_context.clone(), feature_context.clone());
+    let context_builder =
+        init_request_context(&request, cage_context.clone(), feature_context.clone());
     let api_key = match request
         .headers()
         .get("api-key")
@@ -211,18 +213,18 @@ fn log_non_http_trx(
     tx_sender: &UnboundedSender<LogHandlerMessage>,
     authorized: bool,
     remote_ip: Option<String>,
-    context_builder: Option<TrxContextBuilder>
+    context_builder: Option<TrxContextBuilder>,
 ) {
     let cage_context = CageContext::get().unwrap();
     let mut context_builder = match context_builder {
-      Some(context_builder) => context_builder,
-      _ => TrxContextBuilder::init_trx_context_with_cage_details(
-          &cage_context.cage_uuid,
-          &cage_context.cage_name,
-          &cage_context.app_uuid,
-          &cage_context.team_uuid,
-          RequestType::TCP,
-        )
+        Some(context_builder) => context_builder,
+        _ => TrxContextBuilder::init_trx_context_with_cage_details(
+            &cage_context.cage_uuid,
+            &cage_context.cage_name,
+            &cage_context.app_uuid,
+            &cage_context.team_uuid,
+            RequestType::TCP,
+        ),
     };
     context_builder.add_httparse_to_trx(authorized, None, remote_ip);
     let trx_context = context_builder.build().unwrap();
