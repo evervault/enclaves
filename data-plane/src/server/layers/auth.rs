@@ -233,6 +233,32 @@ mod test {
     }
 
     #[tokio::test]
+    async fn test_request_auth_receives_401_on_both_requests() {
+        let mut e3_test_client = MockE3TestClient::new();
+        let api_key = HeaderValue::from_str("my-api-key").unwrap();
+        e3_test_client
+            .expect_authenticate()
+            .times(2)
+            .returning(|_, _| {
+                Err(ClientError::FailedRequest(
+                    StatusCode::from_u16(401).unwrap(),
+                ))
+            });
+
+        let context = CageContext::new(
+            "team_uuid".into(),
+            "app_uuid".into(),
+            "cage_uuid".into(),
+            "cage_name".into(),
+        );
+
+        let result = auth_request(&api_key, &context, Arc::new(e3_test_client)).await;
+        assert!(result.is_err());
+        let auth_err = result.unwrap_err();
+        assert!(matches!(auth_err, AuthError::FailedToAuthenticateApiKey));
+    }
+
+    #[tokio::test]
     async fn test_request_does_not_retry_on_internal_error() {
         let mut e3_test_client = MockE3TestClient::new();
         let api_key = HeaderValue::from_str("my-api-key").unwrap();
