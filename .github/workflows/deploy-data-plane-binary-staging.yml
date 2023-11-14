@@ -15,8 +15,28 @@ env:
   STAGE: staging
 
 jobs:
+  get-release-semver:
+    runs-on: ubuntu-latest
+    outputs:
+      semver: ${{ steps.get-version.outputs.semver }}
+      semver-sha: ${{ steps.get-version.outputs.semver-sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Parse semver from cargo.toml
+        id: get-version
+        run: |
+          SHA_SUFFIX=${GITHUB_SHA::6}
+          SEMVER=$(cargo metadata --no-deps | jq -r ".packages[] | select(.name == \"data-plane\") | .version")
+          echo "Full semver: ${SEMVER}, appending suffix: ${SHA_SUFFIX}"
+          echo "semver=${SEMVER}" >> $GITHUB_OUTPUT
+          echo "semver-sha=${SEMVER}-${SHA_SUFFIX}" >> $GITHUB_OUTPUT
+
   deploy-data-plane-binary:
     runs-on: ubuntu-latest
+    needs: [get-release-semver]
     steps:
       - uses: actions/checkout@v2
 
@@ -41,7 +61,7 @@ jobs:
 
       - name: Upload data-plane to S3 (egress enabled, tls termination disabled)
         env:
-          VERSION_TAG: ${{ github.sha }}
+          VERSION_TAG: ${{ needs.get-release-semver.outputs.semver-sha }}
           FEATURE_LABEL: egress-enabled/tls-termination-disabled
         run: |
           aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
@@ -57,7 +77,7 @@ jobs:
 
       - name: Upload data-plane to S3 (egress enabled, tls termination enabled)
         env:
-          VERSION_TAG: ${{ github.sha }}
+          VERSION_TAG: ${{ needs.get-release-semver.outputs.semver-sha }}
           FEATURE_LABEL: egress-enabled/tls-termination-enabled
         run: |
           aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
@@ -73,7 +93,7 @@ jobs:
 
       - name: Upload data-plane to S3 (egress disabled, tls termination disabled)
         env:
-          VERSION_TAG: ${{ github.sha }}
+          VERSION_TAG: ${{ needs.get-release-semver.outputs.semver-sha }}
           FEATURE_LABEL: egress-disabled/tls-termination-disabled
         run: |
           aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
@@ -89,7 +109,7 @@ jobs:
 
       - name: Upload data-plane to S3 (egress disabled, tls termination enabled)
         env:
-          VERSION_TAG: ${{ github.sha }}
+          VERSION_TAG: ${{ needs.get-release-semver.outputs.semver-sha }}
           FEATURE_LABEL: egress-disabled/tls-termination-enabled
         run: |
           aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
@@ -97,10 +117,12 @@ jobs:
 
       - name: Upload version tag to latest file
         env:
-          VERSION_TAG: ${{ github.sha }}
+          VERSION_TAG: ${{ needs.get-release-semver.outputs.semver-sha }}
         run: |
           echo "{ \"data-plane\": \"${{ env.VERSION_TAG }}\" }" > latest.txt
           aws s3 cp ./latest.txt s3://cage-build-assets-${{ env.STAGE }}/runtime/latest
+          CAGE_BUILD_ASSETS_HOSTNAME=cage-build-assets.evervault.io sh ./scripts/update-runtime-version.sh ${{ env.VERSION_TAG }}
+          aws s3 cp scripts/versions s3://cage-build-assets-${{ env.STAGE }}/runtime/versions
 
       - name: Cloudfront Cache Invalidation
         run: |
