@@ -61,7 +61,7 @@ jobs:
 
       - name: Upload data-plane to S3 (egress enabled, tls termination disabled)
         env:
-          VERSION_TAG: ${{ github.sha }}
+          VERSION_TAG: ${{ needs.get-release-semver.outputs.semver-sha }}
           FEATURE_LABEL: egress-enabled/tls-termination-disabled
         run: |
           aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
@@ -77,7 +77,7 @@ jobs:
 
       - name: Upload data-plane to S3 (egress enabled, tls termination enabled)
         env:
-          VERSION_TAG: ${{ github.sha }}
+          VERSION_TAG: ${{ needs.get-release-semver.outputs.semver-sha }}
           FEATURE_LABEL: egress-enabled/tls-termination-enabled
         run: |
           aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
@@ -93,7 +93,7 @@ jobs:
 
       - name: Upload data-plane to S3 (egress disabled, tls termination disabled)
         env:
-          VERSION_TAG: ${{ github.sha }}
+          VERSION_TAG: ${{ needs.get-release-semver.outputs.semver-sha }}
           FEATURE_LABEL: egress-disabled/tls-termination-disabled
         run: |
           aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
@@ -109,7 +109,7 @@ jobs:
 
       - name: Upload data-plane to S3 (egress disabled, tls termination enabled)
         env:
-          VERSION_TAG: ${{ github.sha }}
+          VERSION_TAG: ${{ needs.get-release-semver.outputs.semver-sha }}
           FEATURE_LABEL: egress-disabled/tls-termination-enabled
         run: |
           aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
@@ -117,10 +117,12 @@ jobs:
 
       - name: Upload version tag to latest file
         env:
-          VERSION_TAG: ${{ github.sha }}
+          VERSION_TAG: ${{ needs.get-release-semver.outputs.semver-sha }}
         run: |
           echo "{ \"data-plane\": \"${{ env.VERSION_TAG }}\" }" > latest.txt
           aws s3 cp ./latest.txt s3://cage-build-assets-${{ env.STAGE }}/runtime/latest
+          sh ./scripts/update-runtime-version.sh ${{ env.VERSION_TAG }}
+          aws s3 cp scripts/versions s3://cage-build-assets-${{ env.STAGE }}/runtime/versions
 
       - name: Cloudfront Cache Invalidation
         run: |
