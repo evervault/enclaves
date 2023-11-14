@@ -121,7 +121,7 @@ jobs:
         run: |
           echo "{ \"data-plane\": \"${{ env.VERSION_TAG }}\" }" > latest.txt
           aws s3 cp ./latest.txt s3://cage-build-assets-${{ env.STAGE }}/runtime/latest
-          sh ./scripts/update-runtime-version.sh ${{ env.VERSION_TAG }}
+          CAGE_BUILD_ASSETS_HOSTNAME=cage-build-assets.evervault.io sh ./scripts/update-runtime-version.sh ${{ env.VERSION_TAG }}
           aws s3 cp scripts/versions s3://cage-build-assets-${{ env.STAGE }}/runtime/versions
 
       - name: Cloudfront Cache Invalidation
