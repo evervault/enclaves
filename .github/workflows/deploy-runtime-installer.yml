@@ -1,7 +1,7 @@
 on:
   push:
     tags:
-      - "installer/v*.*.*"
+      - "installer/v0.*.*"
 
 name: Build and deploy runtime installer bundle
 jobs:

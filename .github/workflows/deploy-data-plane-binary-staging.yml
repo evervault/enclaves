@@ -8,6 +8,7 @@ on:
       - shared/**
     branches:
       - main
+      - release/v*
 
 env:
   RUST_BACKTRACE: 1
