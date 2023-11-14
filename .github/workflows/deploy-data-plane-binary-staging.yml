@@ -15,8 +15,28 @@ env:
   STAGE: staging
 
 jobs:
+  get-release-semver:
+    runs-on: ubuntu-latest
+    outputs:
+      semver: ${{ steps.get-version.outputs.semver }}
+      semver-sha: ${{ steps.get-version.outputs.semver-sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Parse semver from cargo.toml
+        id: get-version
+        run: |
+          SHA_SUFFIX=${GITHUB_SHA::6}
+          SEMVER=$(cargo metadata --no-deps | jq -r ".packages[] | select(.name == \"data-plane\") | .version")
+          echo "Full semver: ${SEMVER}, appending suffix: ${SHA_SUFFIX}"
+          echo "semver=${SEMVER}" >> $GITHUB_OUTPUT
+          echo "semver-sha=${SEMVER}-${SHA_SUFFIX}" >> $GITHUB_OUTPUT
+
   deploy-data-plane-binary:
     runs-on: ubuntu-latest
+    needs: [get-release-semver]
     steps:
       - uses: actions/checkout@v2
 
