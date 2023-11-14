@@ -25,7 +25,7 @@ major_version=$(echo "$release_version" | cut -d '.' -f 1)
 
 echo "Release major version: $major_version"
 
-version_json=$(curl -s "https://cage-build-assets.evervault.com/runtime/versions")
+version_json=$(curl -s "https://${CAGE_BUILD_ASSETS_HOSTNAME:-cage-build-assets.evervault.com}/runtime/versions")
 echo "Version response: $version_json"
 
 if [ $? -eq 0 ]; then
