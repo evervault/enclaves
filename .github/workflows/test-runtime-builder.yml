@@ -2,6 +2,7 @@ on:
   pull_request:
     branches:
       - main
+      - release/v*
     paths:
       - installer/**
       - .github/workflows/test-runtime-builder.yml

@@ -1,7 +1,7 @@
 on:
   push:
     tags:
-      - "v*.*.*"
+      - "v0.*.*"
 
 name: Deploy new control plane image to production
 env:

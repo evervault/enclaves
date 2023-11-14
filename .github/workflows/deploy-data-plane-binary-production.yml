@@ -3,7 +3,7 @@ name: Release data-plane binary production
 on:
   push:
     tags:
-      - "v*.*.*"
+      - "v0.*.*"
 
 env:
   RUST_BACKTRACE: 1
