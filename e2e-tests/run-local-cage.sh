@@ -29,7 +29,7 @@ else
   ACME_S3_BUCKET="cages-acme-local && export ACME_S3_BUCKET"
 fi
 
-cargo build --release --target x86_64-unknown-linux-musl      
+cargo build --release --target x86_64-unknown-linux-musl --features network_egress      
 
 # install the node modules for customer process and test script
 cd e2e-tests && npm install && cd ..

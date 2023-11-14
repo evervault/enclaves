@@ -149,6 +149,7 @@ impl EnclaveDnsDriver {
             })
             .collect();
 
+        println!("Caching IPs for domain: {} {:?}", domain_name, rr);    
         Cache::store_ip(&domain_name, rr);
 
         Self::create_loopback_dns_response(dns)

@@ -1,6 +1,6 @@
 [package]
 name = "data-plane"
-version = "0.0.43"
+version = "1.0.0-beta"
 edition = "2021"
 authors = ["Evervault <engineering@evervault.com>"]
 

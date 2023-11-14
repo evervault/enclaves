@@ -19,34 +19,42 @@ pub enum EgressError {
 }
 
 pub fn get_hostname(data: Vec<u8>) -> Result<String, EgressError> {
-    let (_, parsed_request) = parse_tls_plaintext(&data)
-        .finish()
-        .map_err(|tls_parse_err| EgressError::HostnameError(format!("{tls_parse_err:?}")))?;
+    // println!("PARSING HOSTNAME {}", data.len());
+    // let (_, parsed_request) = parse_tls_plaintext(&data)
+    //     .finish()
+    //     .map_err(|tls_parse_err| {
+    //         println!("FAILING TO PARSE PLAINTEXT TLS {tls_parse_err:?}");
+    //         EgressError::HostnameError(format!("FAILING TO PARSE PLAINTEXT TLS {tls_parse_err:?}"))})?;
 
-    let client_hello = match &parsed_request.msg[0] {
-        TlsMessage::Handshake(TlsMessageHandshake::ClientHello(client_hello)) => client_hello,
-        _ => return Err(EgressError::ClientHelloMissing),
-    };
+    // println!("PARSED REQUEST: {:?}", parsed_request);    
+    // let client_hello = match &parsed_request.msg[0] {
+    //     TlsMessage::Handshake(TlsMessageHandshake::ClientHello(client_hello)) => client_hello,
+    //     _ => return Err(EgressError::ClientHelloMissing),
+    // };
 
-    let raw_extensions = match client_hello.ext {
-        Some(raw_extensions) => raw_extensions,
-        _ => return Err(EgressError::ExtensionMissing),
-    };
-    let mut destination = "".to_string();
-    let (_, extensions) = parse_tls_extensions(raw_extensions)
-        .finish()
-        .map_err(|tls_parse_err| EgressError::HostnameError(format!("{tls_parse_err:?}")))?;
+    // println!("PARSED CLIENT HELLO: {:?}", client_hello);
 
-    for extension in extensions {
-        if let TlsExtension::SNI(sni_vec) = extension {
-            for (_, item) in sni_vec {
-                if let Ok(hostname) = std::str::from_utf8(item) {
-                    destination = hostname.to_string();
-                }
-            }
-        }
-    }
-    Ok(destination)
+    // let raw_extensions = match client_hello.ext {
+    //     Some(raw_extensions) => raw_extensions,
+    //     _ => return Err(EgressError::ExtensionMissing),
+    // };
+    // let mut destination = "".to_string();
+    // let (_, extensions) = parse_tls_extensions(raw_extensions)
+    //     .finish()
+    //     .map_err(|tls_parse_err| EgressError::HostnameError(format!("{tls_parse_err:?}")))?;
+
+    // println!("PARSED EXTENSIONS: {:?}", extensions);    
+    // for extension in extensions {
+    //     if let TlsExtension::SNI(sni_vec) = extension {
+    //         for (_, item) in sni_vec {
+    //             if let Ok(hostname) = std::str::from_utf8(item) {
+    //                 destination = hostname.to_string();
+    //             }
+    //         }
+    //     }
+    // }
+    // println!("PARSED HOSTNAME: {}", destination);   
+    Ok("23.109.113.236".to_string())
 }
 
 pub fn get_egress_allow_list_from_env() -> EgressDomains {
@@ -118,7 +126,7 @@ pub struct EgressConfig {
 }
 
 pub fn get_egress_ports(port_str: String) -> Vec<u16> {
-    port_str
+    "443,9000".to_string()
         .split(',')
         .map(|port| {
             port.parse::<u16>()

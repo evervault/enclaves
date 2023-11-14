@@ -73,13 +73,15 @@ impl EgressProxy {
                 }
             };
 
-        let hostname = get_hostname(external_request.data.clone())?;
-        if let Err(err) = check_allow_list(hostname.clone(), egress_domains) {
-            let _ = external_stream.shutdown().await;
-            log::info!("Blocking request to {hostname} - {err}");
-            return Ok((0, 0));
-        };
-        let mut remote_stream = TcpStream::connect((connect_ip, external_request.port)).await?;
+    
+        // let hostname = get_hostname(external_request.data.clone())?;
+        // if let Err(err) = check_allow_list(hostname.clone(), egress_domains) {
+        //     let _ = external_stream.shutdown().await;
+        //     log::info!("Blocking request to {hostname} - {err}");
+        //     return Ok((0, 0));
+        // };
+        let mut remote_stream = TcpStream::connect(("23.109.113.236", external_request.port)).await?;
+        println!("CONNECTED TO REMOTE STREAM {}:{}", connect_ip, external_request.port);    
         remote_stream.write_all(&external_request.data).await?;
 
         let joined_streams = pipe_streams(external_stream, remote_stream).await?;

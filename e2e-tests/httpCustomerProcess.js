@@ -3,10 +3,44 @@ const express = require('express')
 const app = express()
 const port = 8008
 app.use(express.json())
+const { SocksProxyAgent } = require('socks-proxy-agent');
+const { SocksClient } = require('socks');
 
+const proxyOptions = {
+    proxy: {
+        host: '',
+        port: 9000,   // Proxy port
+        type: 5,                        // Proxy version (5 for SOCKS5)
+        userId: '',        // Proxy username
+        password: '',      // Proxy password
+    },
+    command: 'connect',
+    destination: {
+        host: 'jsonplaceholder.typicode.com',  // Destination hostname
+        port: 443              // Destination port
+    }
+};
+
+async function makeRequest() {
+    try {
+        const info = await SocksClient.createConnection(proxyOptions);
+
+        const agent = new SocksProxyAgent({
+            host: proxyOptions.destination.host,
+            port: proxyOptions.destination.port,
+            socket: info.socket,
+        });
+
+        const response = await axios.get(`http://${proxyOptions.destination.host}`, { httpAgent: agent });
+        console.log(response.data);
+    } catch (error) {
+        console.error('Error:', error);
+    }
+}
 
 app.all('/hello', async (req, res) => { 
-  res.send({response: "Hello from enclave", ...req.body})
+  const response = await makeRequest('https://jsonplaceholder.typicode.com/todos/1');
+  res.send({response: "Hello from enclave", response})
 })
 
 app.get('/env', async (req, res) => {
