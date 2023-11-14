@@ -1,6 +1,6 @@
 [package]
 name = "control-plane"
-version = "0.0.43"
+version = "0.0.52"
 edition = "2021"
 authors = ["Evervault <engineering@evervault.com>"]
 
