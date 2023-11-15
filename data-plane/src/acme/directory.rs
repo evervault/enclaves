@@ -187,7 +187,7 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
         let resp = resp_result?;
 
         if let Some(nonce) = extract_nonce_from_response(&resp)? {
-            let mut guard: sgittd::sync::MutexGuard<'_, Option<String>> = self
+            let mut guard: std::sync::MutexGuard<'_, Option<String>> = self
                 .nonce
                 .lock()
                 .map_err(|err| AcmeError::PoisonError(err.to_string()))?;
