@@ -1,3 +1,5 @@
+use std::string::FromUtf8Error;
+
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -10,6 +12,8 @@ pub enum ClientError {
     SerdeError(#[from] serde_json::Error),
     #[error("Request to server failed with status: {0:?}")]
     FailedRequest(hyper::StatusCode),
+    #[error(transparent)]
+    FromUtf8Error(#[from] FromUtf8Error),
     #[error("Client Error {0:?}")]
     General(String),
 }

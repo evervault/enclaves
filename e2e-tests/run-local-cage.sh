@@ -44,8 +44,10 @@ fi
 
 export CUSTOMER_PROCESS=httpCustomerProcess.js
 echo "Building cage container"
+export EV_API_KEY_AUTH=true
 docker compose build --build-arg CUSTOMER_PROCESS=httpCustomerProcess.js
 
 echo "Running cage container"
 # run the container
-EV_API_KEY_AUTH=true docker compose up
+export EV_API_KEY_AUTH=true
+docker compose up

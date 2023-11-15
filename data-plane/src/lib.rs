@@ -183,6 +183,10 @@ impl FeatureContext {
 
     fn read_dataplane_context() -> Result<FeatureContext, ContextError> {
         let feature_context_file_contents = fs::read_to_string("/etc/dataplane-config.json")?;
+        print!("{}", format!(
+            "Feature context file contents: {:?}",
+            feature_context_file_contents
+        ));
         let mut feature_context: FeatureContext =
             serde_json::from_str(&feature_context_file_contents)?;
         // map trusted headers to lowercase
