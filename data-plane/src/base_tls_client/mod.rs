@@ -108,7 +108,7 @@ impl BaseClient {
             let (parts, body) = response.into_parts();
             let body_bytes = hyper::body::to_bytes(body).await?;
             let raw_body = String::from_utf8(body_bytes.to_vec())?;
-            
+
             log::error!("Request to {uri} failed. Body: {raw_body}");
             return Err(ClientError::FailedRequest(parts.status));
         }
