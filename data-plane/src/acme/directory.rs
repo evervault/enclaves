@@ -180,7 +180,11 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
             .await;
 
         if let Err(err) = &resp_result {
-            log::error!("[ACME] Error sending authenticated request to {}: Error: {}", url, err);
+            log::error!(
+                "[ACME] Error sending authenticated request to {}: Error: {}",
+                url,
+                err
+            );
             return resp_result;
         };
 
