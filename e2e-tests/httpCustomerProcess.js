@@ -3,10 +3,28 @@ const express = require('express')
 const app = express()
 const port = 8008
 app.use(express.json())
+const https = require('https');
 
+const { SocksProxyAgent } = require('socks-proxy-agent');
+
+async function makeRequest(url) {
+    try {
+      const agent = new SocksProxyAgent(
+        ''
+      );
+      
+      https.get(url, { agent }, (res) => {
+        console.log(res.headers);
+        res.pipe(process.stdout);
+      });
+    } catch (error) {
+        console.error('Error:', error);
+    }
+}
 
 app.all('/hello', async (req, res) => { 
-  res.send({response: "Hello from enclave", ...req.body})
+  const response = await makeRequest('https://jsonplaceholder.typicode.com/todos/1');
+  res.send({response: "Hello from enclave", response})
 })
 
 app.get('/env', async (req, res) => {

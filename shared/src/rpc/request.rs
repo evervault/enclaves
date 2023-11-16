@@ -11,6 +11,7 @@ pub struct ExternalRequest {
     pub ip: String,
     pub data: Vec<u8>,
     pub port: u16,
+    pub hostname: String,
 }
 
 impl ExternalRequest {

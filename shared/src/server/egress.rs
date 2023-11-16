@@ -20,7 +20,6 @@ pub enum EgressError {
 
 pub fn get_hostname(data: Vec<u8>) -> Result<String, EgressError> {
     let (_, parsed_request) = parse_tls_plaintext(&data)
-        .finish()
         .map_err(|tls_parse_err| EgressError::HostnameError(format!("{tls_parse_err:?}")))?;
 
     let client_hello = match &parsed_request.msg[0] {
@@ -110,11 +109,19 @@ where
 }
 
 #[derive(Clone, Deserialize)]
+pub struct EgressProxyConfig {
+    pub host: String,
+    pub ports: Vec<u16>,
+    pub destinations: Vec<String>,
+}
+
+#[derive(Clone, Deserialize)]
 pub struct EgressConfig {
     #[serde(deserialize_with = "deserialize_ports")]
     pub ports: Vec<u16>,
     #[serde(deserialize_with = "deserialize_allowlist")]
     pub allow_list: EgressDomains,
+    pub proxy_config: Vec<EgressProxyConfig>,
 }
 
 pub fn get_egress_ports(port_str: String) -> Vec<u16> {

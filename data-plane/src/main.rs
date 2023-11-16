@@ -4,9 +4,11 @@ use shared::server::CID::Enclave;
 use shared::{print_version, server::get_vsock_server_with_proxy_protocol};
 
 #[cfg(feature = "network_egress")]
-use data_plane::dns::egressproxy::EgressProxy;
+use data_plane::dns::egress_proxy::EgressProxy;
 #[cfg(feature = "network_egress")]
-use data_plane::dns::enclavedns::EnclaveDnsProxy;
+use data_plane::dns::egress_proxy::EgressType;
+#[cfg(feature = "network_egress")]
+use data_plane::dns::enclave_dns::EnclaveDnsProxy;
 #[cfg(not(feature = "tls_termination"))]
 use data_plane::env::Environment;
 use data_plane::health::start_health_check_server;
@@ -96,20 +98,48 @@ async fn start(data_plane_port: u16) {
     use data_plane::{crypto::api::CryptoApi, stats::StatsProxy};
 
     StatsClient::init();
-    let ports = match FeatureContext::get() {
-        Ok(context) => context.egress.ports,
+    let (ports, client_proxy_config) = match FeatureContext::get() {
+        Ok(context) => {
+            let egress = context.egress;
+            (egress.ports, egress.proxy_config)
+        }
         Err(e) => {
             log::error!("Failed to access context in enclave - {e}");
             return;
         }
     };
-    let egress_proxies = join_all(ports.into_iter().map(EgressProxy::listen));
 
-    let (_, dns_result, e3_api_result, egress_results, stats_result) = tokio::join!(
+    let egress_proxies = join_all(
+        ports
+            .into_iter()
+            .map(|port| EgressProxy::listen(port, EgressType::Https)),
+    );
+
+    let mut proxy_destinations = vec![];
+
+    let egress_client_proxies: Vec<(u16, String)> = client_proxy_config
+        .into_iter()
+        .flat_map(|mut conf| {
+            proxy_destinations.append(&mut conf.destinations);
+            conf.ports
+                .into_iter()
+                .map(move |port| (port, conf.host.clone()))
+                .collect::<Vec<(u16, String)>>()
+        })
+        .collect();
+
+    let egress_client_proxies = join_all(
+        egress_client_proxies
+            .into_iter()
+            .map(move |(port, host)| EgressProxy::listen(port, EgressType::ForwardProxy(host))),
+    );
+
+    let (_, dns_result, e3_api_result, egress_results, _, stats_result) = tokio::join!(
         start_data_plane(data_plane_port),
-        EnclaveDnsProxy::bind_server(),
+        EnclaveDnsProxy::bind_server(proxy_destinations),
         CryptoApi::listen(),
         egress_proxies,
+        egress_client_proxies,
         StatsProxy::listen()
     );
 

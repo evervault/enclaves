@@ -63,7 +63,6 @@ impl EgressProxy {
         let packet_size = external_stream.read(&mut request_buffer).await?;
         let req = &request_buffer[..packet_size];
         let external_request = ExternalRequest::from_bytes(req.to_vec())?;
-
         let connect_ip: Ipv4Addr =
             match validate_requested_ip(&external_request.ip, *ALLOW_EGRESS_TO_INTERNAL_IPS) {
                 Ok(ip) => ip,
@@ -73,12 +72,16 @@ impl EgressProxy {
                 }
             };
 
-        let hostname = get_hostname(external_request.data.clone())?;
+        let hostname = match get_hostname(external_request.data.clone()) {
+            Ok(hostname) => hostname,
+            Err(_) => external_request.hostname,
+        };
         if let Err(err) = check_allow_list(hostname.clone(), egress_domains) {
             let _ = external_stream.shutdown().await;
             log::info!("Blocking request to {hostname} - {err}");
             return Ok((0, 0));
         };
+
         let mut remote_stream = TcpStream::connect((connect_ip, external_request.port)).await?;
         remote_stream.write_all(&external_request.data).await?;
 

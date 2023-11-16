@@ -1,8 +1,8 @@
 #[cfg(feature = "network_egress")]
 pub mod cache;
 #[cfg(feature = "network_egress")]
-pub mod egressproxy;
+pub mod egress_proxy;
 #[cfg(feature = "network_egress")]
-pub mod enclavedns;
+pub mod enclave_dns;
 #[cfg(feature = "network_egress")]
 pub mod error;

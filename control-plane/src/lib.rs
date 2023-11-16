@@ -4,10 +4,10 @@ pub mod config_server;
 pub mod configuration;
 pub mod dns;
 #[cfg(feature = "network_egress")]
-pub mod dnsproxy;
+pub mod dns_proxy;
 pub mod e3proxy;
 #[cfg(feature = "network_egress")]
-pub mod egressproxy;
+pub mod egress_proxy;
 pub mod enclave_connection;
 pub mod error;
 pub mod health;

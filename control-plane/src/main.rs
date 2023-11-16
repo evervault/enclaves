@@ -115,9 +115,9 @@ async fn main() -> Result<()> {
     {
         listen_for_shutdown_signal();
         let mut health_check_server = health::HealthCheckServer::new().await?;
-        let parsed_ip = control_plane::dnsproxy::read_dns_server_ip_from_env_var()
-            .unwrap_or(control_plane::dnsproxy::CLOUDFLARE_DNS_SERVER);
-        let dns_proxy_server = control_plane::dnsproxy::DnsProxy::new(parsed_ip);
+        let parsed_ip = control_plane::dns_proxy::read_dns_server_ip_from_env_var()
+            .unwrap_or(control_plane::dns_proxy::CLOUDFLARE_DNS_SERVER);
+        let dns_proxy_server = control_plane::dns_proxy::DnsProxy::new(parsed_ip);
         let (
             tcp_result,
             dns_result,
@@ -131,7 +131,7 @@ async fn main() -> Result<()> {
         ) = tokio::join!(
             tcp_server(),
             dns_proxy_server.listen(),
-            control_plane::egressproxy::EgressProxy::listen(),
+            control_plane::egress_proxy::EgressProxy::listen(),
             e3_proxy.listen(),
             health_check_server.start(),
             config_server.listen(),

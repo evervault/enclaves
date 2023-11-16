@@ -27,11 +27,17 @@ pub enum EgressProxyError {
     ServerError(#[from] ServerError),
 }
 
+#[derive(Clone, Debug)]
+pub enum EgressType {
+    Https,
+    ForwardProxy(String),
+}
+
 pub struct EgressProxy;
 
 impl EgressProxy {
-    pub async fn listen(port: u16) -> Result<(), EgressProxyError> {
-        log::info!("Egress proxy started on port {port}");
+    pub async fn listen(port: u16, egress_type: EgressType) -> Result<(), EgressProxyError> {
+        log::info!("Egress proxy started on port {port}, {egress_type:?}");
         let allowed_domains = FeatureContext::get()?.egress.allow_list;
         let mut server =
             TcpServer::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), port)).await?;
@@ -42,6 +48,7 @@ impl EgressProxy {
                     stream,
                     port,
                     allowed_domains.clone(),
+                    egress_type.clone(),
                 ));
             }
         }
@@ -53,14 +60,31 @@ impl EgressProxy {
         mut external_stream: T,
         port: u16,
         allowed_domains: EgressDomains,
+        egress_type: EgressType,
     ) -> Result<(), DNSError> {
         let mut buf = vec![0u8; 4096];
         let n = external_stream.read(&mut buf).await?;
         let customer_data = &mut buf[..n];
 
-        let hostname = get_hostname(customer_data.to_vec())?;
-        check_allow_list(hostname.clone(), allowed_domains.clone())?;
+        let hostname = match egress_type {
+            EgressType::Https => {
+                let hostname = get_hostname(customer_data.to_vec())?;
+                check_allow_list(hostname.clone(), allowed_domains.clone())?;
+                hostname
+            }
+            EgressType::ForwardProxy(host) => host,
+        };
 
+        Self::proxy_connection(hostname, external_stream, port, customer_data).await?;
+        Ok(())
+    }
+
+    async fn proxy_connection<T: AsyncRead + AsyncWrite + Unpin>(
+        hostname: String,
+        external_stream: T,
+        port: u16,
+        customer_data: &[u8],
+    ) -> Result<(), DNSError> {
         let cached_ips = Cache::get_ip(hostname.as_ref());
 
         match cached_ips
@@ -75,6 +99,7 @@ impl EgressProxy {
                     ip: remote_ip.to_string(),
                     data: customer_data.to_vec(),
                     port,
+                    hostname,
                 }
                 .to_bytes()?;
 
@@ -90,7 +115,7 @@ impl EgressProxy {
 
 #[cfg(test)]
 mod tests {
-    use crate::dns::egressproxy::EgressDomains;
+    use crate::dns::egress_proxy::EgressDomains;
     use shared::server::egress::{check_allow_list, EgressError::EgressDomainNotAllowed};
 
     #[test]

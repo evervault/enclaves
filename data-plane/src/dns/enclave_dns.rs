@@ -19,7 +19,7 @@ use tokio::time::timeout;
 pub struct EnclaveDnsProxy;
 
 impl EnclaveDnsProxy {
-    pub async fn bind_server() -> Result<(), DNSError> {
+    pub async fn bind_server(proxy_destinations: Vec<String>) -> Result<(), DNSError> {
         log::info!("Starting DNS proxy");
         let socket = UdpSocket::bind("127.0.0.1:53").await?;
         let shared_socket = std::sync::Arc::new(socket);
@@ -38,6 +38,7 @@ impl EnclaveDnsProxy {
             dns_lookup_receiver,
             dns_request_upper_bound,
             max_concurrent_requests,
+            proxy_destinations,
         );
         tokio::spawn(async move {
             log::info!("Starting DNS request driver");
@@ -66,6 +67,7 @@ struct EnclaveDnsDriver {
     dns_lookup_receiver: Receiver<(Bytes, SocketAddr)>,
     dns_request_upper_bound: Duration,
     concurrency_gate: Arc<Semaphore>,
+    proxy_destinations: Vec<String>,
 }
 
 impl EnclaveDnsDriver {
@@ -74,6 +76,7 @@ impl EnclaveDnsDriver {
         dns_lookup_receiver: Receiver<(Bytes, SocketAddr)>,
         dns_request_upper_bound: Duration,
         concurrency_limit: usize,
+        proxy_destinations: Vec<String>,
     ) -> Self {
         let concurrency_gate = Arc::new(Semaphore::new(concurrency_limit));
         Self {
@@ -81,6 +84,7 @@ impl EnclaveDnsDriver {
             dns_lookup_receiver,
             dns_request_upper_bound,
             concurrency_gate,
+            proxy_destinations,
         }
     }
 
@@ -97,12 +101,15 @@ impl EnclaveDnsDriver {
                 }
             };
 
+            let destinations = self.proxy_destinations.clone();
             // Create task per DNS lookup
             tokio::spawn(async move {
                 // move permit into task to drop when lookup is complete
                 let _lookup_permit = permit;
                 let dns_response =
-                    match Self::perform_dns_lookup(dns_packet, request_upper_bound).await {
+                    match Self::perform_dns_lookup(dns_packet, request_upper_bound, destinations)
+                        .await
+                    {
                         Ok(dns_response) => dns_response,
                         Err(e) => {
                             log::error!("Failed to perform DNS Lookup: {e}");
@@ -121,12 +128,15 @@ impl EnclaveDnsDriver {
     async fn perform_dns_lookup(
         dns_packet: Bytes,
         request_upper_bound: Duration,
+        proxy_destinations: Vec<String>,
     ) -> Result<Bytes, DNSError> {
         // Attempt DNS lookup wth a timeout, flatten timeout errors into a DNS Error
         let dns_response =
             timeout(request_upper_bound, Self::forward_dns_lookup(dns_packet)).await??;
 
         let dns = Dns::decode(dns_response.clone())?;
+        let real_dns = dns.clone();
+
         // No need to cache responses with no IPs, exit early
         if dns.answers.is_empty() {
             return Ok(dns_response);
@@ -149,9 +159,14 @@ impl EnclaveDnsDriver {
             })
             .collect();
 
-        Cache::store_ip(&domain_name, rr);
-
-        Self::create_loopback_dns_response(dns)
+        if proxy_destinations.contains(&domain_name) {
+            println!("Returning REAL DNS Response {domain_name}");
+            Ok(real_dns.encode()?.into())
+        } else {
+            println!("Returning spoofed DNS Response");
+            Cache::store_ip(&domain_name, rr);
+            Self::create_loopback_dns_response(dns)
+        }
     }
 
     /// Creates a spoofed DNS response which will cause the user process to request loopback
