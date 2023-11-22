@@ -48,6 +48,21 @@ pub enum AttestationError {
     InvalidTimeError(String),
 }
 
+impl std::convert::From<AttestationError> for hyper::Response<hyper::Body> {
+    fn from(value: AttestationError) -> Self {
+        let err_payload = serde_json::json!({
+          "message": value.to_string()
+        })
+        .to_string();
+        hyper::Response::builder()
+            .status(500)
+            .header("content-type", "application/json")
+            .header("content-length", err_payload.len())
+            .body(hyper::Body::from(err_payload))
+            .expect("Infallible: failed to build error response")
+    }
+}
+
 pub fn get_attestation_doc(
     challenge: Option<Vec<u8>>,
     nonce: Option<Vec<u8>>,

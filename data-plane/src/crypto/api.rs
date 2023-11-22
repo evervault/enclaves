@@ -12,7 +12,7 @@ use hyper::{
 };
 
 use crate::base_tls_client::ClientError;
-use crate::e3client::{CryptoRequest, CryptoResponse, E3Client};
+use crate::e3client::{CryptoRequest, CryptoResponse, E3Api, E3Client};
 use crate::error::Error;
 use crate::ContextError;
 

@@ -1,8 +1,10 @@
+use async_trait::async_trait;
 use hyper::header::HeaderValue;
 use hyper::{Body, Response};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::value::Value;
+use std::ops::Deref;
 use tokio_rustls::rustls::ServerName;
 use tokio_rustls::TlsConnector;
 
@@ -10,6 +12,74 @@ type E3Error = ClientError;
 
 use tokio_retry::strategy::{jitter, ExponentialBackoff};
 use tokio_retry::Retry;
+
+#[cfg(test)]
+pub mod mock;
+
+#[async_trait]
+pub trait E3Api {
+    async fn decrypt<T: DeserializeOwned + 'static, P: E3Payload + Send + Sync + 'static>(
+        &self,
+        payload: P,
+    ) -> Result<T, E3Error>;
+
+    async fn encrypt<T: DeserializeOwned + 'static, P: E3Payload + Send + Sync + 'static>(
+        &self,
+        payload: P,
+        data_role: Option<String>,
+    ) -> Result<T, E3Error>;
+
+    async fn authenticate(
+        &self,
+        api_key: &HeaderValue,
+        payload: AuthRequest,
+    ) -> Result<(), E3Error>;
+
+    async fn decrypt_with_retries<
+        T: DeserializeOwned + 'static,
+        P: E3Payload + Clone + Send + Sync + 'static,
+    >(
+        &self,
+        retries: usize,
+        payload: P,
+    ) -> Result<T, E3Error> {
+        let retry_strategy = ExponentialBackoff::from_millis(10)
+            .map(jitter)
+            .take(retries);
+
+        Retry::spawn(retry_strategy, || {
+            let owned_payload = payload.clone();
+            async {
+                self.decrypt(owned_payload).await.map_err(|e| {
+                    log::error!("Error attempting decryption {e:?}");
+                    e
+                })
+            }
+        })
+        .await
+    }
+
+    async fn encrypt_with_retries<
+        T: DeserializeOwned + 'static,
+        P: E3Payload + Clone + Send + Sync + 'static,
+    >(
+        &self,
+        retries: usize,
+        payload: P,
+        data_role: Option<String>,
+    ) -> Result<T, E3Error> {
+        let retry_strategy = ExponentialBackoff::from_millis(10)
+            .map(jitter)
+            .take(retries);
+
+        Retry::spawn(retry_strategy, || {
+            let owned_payload = payload.clone();
+            let owned_role = data_role.clone();
+            async move { self.encrypt(owned_payload, owned_role).await }
+        })
+        .await
+    }
+}
 
 #[derive(Clone)]
 pub struct E3Client {
@@ -53,10 +123,19 @@ impl E3Client {
         )
     }
 
-    pub async fn decrypt<T, P: E3Payload>(&self, payload: P) -> Result<T, E3Error>
-    where
-        T: DeserializeOwned,
-    {
+    async fn parse_response<T: DeserializeOwned>(&self, res: Response<Body>) -> Result<T, E3Error> {
+        let response_body = res.into_body();
+        let response_body = hyper::body::to_bytes(response_body).await?;
+        Ok(serde_json::from_slice(&response_body)?)
+    }
+}
+
+#[async_trait]
+impl E3Api for E3Client {
+    async fn decrypt<T: DeserializeOwned + 'static, P: E3Payload + Send + Sync + 'static>(
+        &self,
+        payload: P,
+    ) -> Result<T, E3Error> {
         let token = self
             .token_client
             .get_token()
@@ -76,36 +155,11 @@ impl E3Client {
         self.parse_response(response).await
     }
 
-    pub async fn decrypt_with_retries<T, P: E3Payload>(
-        &self,
-        retries: usize,
-        payload: P,
-    ) -> Result<T, E3Error>
-    where
-        T: DeserializeOwned,
-        P: Clone,
-    {
-        let retry_strategy = ExponentialBackoff::from_millis(10)
-            .map(jitter)
-            .take(retries);
-
-        Retry::spawn(retry_strategy, || async {
-            self.decrypt(payload.clone()).await.map_err(|e| {
-                log::error!("Error attempting decryption {e:?}");
-                e
-            })
-        })
-        .await
-    }
-
-    pub async fn encrypt<T, P: E3Payload>(
+    async fn encrypt<T: DeserializeOwned + 'static, P: E3Payload + Send + Sync + 'static>(
         &self,
         payload: P,
         data_role: Option<String>,
-    ) -> Result<T, E3Error>
-    where
-        T: DeserializeOwned,
-    {
+    ) -> Result<T, E3Error> {
         let request_headers = data_role
             .as_ref()
             .and_then(|role| hyper::header::HeaderValue::from_str(role).ok())
@@ -133,31 +187,11 @@ impl E3Client {
         self.parse_response(response).await
     }
 
-    pub async fn encrypt_with_retries<T, P: E3Payload>(
-        &self,
-        retries: usize,
-        payload: P,
-        data_role: Option<String>,
-    ) -> Result<T, E3Error>
-    where
-        T: DeserializeOwned,
-        P: Clone,
-    {
-        let retry_strategy = ExponentialBackoff::from_millis(10)
-            .map(jitter)
-            .take(retries);
-
-        Retry::spawn(retry_strategy, || async {
-            self.encrypt(payload.clone(), data_role.clone()).await
-        })
-        .await
-    }
-
-    pub async fn authenticate(
+    async fn authenticate(
         &self,
         api_key: &HeaderValue,
         payload: AuthRequest,
-    ) -> Result<bool, E3Error> {
+    ) -> Result<(), E3Error> {
         let response = self
             .base_client
             .send(
@@ -169,17 +203,11 @@ impl E3Client {
             )
             .await?;
         log::debug!("{response:?}");
-        Ok(response.status().is_success())
-    }
-
-    async fn parse_response<T: DeserializeOwned>(&self, res: Response<Body>) -> Result<T, E3Error> {
-        let response_body = res.into_body();
-        let response_body = hyper::body::to_bytes(response_body).await?;
-        Ok(serde_json::from_slice(&response_body)?)
+        Ok(())
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct AuthRequest {
     pub team_uuid: String,
     pub app_uuid: String,
@@ -188,8 +216,8 @@ pub struct AuthRequest {
 
 impl E3Payload for AuthRequest {}
 
-impl std::convert::From<&crate::CageContext> for AuthRequest {
-    fn from(context: &crate::CageContext) -> Self {
+impl<C: Deref<Target = crate::CageContext>> std::convert::From<C> for AuthRequest {
+    fn from(context: C) -> Self {
         Self {
             team_uuid: context.team_uuid().to_string(),
             app_uuid: context.app_uuid().to_string(),
