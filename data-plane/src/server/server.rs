@@ -5,8 +5,6 @@ use super::tls::TlsServerBuilder;
 
 use crate::e3client::E3Client;
 use crate::server::http::parse;
-use crate::server::layers::auth::AuthError;
-use crate::server::layers::context_log::{init_request_context, ContextLogLayer};
 use crate::{CageContext, FeatureContext};
 
 use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
@@ -25,12 +23,13 @@ use tower::Service;
 #[cfg(feature = "enclave")]
 use super::layers::attest::AttestLayer;
 use super::layers::{
-    auth::{auth_request, AuthLayer},
+    auth::{auth_request, AuthError, AuthLayer},
+    context_log::{init_request_context, ContextLogLayer},
     decrypt::DecryptLayer,
     forward::ForwardService,
 };
 
-pub async fn run<L: Listener + Send + Sync>(tcp_server: L, port: u16)
+pub async fn run<L: Listener + Send + Sync>(tcp_server: L, port: u16, context: FeatureContext)
 where
     TlsError: From<<L as Listener>::Error>,
     <L as Listener>::Connection: ProxiedConnection + 'static,
@@ -47,7 +46,7 @@ where
         UnboundedReceiver<LogHandlerMessage>,
     ) = unbounded_channel();
 
-    let feature_context = Arc::new(FeatureContext::get());
+    let feature_context = Arc::new(context);
     if feature_context.trx_logging_enabled {
         let tx_for_handler = tx.clone();
         tokio::spawn(async move {

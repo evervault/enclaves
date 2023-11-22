@@ -173,9 +173,22 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
             Some(payload) => serde_json::to_string(&payload)?,
         };
 
-        let resp = self
+        log::info!("[ACME] Sending authenticated request to {}", url);
+
+        let resp_result = self
             .authenticated_request_raw(method, url, &payload_parsed, account_id)
-            .await?;
+            .await;
+
+        if let Err(err) = &resp_result {
+            log::error!(
+                "[ACME] Error sending authenticated request to {}: Error: {}",
+                url,
+                err
+            );
+            return resp_result;
+        };
+
+        let resp = resp_result?;
 
         if let Some(nonce) = extract_nonce_from_response(&resp)? {
             let mut guard: std::sync::MutexGuard<'_, Option<String>> = self

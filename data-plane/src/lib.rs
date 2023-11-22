@@ -1,8 +1,6 @@
-use std::fs;
-
-use configuration::should_forward_proxy_protocol;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
+use std::fs;
 
 #[cfg(test)]
 pub mod mocks;
@@ -24,7 +22,7 @@ pub mod stats;
 pub mod stats_client;
 pub mod utils;
 #[cfg(feature = "network_egress")]
-use shared::server::egress::{get_egress_ports_from_env, EgressConfig};
+use shared::server::egress::EgressConfig;
 #[cfg(feature = "tls_termination")]
 pub mod server;
 
@@ -43,17 +41,21 @@ pub struct CageContext {
 }
 
 #[derive(Error, Debug)]
-pub enum CageContextError {
-    #[error("Cage context has not yet been initialized")]
-    ContextNotInitialized,
+pub enum ContextError {
+    #[error("Failed to read context from file - {0}")]
+    FailedToRead(#[from] std::io::Error),
+    #[error("Failed to parse read context - {0}")]
+    FailedToParse(#[from] serde_json::error::Error),
+    #[error("Attempted to read the context in the enclave before it was set.")]
+    Uninitialized,
 }
 
 impl CageContext {
-    fn get() -> Result<CageContext, CageContextError> {
+    fn get() -> Result<CageContext, ContextError> {
         CAGE_CONTEXT
             .get()
             .map(|context| context.to_owned())
-            .ok_or(CageContextError::ContextNotInitialized)
+            .ok_or(ContextError::Uninitialized)
     }
 
     fn set(ctx: CageContext) {
@@ -154,69 +156,43 @@ impl From<ProvisionerContext> for CageContext {
     }
 }
 
+#[derive(Clone, Deserialize)]
+pub struct FeatureContext {
+    pub api_key_auth: bool,
+    pub healthcheck: Option<String>,
+    pub trx_logging_enabled: bool,
+    pub forward_proxy_protocol: bool,
+    pub trusted_headers: Vec<String>,
+    #[cfg(feature = "network_egress")]
+    pub egress: EgressConfig,
+}
+
 impl FeatureContext {
-    pub fn set() {
-        match Self::read_dataplane_context() {
-            Some(context) => FEATURE_CONTEXT.get_or_init(|| context),
-            None => FEATURE_CONTEXT.get_or_init(Self::from_env),
-        };
+    pub fn set() -> Result<(), ContextError> {
+        Self::read_dataplane_context().map(|context| {
+            FEATURE_CONTEXT.get_or_init(|| context);
+        })
     }
-    pub fn get() -> FeatureContext {
+
+    pub fn get() -> Result<FeatureContext, ContextError> {
         FEATURE_CONTEXT
             .get()
-            .expect("Couldn't get feature context")
-            .clone()
+            .cloned()
+            .ok_or(ContextError::Uninitialized)
     }
 
-    // Need to support from env for older versions of CLI - Remove after beta
-    fn from_env() -> FeatureContext {
-        let api_key_auth = std::env::var("EV_API_KEY_AUTH")
-            .unwrap_or_else(|_| "true".to_string())
-            .parse()
-            .unwrap_or(true);
-        let trx_logging_enabled = std::env::var("EV_TRX_LOGGING_ENABLED")
-            .unwrap_or_else(|_| "true".to_string())
-            .parse()
-            .unwrap_or(true);
-        FeatureContext {
-            api_key_auth,
-            healthcheck: None,
-            trx_logging_enabled,
-            forward_proxy_protocol: should_forward_proxy_protocol(),
-            trusted_headers: vec![],
-            #[cfg(feature = "network_egress")]
-            egress: EgressConfig {
-                ports: get_egress_ports_from_env(),
-                allow_list: shared::server::egress::get_egress_allow_list_from_env(),
-            },
-        }
-    }
-
-    fn read_dataplane_context() -> Option<FeatureContext> {
-        let mut feature_context: FeatureContext = fs::read_to_string("/etc/dataplane-config.json")
-            .ok()
-            .and_then(|contents| serde_json::from_str(&contents).ok())?;
+    fn read_dataplane_context() -> Result<FeatureContext, ContextError> {
+        let feature_context_file_contents = fs::read_to_string("/etc/dataplane-config.json")?;
+        let mut feature_context: FeatureContext =
+            serde_json::from_str(&feature_context_file_contents)?;
         // map trusted headers to lowercase
         feature_context.trusted_headers = feature_context
             .trusted_headers
             .iter()
             .map(|header| header.to_lowercase())
             .collect();
-        Some(feature_context)
+        Ok(feature_context)
     }
-}
-
-#[derive(Clone, Deserialize)]
-pub struct FeatureContext {
-    pub api_key_auth: bool,
-    pub healthcheck: Option<String>,
-    pub trx_logging_enabled: bool,
-    #[serde(default)]
-    pub forward_proxy_protocol: bool,
-    #[serde(default)]
-    pub trusted_headers: Vec<String>,
-    #[cfg(feature = "network_egress")]
-    pub egress: EgressConfig,
 }
 
 #[cfg(test)]
@@ -225,7 +201,7 @@ mod test {
     #[cfg(not(feature = "network_egress"))]
     #[test]
     fn test_config_deserialization_without_proxy_protocol() {
-        let raw_feature_context = r#"{ "api_key_auth": true, "trx_logging_enabled": false }"#;
+        let raw_feature_context = r#"{ "api_key_auth": true, "trx_logging_enabled": false, "forward_proxy_protocol": false, "trusted_headers": [] }"#;
         let parsed = serde_json::from_str(raw_feature_context);
         assert!(parsed.is_ok());
         let feature_context: FeatureContext = parsed.unwrap();
@@ -238,8 +214,7 @@ mod test {
     #[cfg(not(feature = "network_egress"))]
     #[test]
     fn test_config_deserialization_without_proxy_protocol_and_healthcheck() {
-        let raw_feature_context =
-            r#"{ "api_key_auth": true, "healthcheck": "/health", "trx_logging_enabled": false }"#;
+        let raw_feature_context = r#"{ "api_key_auth": true, "healthcheck": "/health", "trx_logging_enabled": false, "forward_proxy_protocol": false, "trusted_headers": [] }"#;
         let parsed = serde_json::from_str(raw_feature_context);
         assert!(parsed.is_ok());
         let feature_context: FeatureContext = parsed.unwrap();
@@ -252,13 +227,17 @@ mod test {
     #[cfg(feature = "network_egress")]
     #[test]
     fn test_config_deserialization_with_egress() {
-        let raw_feature_context = r#"{ "api_key_auth": true, "trx_logging_enabled": false, "forward_proxy_protocol": true, "egress": { "ports": "443,8080", "allow_list": "*.stripe.com" } }"#;
+        let raw_feature_context = r#"{ "api_key_auth": true, "trx_logging_enabled": false, "forward_proxy_protocol": true, "trusted_headers": ["X-Error-Code"], "egress": { "ports": "443,8080", "allow_list": "*.stripe.com" } }"#;
         let parsed = serde_json::from_str(raw_feature_context);
         assert!(parsed.is_ok());
         let feature_context: FeatureContext = parsed.unwrap();
         assert_eq!(feature_context.api_key_auth, true);
         assert_eq!(feature_context.trx_logging_enabled, false);
         assert_eq!(feature_context.forward_proxy_protocol, true);
+        assert_eq!(
+            feature_context.trusted_headers,
+            vec!["X-Error-Code".to_string()]
+        );
         assert_eq!(feature_context.egress.ports, vec![443, 8080]);
         assert!(feature_context.healthcheck.is_none());
         assert_eq!(
@@ -270,13 +249,15 @@ mod test {
     #[cfg(feature = "network_egress")]
     #[test]
     fn test_config_deserialization_with_egress_and_healthcheck() {
-        let raw_feature_context = r#"{ "api_key_auth": true, "healthcheck": "/health", "trx_logging_enabled": false, "forward_proxy_protocol": true, "egress": { "ports": "443,8080", "allow_list": "*.stripe.com" } }"#;
+        let raw_feature_context = r#"{ "api_key_auth": true, "healthcheck": "/health", "trx_logging_enabled": false, "forward_proxy_protocol": true, "trusted_headers": [], "egress": { "ports": "443,8080", "allow_list": "*.stripe.com" } }"#;
         let parsed = serde_json::from_str(raw_feature_context);
         assert!(parsed.is_ok());
         let feature_context: FeatureContext = parsed.unwrap();
         assert_eq!(feature_context.api_key_auth, true);
         assert_eq!(feature_context.trx_logging_enabled, false);
         assert_eq!(feature_context.forward_proxy_protocol, true);
+        let trusted_headers: Vec<String> = Vec::new();
+        assert_eq!(feature_context.trusted_headers, trusted_headers);
         assert_eq!(feature_context.egress.ports, vec![443, 8080]);
         assert_eq!(
             feature_context.egress.allow_list.wildcard,

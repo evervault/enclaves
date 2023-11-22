@@ -7,7 +7,7 @@ use tokio::sync::oneshot::{
     channel as oneshot_channel, Receiver as OneshotReceiver, Sender as OneshotSender,
 };
 
-use crate::{CageContext, CageContextError};
+use crate::{CageContext, ContextError};
 
 enum HealthcheckAgentState {
     Initializing,
@@ -110,7 +110,7 @@ impl<T: InitializedHealthcheck> HealthcheckAgent<T> {
         Client::builder().build(https_connector)
     }
 
-    fn check_user_process_initialized(&mut self) -> Result<HealthCheckStatus, CageContextError> {
+    fn check_user_process_initialized(&mut self) -> Result<HealthCheckStatus, ContextError> {
         let is_initialized = match self.initialized_check.is_initialized() {
             Ok(is_initialized) => is_initialized,
             Err(_) => return Ok(HealthCheckStatus::Err),

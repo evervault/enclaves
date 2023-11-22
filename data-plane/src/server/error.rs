@@ -1,6 +1,6 @@
 #[cfg(feature = "enclave")]
 use crate::crypto::attest::AttestationError;
-use crate::CageContextError;
+use crate::ContextError;
 use std::{fmt::Formatter, num::TryFromIntError, time::SystemTimeError};
 use thiserror::Error;
 use tokio_rustls::rustls::sign::SignError;
@@ -19,7 +19,7 @@ pub enum TlsError {
     SignError(#[from] SignError),
     PemError(#[from] pem::PemError),
     CertProvisionerError(String),
-    CageContextError(#[from] CageContextError),
+    ContextError(#[from] ContextError),
     SystemTimeError(#[from] SystemTimeError),
     TryFromIntError(#[from] TryFromIntError),
     EnvError(#[from] crate::env::EnvError),

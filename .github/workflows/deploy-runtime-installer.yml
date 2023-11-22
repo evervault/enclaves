@@ -36,8 +36,9 @@ jobs:
 
   upload-runtime-bundle-staging:
     runs-on: ubuntu-latest
-    needs: [build-runtime-bundle]
+    needs: [build-runtime-bundle, get-version]
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v3
         with:
           name: runtime-dependencies-${{github.sha}}.zip
@@ -57,9 +58,12 @@ jobs:
         env:
           STAGE: staging
           CHECKSUM: ${{ needs.build-runtime-bundle.outputs.checksum }}
+          VERSION_TAG: ${{ needs.get-version.outputs.version }}
         run: |
           echo "${{ env.CHECKSUM }}" > latest.txt
           aws s3 cp ./latest.txt s3://cage-build-assets-${{ env.STAGE }}/installer/latest
+          sh ./scripts/update-installer-version.sh ${{ env.VERSION_TAG  }} ${{ env.CHECKSUM }}
+          aws s3 cp scripts/versions s3://cage-build-assets-${{ env.STAGE }}/runtime/versions
 
   upload-runtime-bundle-production:
     runs-on: ubuntu-latest

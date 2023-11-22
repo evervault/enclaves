@@ -53,8 +53,15 @@ fn main() {
         .build()
         .expect("Failed to build tokio runtime in data plane");
 
-    FeatureContext::set();
-    let ctx = FeatureContext::get();
+    let ctx = match FeatureContext::set() {
+        Ok(_) => FeatureContext::get()
+            .expect("Infallible - feature context read after context is set successfully"),
+        Err(e) => {
+            log::error!("Failed to set context in enclave, cannot proceed - {e:?}");
+            return;
+        }
+    };
+
     runtime.block_on(async move {
         tokio::join!(
             start(data_plane_port),
@@ -68,9 +75,18 @@ async fn start(data_plane_port: u16) {
     use data_plane::{crypto::api::CryptoApi, stats::StatsProxy};
 
     StatsClient::init();
+
+    let context = match FeatureContext::get() {
+        Ok(context) => context,
+        Err(e) => {
+            log::error!("Failed to access context in enclave - {e}");
+            return;
+        }
+    };
+
     log::info!("Running data plane with egress disabled");
     let (_, e3_api_result, stats_result) = tokio::join!(
-        start_data_plane(data_plane_port),
+        start_data_plane(data_plane_port, context),
         CryptoApi::listen(),
         StatsProxy::listen()
     );
@@ -89,11 +105,24 @@ async fn start(data_plane_port: u16) {
     use data_plane::{crypto::api::CryptoApi, stats::StatsProxy};
 
     StatsClient::init();
-    let ports = FeatureContext::get().egress.ports;
-    let egress_proxies = join_all(ports.into_iter().map(EgressProxy::listen));
+    let context = match FeatureContext::get() {
+        Ok(context) => context,
+        Err(e) => {
+            log::error!("Failed to access context in enclave - {e}");
+            return;
+        }
+    };
+    let egress_proxies = join_all(
+        context
+            .egress
+            .ports
+            .clone()
+            .into_iter()
+            .map(EgressProxy::listen),
+    );
 
     let (_, dns_result, e3_api_result, egress_results, stats_result) = tokio::join!(
-        start_data_plane(data_plane_port),
+        start_data_plane(data_plane_port, context),
         EnclaveDnsProxy::bind_server(),
         CryptoApi::listen(),
         egress_proxies,
@@ -119,7 +148,7 @@ async fn start(data_plane_port: u16) {
     }
 }
 
-async fn start_data_plane(data_plane_port: u16) {
+async fn start_data_plane(data_plane_port: u16, context: FeatureContext) {
     log::info!("Data plane starting up. Forwarding traffic to {data_plane_port}");
     let server = match get_vsock_server_with_proxy_protocol(ENCLAVE_CONNECT_PORT, Enclave).await {
         Ok(server) => server,
@@ -130,7 +159,7 @@ async fn start_data_plane(data_plane_port: u16) {
     #[cfg(feature = "tls_termination")]
     {
         log::info!("TLS Termination enabled in dataplane. Running tls server.");
-        data_plane::server::server::run(server, data_plane_port).await;
+        data_plane::server::server::run(server, data_plane_port, context).await;
     }
     #[cfg(not(feature = "tls_termination"))]
     run_tcp_passthrough(server, data_plane_port).await;
@@ -146,7 +175,13 @@ where
     use shared::utils::pipe_streams;
     use tokio::io::AsyncWriteExt;
     log::info!("Piping TCP streams directly to user process");
-    let should_forward_proxy_protocol = FeatureContext::get().forward_proxy_protocol;
+    let should_forward_proxy_protocol = match FeatureContext::get() {
+        Ok(context) => context.forward_proxy_protocol,
+        Err(e) => {
+            log::error!("Failed to access context in TCP Passthrough - {e}");
+            return;
+        }
+    };
 
     let env_result = Environment::new().init_without_certs().await;
     if let Err(e) = env_result {
