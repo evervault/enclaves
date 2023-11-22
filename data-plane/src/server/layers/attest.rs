@@ -6,6 +6,7 @@ use std::pin::Pin;
 use tower::{Layer, Service};
 
 use crate::crypto::attest;
+use crate::server::http::build_internal_error_response;
 use crate::server::tls::TRUSTED_PUB_CERT;
 
 #[derive(Clone)]
@@ -70,12 +71,13 @@ where
                 attestation_doc: base64_doc,
             };
 
+            let response_payload = serde_json::to_string(&response).expect("Infallible");
             let attestation_response = Response::builder()
                 .status(200)
-                .body(Body::from(
-                    serde_json::to_string(&response).expect("Infallible"),
-                ))
-                .unwrap();
+                .header(hyper::http::header::CONTENT_TYPE, "application/json")
+                .header(hyper::http::header::CONTENT_LENGTH, response_payload.len())
+                .body(Body::from(response_payload))
+                .unwrap_or_else(|e| build_internal_error_response(Some(e.to_string())));
 
             Ok(attestation_response)
         })

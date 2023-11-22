@@ -4,7 +4,7 @@ use super::http::{request_to_bytes, response_to_bytes};
 use super::tls::TlsServerBuilder;
 
 use crate::e3client::E3Client;
-use crate::server::http::parse;
+use crate::server::http::{build_internal_error_response, parse};
 use crate::{CageContext, FeatureContext};
 
 use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
@@ -116,7 +116,10 @@ where
                         .await;
                     }
                     Ok(Incoming::HttpRequest(request)) => {
-                        let response = data_plane_service.call(request).await.unwrap();
+                        let response = data_plane_service.call(request).await.unwrap_or_else(|e| {
+                            log::error!("Failed to handle incoming request in data plane - {e:?}");
+                            build_internal_error_response(None)
+                        });
                         let response_bytes = response_to_bytes(response).await;
                         let _ = stream.write_all(&response_bytes).await;
                         continue;
