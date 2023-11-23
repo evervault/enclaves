@@ -131,7 +131,7 @@ impl EnclaveDnsDriver {
         if dns.answers.is_empty() {
             return Ok(dns_response);
         }
-
+        println!("DOING DNS LOOKUP!!!!");
         let domain_name = dns
             .questions
             .get(0)
@@ -151,7 +151,8 @@ impl EnclaveDnsDriver {
 
         Cache::store_ip(&domain_name, rr);
 
-        Self::create_loopback_dns_response(dns)
+        Ok(dns_response)
+        // Self::create_loopback_dns_response(dns)
     }
 
     /// Creates a spoofed DNS response which will cause the user process to request loopback

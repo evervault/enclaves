@@ -18,9 +18,12 @@ services:
   cages:
     build: .
     dns: 127.0.0.1
+    privileged: true
     ports:
       - "443:3031"
       - "3032:3032"
+    cap_add:
+      - NET_ADMIN  
     depends_on:
       - statsd
     networks:

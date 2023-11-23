@@ -8,6 +8,8 @@ do
     sleep 1;
 done
 
+# sudo iptables -t nat -A OUTPUT -p tcp --dport 443 -j DNAT --to-destination 127.0.0.1:443
+
 echo "Environment ready.. Starting user process $CUSTOMER_PROCESS"
 
 source /etc/customer-env

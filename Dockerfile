@@ -12,6 +12,9 @@ RUN apk update &&\
     apk add runit && apk add curl && \
     rm -rf /var/cache/apk/*
 
+RUN apk add iptables
+RUN apk add sudo
+
 COPY ./target/x86_64-unknown-linux-musl/release/data-plane $DATA_PLANE_EXECUTABLE_PATH
 RUN chmod +x $DATA_PLANE_EXECUTABLE_PATH
 
@@ -87,6 +90,7 @@ RUN mkdir /etc/service/mock_cert_provisioner \
     && chmod +x /etc/service/mock_cert_provisioner/run
 
 RUN mkdir /mock_cert_provisioner
+
 
 COPY ./e2e-tests/scripts/start_mock_cert_provisioner /mock_cert_provisioner/start_mock_cert_provisioner
 RUN chmod +x /mock_cert_provisioner/start_mock_cert_provisioner
