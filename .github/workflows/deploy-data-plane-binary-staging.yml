@@ -53,7 +53,7 @@ jobs:
 
       # Egress Enabled, TLS Termination Disabled
       - name: Build data-plane (egress enabled, tls termination disabled)
-        uses: evervault/cargo-static-build@master
+        uses: evervault/cargo-static-build@v1.73.0-stable
         with:
           cmd: cargo build -p data-plane --no-default-features --features enclave,network_egress,release_logging --release --target ${{ env.LINUX_TARGET }}
         env:
@@ -69,7 +69,7 @@ jobs:
 
       # Egress Enabled, TLS Termination Enabled
       - name: Build data-plane (egress enabled, tls termination enabled)
-        uses: evervault/cargo-static-build@master
+        uses: evervault/cargo-static-build@v1.73.0-stable
         with:
           cmd: cargo build -p data-plane --features enclave,network_egress,release_logging --release --target ${{ env.LINUX_TARGET }}
         env:
@@ -85,7 +85,7 @@ jobs:
 
       # Egress Disabled, TLS Termination Disabled
       - name: Build data-plane (egress disabled, tls termination disabled)
-        uses: evervault/cargo-static-build@master
+        uses: evervault/cargo-static-build@v1.73.0-stable
         with:
           cmd: cargo build -p data-plane --no-default-features --features enclave,release_logging --release --target ${{ env.LINUX_TARGET }}
         env:
@@ -101,7 +101,7 @@ jobs:
 
       # Egress Disabled, TLS Termination Enabled
       - name: Build data-plane (egress disabled, tls termination enabled)
-        uses: evervault/cargo-static-build@master
+        uses: evervault/cargo-static-build@v1.73.0-stable
         with:
           cmd: cargo build -p data-plane --features enclave,release_logging --release --target ${{ env.LINUX_TARGET }}
         env:
