@@ -15,7 +15,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "axios": "^0.27.2",
+    "axios": "^1.6.0",
     "cbor-sync": "^1.0.4",
     "chai": "^4.3.10",
     "chai-http": "^4.4.0",
