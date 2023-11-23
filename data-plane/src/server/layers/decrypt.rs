@@ -39,7 +39,7 @@ impl std::convert::From<DecryptError> for Response<Body> {
         .to_string();
         Response::builder()
             .status(err.to_status())
-            .header("content-length", msg.len())
+            .header("content-length", body.len())
             .body(body.into())
             .expect("Failed to build auth error to response")
     }
