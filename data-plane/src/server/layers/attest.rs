@@ -85,7 +85,7 @@ where
 }
 
 fn is_attestation_request(req: &Request<Body>) -> bool {
-    req.uri() == "/.well-known/attestation"
+    req.uri().path() == "/.well-known/attestation"
 }
 
 #[cfg(test)]
