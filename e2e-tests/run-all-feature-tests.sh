@@ -39,20 +39,20 @@ then
 fi
 
 export CUSTOMER_PROCESS=httpCustomerProcess.js
-echo "Building cage container"
+echo "Building enclave setup"
 export EV_API_KEY_AUTH=true
 docker compose build --build-arg CUSTOMER_PROCESS=httpCustomerProcess.js
 
-echo "Running cage container"
+echo "Running enclave local setup"
 # run the container
 docker compose up -d
-echo "SLEEPING 15 SECONDS to let cage initialize..."
+echo "SLEEPING 15 SECONDS to let enclave initialize..."
 sleep 15
 
-docker compose logs --tail cages-cages
+docker compose logs --tail enclaves-enclave
 
 echo "Running end-to-end tests"
-cd e2e-tests && npm run test || ($(docker compose logs --tail cages-cages) && false)
+cd e2e-tests && npm run test || ($(docker compose logs --tail enclaves-enclave) && false)
 
 echo "Running tests for health-check configurations"
 
@@ -60,7 +60,7 @@ echo "data-plane health checks ON, control-plane ON, data-plane ON"
 npm run health-check-tests "should succeed"
 
 echo "data-plane health checks ON, control-plane ON, data-plane OFF"
-docker compose exec cages sh -c "sv down data-plane"
+docker compose exec enclave sh -c "sv down data-plane"
 npm run health-check-tests "should fail"
 
 echo "API Key Auth Tests"
@@ -82,11 +82,11 @@ export CUSTOMER_PROCESS=wsCustomerProcess.js
 docker compose down
 docker compose build --build-arg CUSTOMER_PROCESS=wsCustomerProcess.js
 docker compose up -d
-docker compose logs --tail cages-cages
+docker compose logs --tail enclave-enclaves
 sleep 10
 npm run websocket-tests
 
-echo "Testing that Cage is serving trustable cert chain"
+echo "Testing that enclave is serving trustable cert chain"
 echo "Q" | openssl s_client -verifyCAfile sample-ca/sample-root-ca-cert.pem -showcerts -connect 0.0.0.0:443 | grep "Verification: OK"
 
 echo "Tests complete"

@@ -93,6 +93,11 @@ impl E3Proxy {
     // supporting local env
     #[cfg(not(feature = "enclave"))]
     async fn get_ip_for_e3(&self) -> Result<Option<SocketAddr>> {
-        dns::get_ip_for_localhost(7676)
+        use std::net::IpAddr;
+        use std::net::Ipv4Addr;
+        Ok(Some(SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+            7676,
+        )))
     }
 }

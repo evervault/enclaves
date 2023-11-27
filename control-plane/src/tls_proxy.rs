@@ -124,6 +124,11 @@ impl TlsProxy {
 
     #[cfg(not(feature = "enclave"))]
     async fn get_ip_target_host(&self) -> Result<Option<SocketAddr>> {
-        dns::get_ip_for_localhost(self.target.port)
+        use std::net::IpAddr;
+        use std::net::Ipv4Addr;
+        Ok(Some(SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(172, 20, 0, 9)),
+            self.target.port,
+        )))
     }
 }

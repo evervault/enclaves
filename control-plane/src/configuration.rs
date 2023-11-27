@@ -117,7 +117,7 @@ pub fn get_team_uuid() -> String {
 pub fn get_cert_provisoner_host() -> String {
     match get_rust_env() {
         Environment::Staging | Environment::Production => "provisioner.cages.internal".to_string(),
-        _ => "localhost".to_string(),
+        _ => "provisioner".to_string(),
     }
 }
 

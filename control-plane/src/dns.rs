@@ -45,16 +45,5 @@ pub async fn get_ip_for_host_with_dns_resolver(
         .iter()
         .choose(&mut rand::thread_rng())
         .map(|ip| SocketAddr::new(ip, port));
-
-    Ok(addr)
-}
-
-#[cfg(not(feature = "enclave"))]
-pub fn get_ip_for_localhost(port: u16) -> error::Result<Option<SocketAddr>> {
-    let addr = Some(SocketAddr::new(
-        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-        port,
-    ));
-
     Ok(addr)
 }

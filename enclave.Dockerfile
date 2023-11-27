@@ -2,11 +2,9 @@ FROM node:16-alpine3.18
 
 ENV DATA_PLANE_EXECUTABLE_PATH=/data-plane
 ENV DATA_PLANE_SERVICE_PATH=/etc/service/data-plane
-ENV CONTROL_PLANE_EXECUTABLE_PATH=/control-plane
-ENV CONTROL_PLANE_SERVICE_PATH=/etc/service/control-plane
 ENV START_EV_SERVICES_PATH=/etc/service/ev-services-entrypoint
 
-EXPOSE 443
+EXPOSE 4000
 
 RUN apk update &&\
     apk add runit && apk add curl && \
@@ -15,17 +13,9 @@ RUN apk update &&\
 COPY ./target/x86_64-unknown-linux-musl/release/data-plane $DATA_PLANE_EXECUTABLE_PATH
 RUN chmod +x $DATA_PLANE_EXECUTABLE_PATH
 
-COPY ./target/x86_64-unknown-linux-musl/release/control-plane $CONTROL_PLANE_EXECUTABLE_PATH
-RUN chmod +x $CONTROL_PLANE_EXECUTABLE_PATH
-
 RUN mkdir $DATA_PLANE_SERVICE_PATH
 COPY ./e2e-tests/scripts/start-data-plane.sh $DATA_PLANE_SERVICE_PATH/run
 RUN chmod +x $DATA_PLANE_SERVICE_PATH/run
-
-RUN mkdir $CONTROL_PLANE_SERVICE_PATH
-COPY ./e2e-tests/mtls-testing-certs/ca/*  /$CONTROL_PLANE_SERVICE_PATH/
-COPY ./e2e-tests/scripts/start-control-plane.sh $CONTROL_PLANE_SERVICE_PATH/run
-RUN chmod +x $CONTROL_PLANE_SERVICE_PATH/run
 
 ENV PCR0 000
 ENV PCR1 000
@@ -81,14 +71,5 @@ RUN mkdir /mock_process
 
 COPY ./e2e-tests/scripts/start_mock_process /mock_process/mock_process
 RUN chmod +x /mock_process/mock_process
-
-RUN mkdir /etc/service/mock_cert_provisioner \
-    && /bin/sh -c "echo -e '"'#!/bin/sh\nexec /mock_cert_provisioner/start_mock_cert_provisioner\n'"' > /etc/service/mock_cert_provisioner/run" \
-    && chmod +x /etc/service/mock_cert_provisioner/run
-
-RUN mkdir /mock_cert_provisioner
-
-COPY ./e2e-tests/scripts/start_mock_cert_provisioner /mock_cert_provisioner/start_mock_cert_provisioner
-RUN chmod +x /mock_cert_provisioner/start_mock_cert_provisioner
 
 CMD ["runsvdir", "/etc/service"]
