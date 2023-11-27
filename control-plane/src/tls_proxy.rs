@@ -1,3 +1,4 @@
+use crate::dns;
 use crate::error::Result;
 use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
@@ -111,7 +112,6 @@ impl TlsProxy {
 
     #[cfg(feature = "enclave")]
     async fn get_ip_target_host(&self) -> Result<Option<SocketAddr>> {
-        use crate::dns;
         let target = self.target.clone();
         let target_host_dns_name = format!("{}.", target.host);
         dns::get_ip_for_host_with_dns_resolver(
@@ -124,11 +124,6 @@ impl TlsProxy {
 
     #[cfg(not(feature = "enclave"))]
     async fn get_ip_target_host(&self) -> Result<Option<SocketAddr>> {
-        use std::net::IpAddr;
-        use std::net::Ipv4Addr;
-        Ok(Some(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-            self.target.port,
-        )))
+        dns::get_ip_for_localhost(self.target.port)
     }
 }
