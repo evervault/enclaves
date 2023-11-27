@@ -5,7 +5,7 @@ pub fn get_cert_provisioner_host() -> String {
 
 #[cfg(not(feature = "enclave"))]
 pub fn get_cert_provisioner_host() -> String {
-    "provisioner".to_string()
+    "localhost".to_string()
 }
 
 pub fn get_acme_host() -> String {

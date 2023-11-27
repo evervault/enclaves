@@ -49,10 +49,10 @@ docker compose up -d
 echo "SLEEPING 15 SECONDS to let enclave initialize..."
 sleep 15
 
-docker compose logs --tail enclaves-enclave
+docker compose logs --tail cages-enclave
 
 echo "Running end-to-end tests"
-cd e2e-tests && npm run test || ($(docker compose logs --tail enclaves-enclave) && false)
+cd e2e-tests && npm run test || ($(docker compose logs --tail cages-enclave) && false)
 
 echo "Running tests for health-check configurations"
 
@@ -60,7 +60,7 @@ echo "data-plane health checks ON, control-plane ON, data-plane ON"
 npm run health-check-tests "should succeed"
 
 echo "data-plane health checks ON, control-plane ON, data-plane OFF"
-docker compose exec enclave sh -c "sv down data-plane"
+docker compose exec cages sh -c "sv down data-plane"
 npm run health-check-tests "should fail"
 
 echo "API Key Auth Tests"
@@ -82,7 +82,7 @@ export CUSTOMER_PROCESS=wsCustomerProcess.js
 docker compose down
 docker compose build --build-arg CUSTOMER_PROCESS=wsCustomerProcess.js
 docker compose up -d
-docker compose logs --tail enclave-enclaves
+docker compose logs --tail cages-enclave
 sleep 10
 npm run websocket-tests
 

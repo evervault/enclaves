@@ -3,13 +3,22 @@ FROM node:16-alpine3.18
 ENV CONTROL_PLANE_EXECUTABLE_PATH=/control-plane
 ENV CONTROL_PLANE_SERVICE_PATH=/etc/service/control-plane
 
-EXPOSE 443
-
 # CERTS FOR CRYPTO API
 ARG MOCK_CRYPTO_CERT
 ARG MOCK_CRYPTO_KEY
 ENV MOCK_CRYPTO_CERT $MOCK_CRYPTO_CERT
 ENV MOCK_CRYPTO_KEY $MOCK_CRYPTO_KEY
+
+ARG MOCK_CERT_PROVISIONER_CLIENT_CERT
+ARG MOCK_CERT_PROVISIONER_CLIENT_KEY
+ARG MOCK_CERT_PROVISIONER_ROOT_CERT
+ARG MOCK_CERT_PROVISIONER_SERVER_KEY
+ARG MOCK_CERT_PROVISIONER_SERVER_CERT
+ENV MOCK_CERT_PROVISIONER_CLIENT_CERT $MOCK_CERT_PROVISIONER_CLIENT_CERT
+ENV MOCK_CERT_PROVISIONER_CLIENT_KEY $MOCK_CERT_PROVISIONER_CLIENT_KEY
+ENV MOCK_CERT_PROVISIONER_ROOT_CERT $MOCK_CERT_PROVISIONER_ROOT_CERT
+ENV MOCK_CERT_PROVISIONER_SERVER_KEY $MOCK_CERT_PROVISIONER_SERVER_KEY
+ENV MOCK_CERT_PROVISIONER_SERVER_CERT $MOCK_CERT_PROVISIONER_SERVER_CERT
 
 RUN apk update &&\
     apk add runit && apk add curl && \
@@ -34,5 +43,21 @@ RUN mkdir $CONTROL_PLANE_SERVICE_PATH
 COPY ./e2e-tests/mtls-testing-certs/ca/*  /$CONTROL_PLANE_SERVICE_PATH/
 COPY ./e2e-tests/scripts/start-control-plane.sh $CONTROL_PLANE_SERVICE_PATH/run
 RUN chmod +x $CONTROL_PLANE_SERVICE_PATH/run
+
+COPY ./e2e-tests/mockCertProvisionerApi.js ./e2e-tests/mtls-testing-certs/ca/* /services/
+COPY ./e2e-tests/sample-ca/* /services/
+COPY ./e2e-tests/package.json /services/package.json
+COPY ./e2e-tests/package-lock.json /services/package-lock.json
+
+RUN cd services && npm i
+
+RUN mkdir /etc/service/mock_cert_provisioner \
+    && /bin/sh -c "echo -e '"'#!/bin/sh\nexec /mock_cert_provisioner/start_mock_cert_provisioner\n'"' > /etc/service/mock_cert_provisioner/run" \
+    && chmod +x /etc/service/mock_cert_provisioner/run
+
+RUN mkdir /mock_cert_provisioner
+
+COPY ./e2e-tests/scripts/start_mock_cert_provisioner /mock_cert_provisioner/start_mock_cert_provisioner
+RUN chmod +x /mock_cert_provisioner/start_mock_cert_provisioner
 
 CMD ["runsvdir", "/etc/service"]

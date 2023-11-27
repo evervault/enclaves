@@ -1,4 +1,4 @@
-use crate::dns::{self, InternalAsyncDnsResolver};
+use crate::dns::InternalAsyncDnsResolver;
 use crate::error::Result;
 use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
@@ -86,6 +86,7 @@ impl E3Proxy {
 
     #[cfg(feature = "enclave")]
     async fn get_ip_for_e3(&self) -> Result<Option<SocketAddr>> {
+        use crate::dns;
         dns::get_ip_for_host_with_dns_resolver(&self.dns_resolver, "e3.cages-e3.internal.", 443)
             .await
     }

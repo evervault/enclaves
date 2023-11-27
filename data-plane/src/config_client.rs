@@ -42,16 +42,8 @@ impl ConfigClient {
     }
 
     fn get_uri(&self, path: ConfigServerPath) -> String {
-        format!(
-            "http://control-plane:{}{}",
-            shared::ENCLAVE_CONFIG_PORT,
-            path
-        )
+        format!("http://127.0.0.1:{}{}", shared::ENCLAVE_CONFIG_PORT, path)
     }
-
-    // fn get_uri(&self, path: ConfigServerPath) -> String {
-    //     format!("http://127.0.0.1:{}{}", shared::ENCLAVE_CONFIG_PORT, path)
-    // }
 
     async fn get_conn(
         &self,

@@ -24,23 +24,11 @@ services:
       - "7779:7779"
     depends_on:
       - statsd
-      - provisioner
       - control-plane
     networks:
       mynetwork:
         ipv4_address: 172.20.0.7       
     environment:
-      - MOCK_CRYPTO_CERT=${MOCK_CRYPTO_CERT}
-      - MOCK_CRYPTO_KEY=${MOCK_CRYPTO_KEY}
-      - MOCK_CERT_PROVISIONER_CLIENT_CERT=${MOCK_CERT_PROVISIONER_CLIENT_CERT}
-      - MOCK_CERT_PROVISIONER_CLIENT_KEY=${MOCK_CERT_PROVISIONER_CLIENT_KEY}
-      - MOCK_CERT_PROVISIONER_ROOT_CERT=${MOCK_CERT_PROVISIONER_ROOT_CERT}
-      - MOCK_CERT_PROVISIONER_SERVER_KEY=${MOCK_CERT_PROVISIONER_SERVER_KEY}
-      - MOCK_CERT_PROVISIONER_SERVER_CERT=${MOCK_CERT_PROVISIONER_SERVER_CERT}
-      - ACME_ACCOUNT_EC_KEY=${ACME_ACCOUNT_EC_KEY}
-      - ACME_ACCOUNT_HMAC_KEY=${ACME_ACCOUNT_HMAC_KEY}
-      - ACME_ACCOUNT_HMAC_KEY_ID=${ACME_ACCOUNT_HMAC_KEY_ID}
-      - DEREGISTRATION_TOPIC_ARN=testarn
       - EV_API_KEY_AUTH=${EV_API_KEY_AUTH:?No api key auth set, failing fast}
       - CUSTOMER_PROCESS=${CUSTOMER_PROCESS}
       - AWS_REGION=us-east-1
@@ -52,7 +40,6 @@ services:
       - "3032:3032"
     depends_on:
       - statsd
-      - provisioner
     networks:
       mynetwork:
         ipv4_address: 172.20.0.8    
@@ -70,23 +57,4 @@ services:
       - DEREGISTRATION_TOPIC_ARN=testarn
       - EV_API_KEY_AUTH=${EV_API_KEY_AUTH:?No api key auth set, failing fast}
       - CUSTOMER_PROCESS=${CUSTOMER_PROCESS}   
-      - AWS_REGION=us-east-1 
-  provisioner:
-    build:
-      dockerfile: mock-provisioner.Dockerfile
-    ports:
-      - "3000:3000"
-      - "3443:3443"
-    depends_on:
-      - statsd
-    networks:
-      mynetwork:
-        ipv4_address: 172.20.0.9    
-    environment:
-      - MOCK_CRYPTO_CERT=${MOCK_CRYPTO_CERT}
-      - MOCK_CRYPTO_KEY=${MOCK_CRYPTO_KEY}
-      - MOCK_CERT_PROVISIONER_CLIENT_CERT=${MOCK_CERT_PROVISIONER_CLIENT_CERT}
-      - MOCK_CERT_PROVISIONER_CLIENT_KEY=${MOCK_CERT_PROVISIONER_CLIENT_KEY}
-      - MOCK_CERT_PROVISIONER_ROOT_CERT=${MOCK_CERT_PROVISIONER_ROOT_CERT}
-      - MOCK_CERT_PROVISIONER_SERVER_KEY=${MOCK_CERT_PROVISIONER_SERVER_KEY}
-      - MOCK_CERT_PROVISIONER_SERVER_CERT=${MOCK_CERT_PROVISIONER_SERVER_CERT}    
+      - AWS_REGION=us-east-1    
