@@ -430,14 +430,17 @@ fn valid_order_identifiers(
 ) -> bool {
     let trusted_base_domains = configuration::get_trusted_cert_base_domains();
 
-    let valid_domains: Vec<String> = trusted_base_domains.iter().map(|base_domain| {
-        format!(
-            "{}.{}.{}",
-            &cage_context.cage_name,
-            &cage_context.hyphenated_app_uuid(),
-            base_domain
-        )
-    }).collect();
+    let valid_domains: Vec<String> = trusted_base_domains
+        .iter()
+        .map(|base_domain| {
+            format!(
+                "{}.{}.{}",
+                &cage_context.cage_name,
+                &cage_context.hyphenated_app_uuid(),
+                base_domain
+            )
+        })
+        .collect();
 
     payload
         .identifiers

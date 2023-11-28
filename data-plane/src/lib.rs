@@ -127,14 +127,17 @@ impl CageContext {
         #[cfg(staging)]
         let base_domains = vec!["cage.evervault.dev", "enclave.evervault.dev"];
 
-        base_domains.iter().map(|domain| {
-            format!(            
-                "{}.{}.{}",
-                &self.cage_name,
-                &self.hyphenated_app_uuid(),
-                domain
-            )
-        }).collect()
+        base_domains
+            .iter()
+            .map(|domain| {
+                format!(
+                    "{}.{}.{}",
+                    &self.cage_name,
+                    &self.hyphenated_app_uuid(),
+                    domain
+                )
+            })
+            .collect()
     }
 
     pub fn get_cert_names(&self) -> Vec<String> {

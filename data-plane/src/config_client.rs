@@ -171,8 +171,7 @@ impl ConfigClient {
             let response_body = self.parse_response_body_to_string(response).await?;
             let err_msg = format!(
                 "Error sending jws request to control plane. Response Code: {}. Msg: {}",
-                response_status,
-                response_body
+                response_status, response_body
             );
 
             log::error!("{}", err_msg);
@@ -193,8 +192,7 @@ impl ConfigClient {
             let response_body = self.parse_response_body_to_string(response).await?;
             let err_msg = format!(
                 "Error sending jwk request to control plane. Response Code: {}. Msg: {}",
-                response_status,
-                response_body
+                response_status, response_body
             );
 
             log::error!("{}", err_msg);

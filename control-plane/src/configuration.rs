@@ -166,9 +166,15 @@ pub fn get_acme_hmac_key_id() -> String {
 
 pub fn get_trusted_cert_base_domains() -> Vec<String> {
     #[cfg(not(staging))]
-    let cage_base_domains = vec!["cage.evervault.com".to_string(), "enclave.evervault.com".to_string()];
+    let cage_base_domains = vec![
+        "cage.evervault.com".to_string(),
+        "enclave.evervault.com".to_string(),
+    ];
     #[cfg(staging)]
-    let cage_base_domains = vec!["cage.evervault.dev".to_string(), "enclave.evervault.dev".to_string()];
+    let cage_base_domains = vec![
+        "cage.evervault.dev".to_string(),
+        "enclave.evervault.dev".to_string(),
+    ];
 
     cage_base_domains
 }

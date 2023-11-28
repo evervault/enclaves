@@ -357,7 +357,10 @@ impl AcmeCertificateRetreiver {
         log::info!("[ACME] Fetching authorizations needed for order.");
         let authorizations = order.authorizations().await?;
 
-        log::info!("[ACME] {} authorizations needed. Storing challenges.", authorizations.len());
+        log::info!(
+            "[ACME] {} authorizations needed. Storing challenges.",
+            authorizations.len()
+        );
         for auth in authorizations {
             let challenge = auth
                 .get_challenge("http-01")
@@ -392,7 +395,9 @@ impl AcmeCertificateRetreiver {
             auth.wait_done(Duration::from_secs(5), 5).await?;
         }
 
-        log::info!("[ACME] All authorizations validated. Continuing polling order to check if ready.");
+        log::info!(
+            "[ACME] All authorizations validated. Continuing polling order to check if ready."
+        );
 
         let order_ready = order.wait_ready(Duration::from_secs(5), 5).await?;
 
@@ -400,10 +405,8 @@ impl AcmeCertificateRetreiver {
 
         let order_finalized = order_ready.finalize(key).await?;
 
-        let order_complete = order_finalized
-            .wait_done(Duration::from_secs(5), 5)
-            .await?;
-        
+        let order_complete = order_finalized.wait_done(Duration::from_secs(5), 5).await?;
+
         log::info!("[ACME] Order is complete. Downloading certficate.");
 
         let cert_chain = order_complete
