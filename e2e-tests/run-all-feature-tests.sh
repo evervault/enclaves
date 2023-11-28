@@ -60,7 +60,7 @@ echo "data-plane health checks ON, control-plane ON, data-plane ON"
 npm run health-check-tests "should succeed"
 
 echo "data-plane health checks ON, control-plane ON, data-plane OFF"
-docker compose exec cages sh -c "sv down data-plane"
+docker compose exec enclave sh -c "sv down data-plane"
 npm run health-check-tests "should fail"
 
 echo "API Key Auth Tests"
