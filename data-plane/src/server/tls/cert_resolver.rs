@@ -134,13 +134,10 @@ impl AttestableCertResolver {
     pub(crate) fn is_trusted_cert_domain(received_servername: Option<&str>) -> bool {
         match received_servername {
             Some(servername) => {
-                let split_hostname: Vec<&str> = servername.split('.').collect();
-                let subdomains_total = split_hostname.len();
-
-                split_hostname
-                    .get(subdomains_total - 3) //Second from the end
-                    .map(|specific_subdomain| specific_subdomain == &"cage")
-                    .unwrap_or(false)
+                servername.split('.')
+                    .rev() 
+                    .nth(1)
+                    .map_or(false, |subdomain| ["cage", "enclave"].contains(&subdomain))
             }
             None => false,
         }
@@ -560,6 +557,12 @@ mod tests {
     #[test]
     fn test_trusted_cert_used_with_trusted_hostname() {
         let server_name = Some("wicked_cage.app_123543.cage.evervault.com".to_string());
+        test_trusted_cert_with_hostname(server_name, true);
+    }
+    
+    #[test]
+    fn test_trusted_cert_used_with_trusted_enclave_hostname() {
+        let server_name = Some("wicked_cage.app_123543.enclave.evervault.com".to_string());
         test_trusted_cert_with_hostname(server_name, true);
     }
 
