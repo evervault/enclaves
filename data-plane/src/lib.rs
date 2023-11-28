@@ -122,10 +122,10 @@ impl CageContext {
 
     pub fn get_trusted_cert_domains(&self) -> Vec<String> {
         #[cfg(not(staging))]
-        let base_domains = vec!["cage.evervault.com", "enclave.evervault.com"];
+        let base_domains = ["cage.evervault.com", "enclave.evervault.com"];
 
         #[cfg(staging)]
-        let base_domains = vec!["cage.evervault.dev", "enclave.evervault.dev"];
+        let base_domains = ["cage.evervault.dev", "enclave.evervault.dev"];
 
         base_domains
             .iter()
