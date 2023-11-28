@@ -27,7 +27,7 @@ tokio-rustls = { version = "0.24.1", features = ["dangerous_configuration"] }
 sys-info = "0.9.1"
 cadence = "0.29.0"
 httparse = "1.8.0"
-openssl = { version = "0.10.48", features = ["vendored"] }
+openssl = { version = "0.10.60", features = ["vendored"] }
 base64 = "0.13.0"
 env_logger = "0.10.0"
 

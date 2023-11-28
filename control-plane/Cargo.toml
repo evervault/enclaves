@@ -31,7 +31,7 @@ cadence-macros = "0.29.0"
 async-trait = "0.1.56"
 mockall = "0.11.4"
 axum = "0.6.19"
-openssl = { version = "0.10.48", features = ["vendored"] }
+openssl = { version = "0.10.60", features = ["vendored"] }
 base64 = "0.13.0"
 storage-client-interface = "0.2.0"
 log = { version = "0.4.19", features = ["max_level_debug"] }
