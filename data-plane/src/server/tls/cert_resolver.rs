@@ -136,8 +136,12 @@ impl AttestableCertResolver {
             Some(servername) => servername
                 .split('.')
                 .rev()
-                .nth(1)
-                .map_or(false, |subdomain| ["cage", "enclave"].contains(&subdomain)),
+                .nth(2)
+                .map_or(false, |subdomain| {
+                    println!("subdomain: {}", subdomain);
+                    ["cage", "enclave"].contains(&subdomain)
+                }),
+
             None => false,
         }
     }
