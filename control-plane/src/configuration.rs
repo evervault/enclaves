@@ -164,11 +164,11 @@ pub fn get_acme_hmac_key_id() -> String {
     std::env::var("ACME_ACCOUNT_HMAC_KEY_ID").expect("ACME_ACCOUNT_HMAC_KEY_ID is not set in env")
 }
 
-pub fn get_trusted_cert_base_domain() -> String {
+pub fn get_trusted_cert_base_domains() -> Vec<String> {
     #[cfg(not(staging))]
-    let cage_base_domain = "cage.evervault.com";
+    let cage_base_domains = vec!["cage.evervault.com".to_string(), "enclave.evervault.com".to_string()];
     #[cfg(staging)]
-    let cage_base_domain = "cage.evervault.dev";
+    let cage_base_domains = vec!["cage.evervault.dev".to_string(), "enclave.evervault.dev".to_string()];
 
-    cage_base_domain.into()
+    cage_base_domains
 }
