@@ -1,5 +1,5 @@
 use crate::configuration;
-use aws_config::{load_from_env, meta::region::RegionProviderChain};
+use aws_config::{load_defaults, meta::region::RegionProviderChain};
 use aws_sdk_sns::Client as SnsClient;
 use serde::{Deserialize, Serialize};
 
@@ -61,7 +61,8 @@ impl ControlPlaneSnsClient {
         // Use local profile for local development
         let region_provider =
             RegionProviderChain::default_provider().or_else(configuration::get_aws_region());
-        let config = aws_config::from_env()
+
+        let config = aws_config::defaults(aws_config::BehaviorVersion::v2023_11_09())
             .profile_name(configuration::get_aws_profile())
             .region(region_provider)
             .load()
@@ -75,7 +76,7 @@ impl ControlPlaneSnsClient {
     }
 
     pub async fn new(topic_arn: String) -> Self {
-        let config = load_from_env().await;
+        let config = load_defaults(aws_config::BehaviorVersion::v2023_11_09()).await;
         Self {
             sns_client: SnsClient::new(&config),
             topic_arn,
