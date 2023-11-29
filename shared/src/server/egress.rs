@@ -99,13 +99,8 @@ pub fn check_allow_list(
                 Err(EgressError::EgressDomainNotAllowed(domain))
             }
         }
-        None => {
-            if allowed_destinations.ips.contains(&ip) {
-                Ok(())
-            } else {
-                Err(EgressError::EgressIpNotAllowed(ip))
-            }
-        }
+        None if allowed_destinations.ips.contains(&ip) => Ok(()),
+        None => Err(EgressError::EgressIpNotAllowed(ip)),
     }
 }
 

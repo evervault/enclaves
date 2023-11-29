@@ -82,6 +82,7 @@ impl EgressProxy {
 
     #[cfg(not(feature = "enclave"))]
     fn get_destination(_: RawFd) -> Result<(Ipv4Addr, u16), DNSError> {
+        // Hardcode egress IP for docker setup as SO_ORIGINAL_DST is not supported
         let addr = TEST_EGRESS_IP
             .parse::<Ipv4Addr>()
             .expect("Invalid IP address");

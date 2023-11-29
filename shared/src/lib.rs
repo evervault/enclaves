@@ -16,6 +16,10 @@ pub const ENCLAVE_STATSD_PORT: u16 = 8125;
 pub const ENCLAVE_CID: u32 = 2021;
 #[cfg(feature = "enclave")]
 pub const PARENT_CID: u32 = 3;
+#[cfg(not(feature = "enclave"))]
+pub const ENCLAVE_IP: &str = "172.20.0.7";
+#[cfg(not(feature = "enclave"))]
+pub const PARENT_IP: &str = "172.20.0.8";
 
 #[cfg(not(feature = "enclave"))]
 pub const TEST_EGRESS_IP: &str = "172.64.101.22";
