@@ -90,13 +90,15 @@ fn is_attestation_request(req: &Request<Body>) -> bool {
 
 #[cfg(test)]
 mod test {
+    use hyper::Body;
+
     use super::is_attestation_request;
 
     #[test]
     fn correctly_identifies_attestation_requests() {
         let req = hyper::Request::builder()
             .uri("http://localhost:1234/.well-known/attestation")
-            .body(())
+            .body(Body::empty())
             .unwrap();
         assert!(is_attestation_request(&req));
     }
@@ -105,7 +107,7 @@ mod test {
     fn correctly_identifies_non_attestation_requests() {
         let req = hyper::Request::builder()
             .uri("http://localhost:1234/echo")
-            .body(())
+            .body(Body::empty())
             .unwrap();
         assert!(!is_attestation_request(&req));
     }

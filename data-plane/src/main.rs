@@ -12,8 +12,6 @@ use data_plane::env::Environment;
 use data_plane::health::start_health_check_server;
 use data_plane::stats_client::StatsClient;
 use data_plane::FeatureContext;
-#[cfg(feature = "network_egress")]
-use futures::future::join_all;
 use shared::ENCLAVE_CONNECT_PORT;
 
 #[cfg(feature = "enclave")]
@@ -112,20 +110,12 @@ async fn start(data_plane_port: u16) {
             return;
         }
     };
-    let egress_proxies = join_all(
-        context
-            .egress
-            .ports
-            .clone()
-            .into_iter()
-            .map(EgressProxy::listen),
-    );
 
-    let (_, dns_result, e3_api_result, egress_results, stats_result) = tokio::join!(
+    let (_, dns_result, e3_api_result, egress_result, stats_result) = tokio::join!(
         start_data_plane(data_plane_port, context),
         EnclaveDnsProxy::bind_server(),
         CryptoApi::listen(),
-        egress_proxies,
+        EgressProxy::listen(),
         StatsProxy::listen()
     );
 
@@ -133,11 +123,9 @@ async fn start(data_plane_port: u16) {
         log::error!("An error occurred within the dns server — {e:?}");
     }
 
-    egress_results.into_iter().for_each(|egress_result| {
-        if let Err(e) = egress_result {
-            log::error!("An error occurred within the egress server(s) — {e:?}");
-        }
-    });
+    if let Err(e) = egress_result {
+        log::error!("An error occurred within the egress server — {e:?}");
+    }
 
     if let Err(e) = e3_api_result {
         log::error!("An error occurred within the E3 API server — {e:?}");

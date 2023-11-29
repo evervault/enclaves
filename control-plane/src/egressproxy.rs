@@ -1,6 +1,6 @@
 use crate::error::{Result, ServerError};
 use shared::rpc::request::ExternalRequest;
-use shared::server::egress::{check_allow_list, get_hostname, EgressDomains};
+use shared::server::egress::{check_allow_list, get_hostname, EgressDestinations};
 use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
 use shared::utils::pipe_streams;
@@ -56,7 +56,7 @@ impl EgressProxy {
 
     async fn handle_connection<T: AsyncReadExt + AsyncWriteExt + Unpin>(
         mut external_stream: T,
-        egress_domains: EgressDomains,
+        egress_destinations: EgressDestinations,
     ) -> Result<(u64, u64)> {
         log::debug!("Received request to egress proxy");
         let mut request_buffer = [0; 4096];
@@ -73,10 +73,17 @@ impl EgressProxy {
                 }
             };
 
-        let hostname = get_hostname(external_request.data.clone())?;
-        if let Err(err) = check_allow_list(hostname.clone(), egress_domains) {
+        let hostname = get_hostname(external_request.data.clone()).ok();
+        if let Err(err) = check_allow_list(
+            hostname.clone(),
+            external_request.ip.clone(),
+            egress_destinations,
+        ) {
             let _ = external_stream.shutdown().await;
-            log::info!("Blocking request to {hostname} - {err}");
+            log::info!(
+                "Blocking request to hostname: {hostname:?} ip: {:?}  - {err}",
+                external_request.ip
+            );
             return Ok((0, 0));
         };
         let mut remote_stream = TcpStream::connect((connect_ip, external_request.port)).await?;
