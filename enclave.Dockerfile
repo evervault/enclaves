@@ -7,6 +7,7 @@ ENV START_EV_SERVICES_PATH=/etc/service/ev-services-entrypoint
 RUN apk update &&\
     apk add runit && apk add curl && \
     rm -rf /var/cache/apk/*
+RUN apk add iptables
 
 COPY ./target/x86_64-unknown-linux-musl/release/data-plane $DATA_PLANE_EXECUTABLE_PATH
 RUN chmod +x $DATA_PLANE_EXECUTABLE_PATH

@@ -13,7 +13,6 @@ use shared::EGRESS_PROXY_PORT;
 use shared::EGRESS_PROXY_VSOCK_PORT;
 #[cfg(not(feature = "enclave"))]
 use shared::TEST_EGRESS_IP;
-use std::io::Error;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::os::fd::AsRawFd;
 use std::os::fd::RawFd;
@@ -93,11 +92,12 @@ impl EgressProxy {
     fn get_destination(fd: RawFd) -> Result<(Ipv4Addr, u16), DNSError> {
         use libc::sockaddr_in;
         use libc::socklen_t;
+        use std::io::Error;
 
         let mut addr: sockaddr_in = unsafe { std::mem::zeroed() };
         let mut len: socklen_t = std::mem::size_of::<sockaddr_in>() as socklen_t;
 
-        let ret = unsafe {
+        let response_code = unsafe {
             libc::getsockopt(
                 fd,
                 libc::SOL_IP,
@@ -107,14 +107,12 @@ impl EgressProxy {
             )
         };
 
-        if ret == -1 {
+        if response_code == -1 {
             let e = Error::last_os_error();
-            println!("ERRR {:?}", e);
             Err(e.into())
         } else {
             let ip = Ipv4Addr::from(u32::from_be(addr.sin_addr.s_addr));
             let port = u16::from_be(addr.sin_port);
-            println!("IP: {:?}, PORT: {:?}", ip, port);
             Ok((ip, port))
         }
     }
