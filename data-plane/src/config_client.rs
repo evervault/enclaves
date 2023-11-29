@@ -163,18 +163,19 @@ impl ConfigClient {
             .send(ConfigServerPath::AcmeSign, "GET", payload)
             .await?;
 
-        if response.status() == StatusCode::OK {
+        let response_status = response.status();
+        if response_status == StatusCode::OK {
             let result: JwsResponse = self.parse_response(response).await?;
             Ok(result)
         } else {
-            log::error!(
-                "Error sending jws request to control plane. Response Code: {}",
-                response.status()
+            let response_body = self.parse_response_body_to_string(response).await?;
+            let err_msg = format!(
+                "Error sending jws request to control plane. Response Code: {}. Msg: {}",
+                response_status, response_body
             );
-            Err(Error::ConfigServer(
-                "Invalid Response code returned when sending jws request to control plane"
-                    .to_string(),
-            ))
+
+            log::error!("{}", err_msg);
+            Err(Error::ConfigServer(err_msg))
         }
     }
 
@@ -183,18 +184,19 @@ impl ConfigClient {
             .send(ConfigServerPath::AcmeJWK, "POST", Body::empty())
             .await?;
 
-        if response.status() == StatusCode::OK {
+        let response_status = response.status();
+        if response_status == StatusCode::OK {
             let result: JwkResponse = self.parse_response(response).await?;
             Ok(result)
         } else {
-            log::error!(
-                "Error sending jwk request to control plane. Response Code: {}",
-                response.status()
+            let response_body = self.parse_response_body_to_string(response).await?;
+            let err_msg = format!(
+                "Error sending jwk request to control plane. Response Code: {}. Msg: {}",
+                response_status, response_body
             );
-            Err(Error::ConfigServer(
-                "Invalid Response code returned when sending jwk request to control plane"
-                    .to_string(),
-            ))
+
+            log::error!("{}", err_msg);
+            Err(Error::ConfigServer(err_msg))
         }
     }
 
@@ -207,6 +209,11 @@ impl ConfigClient {
                 "Error parsing response from config server. Error: {err:?}"
             ))
         })
+    }
+
+    async fn parse_response_body_to_string(&self, res: Response<Body>) -> Result<String> {
+        let body_bytes = hyper::body::to_bytes(res.into_body()).await?;
+        String::from_utf8(body_bytes.to_vec()).map_err(Error::FromUtf8Error)
     }
 
     async fn base_get_object(&self, key: String) -> Result<Option<GetObjectResponse>> {

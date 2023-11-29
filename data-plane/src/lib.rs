@@ -118,22 +118,24 @@ impl CageContext {
         )
     }
 
-    #[cfg(not(staging))]
-    pub fn get_trusted_cert_name(&self) -> String {
-        format!(
-            "{}.{}.cage.evervault.com",
-            &self.cage_name,
-            &self.hyphenated_app_uuid()
-        )
-    }
+    pub fn get_trusted_cert_domains(&self) -> Vec<String> {
+        #[cfg(not(staging))]
+        let base_domains = ["cage.evervault.com", "enclave.evervault.com"];
 
-    #[cfg(staging)]
-    pub fn get_trusted_cert_name(&self) -> String {
-        format!(
-            "{}.{}.cage.evervault.dev",
-            &self.cage_name,
-            &self.hyphenated_app_uuid()
-        )
+        #[cfg(staging)]
+        let base_domains = ["cage.evervault.dev", "enclave.evervault.dev"];
+
+        base_domains
+            .iter()
+            .map(|domain| {
+                format!(
+                    "{}.{}.{}",
+                    &self.cage_name,
+                    &self.hyphenated_app_uuid(),
+                    domain
+                )
+            })
+            .collect()
     }
 
     pub fn get_cert_names(&self) -> Vec<String> {
