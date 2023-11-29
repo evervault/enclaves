@@ -1,4 +1,5 @@
-use crate::dns::{self, InternalAsyncDnsResolver};
+use crate::dns;
+use crate::dns::InternalAsyncDnsResolver;
 use crate::error::Result;
 use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};

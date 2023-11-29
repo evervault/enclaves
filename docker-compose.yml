@@ -15,9 +15,26 @@ services:
       mynetwork:
         ipv4_address: 172.20.0.6  
     platform: linux/amd64    
-  cages:
-    build: .
+  enclave:
+    build:
+      dockerfile: enclave.Dockerfile
     dns: 127.0.0.1
+    ports:
+      - "7777:7777"
+      - "7779:7779"
+    depends_on:
+      - statsd
+      - control-plane
+    networks:
+      mynetwork:
+        ipv4_address: 172.20.0.7       
+    environment:
+      - EV_API_KEY_AUTH=${EV_API_KEY_AUTH:?No api key auth set, failing fast}
+      - CUSTOMER_PROCESS=${CUSTOMER_PROCESS}
+      - AWS_REGION=us-east-1
+  control-plane:
+    build:
+      dockerfile: control-plane.Dockerfile
     ports:
       - "443:3031"
       - "3032:3032"
@@ -25,8 +42,7 @@ services:
       - statsd
     networks:
       mynetwork:
-        ipv4_address: 172.20.0.7    
-      
+        ipv4_address: 172.20.0.8    
     environment:
       - MOCK_CRYPTO_CERT=${MOCK_CRYPTO_CERT}
       - MOCK_CRYPTO_KEY=${MOCK_CRYPTO_KEY}
@@ -40,4 +56,5 @@ services:
       - ACME_ACCOUNT_HMAC_KEY_ID=${ACME_ACCOUNT_HMAC_KEY_ID}
       - DEREGISTRATION_TOPIC_ARN=testarn
       - EV_API_KEY_AUTH=${EV_API_KEY_AUTH:?No api key auth set, failing fast}
-      - CUSTOMER_PROCESS=${CUSTOMER_PROCESS}
+      - CUSTOMER_PROCESS=${CUSTOMER_PROCESS}   
+      - AWS_REGION=us-east-1    

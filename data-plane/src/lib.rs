@@ -158,7 +158,7 @@ impl From<ProvisionerContext> for CageContext {
     }
 }
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct FeatureContext {
     pub api_key_auth: bool,
     pub healthcheck: Option<String>,

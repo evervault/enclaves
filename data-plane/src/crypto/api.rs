@@ -155,17 +155,23 @@ impl CryptoApi {
     }
 
     #[cfg(not(feature = "enclave"))]
-    async fn get_attestation_doc(self, req: Request<Body>) -> Result<Body, CryptoApiError> {
-        use hyper::Client;
+    async fn get_attestation_doc(self, _: Request<Body>) -> Result<Body, CryptoApiError> {
+        #[derive(Serialize, Deserialize, Debug)]
+        struct TestData {
+            pcr0: String,
+            pcr1: String,
+            pcr2: String,
+            pcr8: String,
+        }
+        let test = TestData {
+            pcr0: "000".to_string(),
+            pcr1: "000".to_string(),
+            pcr2: "000".to_string(),
+            pcr8: "000".to_string(),
+        };
+        let res: Vec<u8> = serde_cbor::to_vec(&test).unwrap();
 
-        let client = Client::new();
-        let request = Request::builder()
-            .uri("http://127.0.0.1:7677/attestation-doc")
-            .method("POST")
-            .body(req.into_body())
-            .expect("Couldnt build request");
-        let resp = client.request(request).await?;
-        Ok(resp.into_body())
+        Ok(Body::from(res))
     }
 }
 

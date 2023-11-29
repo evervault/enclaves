@@ -72,7 +72,6 @@ fn get_router() -> Router {
   Router::new()
     .route("/encrypt", post(encryption_handler))
     .route("/decrypt", post(decryption_handler))
-    .route("/attestation-doc", post(attestation_handler))
     .route("/authenticate", post(authentication_handler))
 }
 
@@ -141,22 +140,6 @@ async fn authentication_handler(headers: HeaderMap) -> impl IntoResponse {
     },
     None => return StatusCode::UNAUTHORIZED
   }
-}
-
-async fn attestation_handler() -> Result<Vec<u8>, Infallible> {
-  let pcr0 = std::env::var("PCR0").expect("No PCR0 given");
-  let pcr1 = std::env::var("PCR1").expect("No PCR1 given");
-  let pcr2 = std::env::var("PCR2").expect("No PCR2 given");
-  let pcr8 = std::env::var("PCR8").expect("No PCR8 given");
-  let ad = serde_json::json!({
-    "Measurements": { 
-      "PCR0": pcr0, 
-      "PCR1": pcr1, 
-      "PCR2": pcr2,
-      "PCR8": pcr8
-    }
-  });
-  Ok(serde_cbor::to_vec(&ad).unwrap())
 }
 
 #[derive(Debug, Deserialize, Serialize)]

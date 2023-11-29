@@ -58,37 +58,35 @@ pub enum CID {
 }
 
 #[cfg(not(feature = "enclave"))]
-pub async fn get_vsock_server(port: u16, _: CID) -> error::ServerResult<TcpServer> {
-    use std::net::{IpAddr, Ipv4Addr};
-    let listener = TcpServer::bind(std::net::SocketAddr::new(
-        IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-        port,
-    ))
-    .await?;
+pub async fn get_vsock_server(port: u16, cid: CID) -> error::ServerResult<TcpServer> {
+    let listener = TcpServer::bind(std::net::SocketAddr::new(get_local_ip(cid), port)).await?;
     Ok(listener)
 }
 
 #[cfg(not(feature = "enclave"))]
 pub async fn get_vsock_server_with_proxy_protocol(
     port: u16,
-    _: CID,
+    cid: CID,
 ) -> error::ServerResult<TcpServerWithProxyProtocol> {
-    use std::net::{IpAddr, Ipv4Addr};
-    let listener = TcpServerWithProxyProtocol::bind(std::net::SocketAddr::new(
-        IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-        port,
-    ))
-    .await?;
+    let listener =
+        TcpServerWithProxyProtocol::bind(std::net::SocketAddr::new(get_local_ip(cid), port))
+            .await?;
     Ok(listener)
 }
 
 #[cfg(not(feature = "enclave"))]
-pub async fn get_vsock_client(port: u16, _: CID) -> Result<TcpStream, tokio::io::Error> {
-    TcpStream::connect(std::net::SocketAddr::new(
-        std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
-        port,
-    ))
-    .await
+fn get_local_ip(cid: CID) -> std::net::IpAddr {
+    use std::net::IpAddr;
+    let ip = match cid {
+        CID::Parent => std::net::Ipv4Addr::new(172, 20, 0, 8),
+        CID::Enclave => std::net::Ipv4Addr::new(172, 20, 0, 7),
+    };
+    IpAddr::V4(ip)
+}
+
+#[cfg(not(feature = "enclave"))]
+pub async fn get_vsock_client(port: u16, cid: CID) -> Result<TcpStream, tokio::io::Error> {
+    TcpStream::connect(std::net::SocketAddr::new(get_local_ip(cid), port)).await
 }
 
 #[cfg(not(feature = "enclave"))]

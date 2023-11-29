@@ -122,12 +122,10 @@ describe("POST data to enclave", () => {
       });
     const result = CBOR.decode(doc.data);
     expect(result).to.deep.equal({
-      Measurements: {
-        PCR0: "000",
-        PCR1: "000",
-        PCR2: "000",
-        PCR8: "000",
-      },
+        pcr0: "000",
+        pcr1: "000",
+        pcr2: "000",
+        pcr8: "000",
     });
   });
 
