@@ -47,6 +47,8 @@ hyper-rustls = { version = "0.24.1", default-features = false, features = ["http
 chrono-tz = { version = "0.8.3" }
 tower = { version = "0.4.13", features = ["util"] }
 tower-http = { version = "0.5.0", features = ["catch-panic"] }
+hickory-proto = "0.24.0"
+libc = "0.2.150"
 
 [dev-dependencies]
 tokio-test = "0.4.2"
