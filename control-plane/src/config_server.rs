@@ -334,10 +334,9 @@ async fn handle_acme_signing_request(
     acme_account_details: AcmeAccountDetails,
     cage_context: configuration::CageContext,
 ) -> Response<Body> {
-    log::info!("Received ACME signing request in config server");
     match sign_acme_payload(req, acme_account_details, cage_context).await {
         Ok(response) => response,
-        Err(_) => build_error_response("Failed to sign JWS request".to_string()),
+        Err(err) => build_error_response(format!("Failed to sign JWS request. Err: {}", err)),
     }
 }
 
@@ -368,6 +367,7 @@ async fn sign_acme_payload(
                 let order_payload: NewOrderPayload = serde_json::from_str(&jws_request.payload)?;
 
                 if !valid_order_identifiers(order_payload, cage_context) {
+                    log::error!("[ACME] Domain for order was not for valid Evervault Enclave domain. Rejecting signing request.");
                     return Ok(build_bad_request_response());
                 }
             };
@@ -392,7 +392,7 @@ async fn sign_acme_payload(
                         .map_err(ServerError::HyperHttp)
                 }
                 Err(err) => {
-                    log::error!("Failed to sign request: {}", err);
+                    log::error!("[ACME] Failed to sign request: {}", err);
                     Ok(build_error_response(
                         "Failed to sign JWS request".to_string(),
                     ))
@@ -406,10 +406,9 @@ async fn sign_acme_payload(
 }
 
 async fn handle_acme_jwk_request(acme_account_details: AcmeAccountDetails) -> Response<Body> {
-    log::info!("Recieved ACME JWK request in config server");
     match get_acme_jwk(acme_account_details).await {
         Ok(response) => response,
-        Err(_) => build_error_response("Failed to get JWK".to_string()),
+        Err(err) => build_error_response(format!("Failed to get JWK. Err: {}", err)),
     }
 }
 
@@ -429,19 +428,24 @@ fn valid_order_identifiers(
     payload: NewOrderPayload,
     cage_context: configuration::CageContext,
 ) -> bool {
-    let cage_base_domain = configuration::get_trusted_cert_base_domain();
+    let trusted_base_domains = configuration::get_trusted_cert_base_domains();
 
-    let cage_domain = format!(
-        "{}.{}.{}",
-        &cage_context.cage_name,
-        &cage_context.hyphenated_app_uuid(),
-        cage_base_domain
-    );
+    let valid_domains: Vec<String> = trusted_base_domains
+        .iter()
+        .map(|base_domain| {
+            format!(
+                "{}.{}.{}",
+                &cage_context.cage_name,
+                &cage_context.hyphenated_app_uuid(),
+                base_domain
+            )
+        })
+        .collect();
 
     payload
         .identifiers
         .into_iter()
-        .all(|identifier| identifier.value == cage_domain)
+        .all(|identifier| valid_domains.contains(&identifier.value))
 }
 
 fn build_success_response() -> Response<Body> {

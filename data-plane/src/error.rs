@@ -76,6 +76,8 @@ pub enum Error {
     AttestationRequestError(String),
     #[error("Request timed out in data plane after {0} seconds")]
     RequestTimeout(usize),
+    #[error("FromUtf8Error")]
+    FromUtf8Error(#[from] std::string::FromUtf8Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
