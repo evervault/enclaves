@@ -255,7 +255,7 @@ impl AcmeCertificateRetreiver {
                     Some(decrypted_certificate.to_certified_key(x509s, key)).transpose()
                 }
                 RenewalStrategy::SyncRenewal => {
-                    log::info!("[ACME] Certificate expires in the comming week. Should be renewed synchronously");
+                    log::info!("[ACME] Certificate expires in the coming week. Should be renewed synchronously");
                     Ok(None)
                 }
                 RenewalStrategy::NoRenewal => {
@@ -287,8 +287,8 @@ impl AcmeCertificateRetreiver {
             self.config_client.clone(),
         );
         if certificate_lock.write_and_check_persisted().await? {
-            let cert_domain = cage_context.get_trusted_cert_name();
-            let raw_acme_certificate = self.order_certificate(cert_domain, key.clone()).await?;
+            let cert_domains = cage_context.get_trusted_cert_domains();
+            let raw_acme_certificate = self.order_certificate(cert_domains, key.clone()).await?;
 
             let encrypted_raw_certificate =
                 Self::encrypt_certificate(&self.e3_client, &raw_acme_certificate).await?;
@@ -328,13 +328,14 @@ impl AcmeCertificateRetreiver {
     //Use all the acme libraries to order cert
     async fn order_certificate(
         &mut self,
-        domain: String,
+        domains: Vec<String>,
         key: PKey<Private>,
     ) -> Result<RawAcmeCertificate, AcmeError> {
         if self.acme_account.is_none() {
             self.acme_account = Some(self.init_acme_account().await?);
         };
 
+        log::info!("[ACME] Initializing acme account.");
         let acme_account = match self.acme_account {
             Some(ref acme_account) => acme_account.clone(),
             None => {
@@ -346,11 +347,20 @@ impl AcmeCertificateRetreiver {
 
         let mut order_builder = OrderBuilder::new(acme_account);
 
-        order_builder.add_dns_identifier(domain);
+        for domain in domains.iter() {
+            order_builder.add_dns_identifier(domain.to_string());
+        }
 
+        log::info!("[ACME] Creating order for trusted cert.");
         let order = order_builder.build().await?;
+
+        log::info!("[ACME] Fetching authorizations needed for order.");
         let authorizations = order.authorizations().await?;
 
+        log::info!(
+            "[ACME] {} authorizations needed. Storing challenges.",
+            authorizations.len()
+        );
         for auth in authorizations {
             let challenge = auth
                 .get_challenge("http-01")
@@ -385,13 +395,19 @@ impl AcmeCertificateRetreiver {
             auth.wait_done(Duration::from_secs(5), 5).await?;
         }
 
+        log::info!(
+            "[ACME] All authorizations validated. Continuing polling order to check if ready."
+        );
+
         let order_ready = order.wait_ready(Duration::from_secs(5), 5).await?;
+
+        log::info!("[ACME] Order is ready. Finalizing order.");
+
         let order_finalized = order_ready.finalize(key).await?;
 
-        let order_complete = order_finalized
-            .wait_done(Duration::from_secs(5), 5)
-            .await
-            .unwrap();
+        let order_complete = order_finalized.wait_done(Duration::from_secs(5), 5).await?;
+
+        log::info!("[ACME] Order is complete. Downloading certficate.");
 
         let cert_chain = order_complete
             .certificate()
@@ -400,7 +416,7 @@ impl AcmeCertificateRetreiver {
                 "Certificate not found in completed order".into(),
             ))?;
 
-        log::info!("Certificate received from ACME provider: {:?}", cert_chain);
+        log::info!("[ACME] Certificate received!");
 
         RawAcmeCertificate::from_x509s(cert_chain)
     }
