@@ -64,16 +64,54 @@ echo "* copying ifconfig to outputs *"
 echo "*******************************"
 cp ./ifconfig "$OUTPUT_PATH/net-tools-2.10"
 
+cd $PACKAGES_PATH
+# libmnl is required for nftables support which is required for NAT
+echo "************************"
+echo "* extracting libmnl *"
+echo "************************"
+tar -xvf libmnl-1.0.4.tar.bz2
+
+echo "************************"
+echo "* building libmnl *"
+echo "************************"
+cd libmnl-1.0.4
+./configure
+make
+make install
+
+cd $PACKAGES_PATH
+echo "************************"
+echo "* extracting iptables *"
+echo "************************"
+xz -d iptables-1.8.10.tar.xz ; tar -xf iptables-1.8.10.tar
+
+echo "************************"
+echo "* building iptables *"
+echo "************************"
+cd iptables-1.8.10 
+./configure --disable-shared --enable-static --disable-nftables 
+export CFLAGS='-static'
+export LDFLAGS='-static -dl'
+make 
+make install
+
+# Copy iptables binary to output directory
+echo "*******************************"
+echo "* copying iptables to outputs *"
+echo "*******************************"
+mkdir -p "$OUTPUT_PATH/iptables-1.8.10"
+cp -r ./iptables "$OUTPUT_PATH/iptables-1.8.10"
+
 # Create archive of static binaries and installer
 echo "******************************"
 echo "* creating installer archive *"
 echo "******************************"
 cp "$PACKAGES_PATH/installer.sh" "$OUTPUT_PATH/installer.sh"
 cd $OUTPUT_PATH
-tar -czf runtime-dependencies.tar.gz net-tools-2.10 runit-2.1.2 installer.sh
+tar -czf runtime-dependencies.tar.gz net-tools-2.10 runit-2.1.2 installer.sh iptables-1.8.10
 
-# Remove binaries outside of the archive
+# Remove binaries outside of the archive 
 echo "*****************************"
 echo "* removing unused artifacts *"
 echo "*****************************"
-rm -rf net-tools-2.10 runit-2.1.2 installer.sh
+rm -rf net-tools-2.10 runit-2.1.2 installer.sh iptables-1.8.10
