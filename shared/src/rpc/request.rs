@@ -1,6 +1,8 @@
 extern crate rmp_serde as rmps;
 extern crate serde;
 extern crate serde_derive;
+use std::net::Ipv4Addr;
+
 use crate::rpc::error::RpcError;
 
 use rmps::{Deserializer, Serializer};
@@ -8,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Deserialize, Serialize, Eq)]
 pub struct ExternalRequest {
-    pub ip: String,
+    pub ip: Ipv4Addr,
     pub data: Vec<u8>,
     pub port: u16,
 }

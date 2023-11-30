@@ -68,7 +68,7 @@ impl EgressProxy {
         check_allow_list(hostname.clone(), ip.to_string(), allowed_domains.clone())?;
 
         let external_request = ExternalRequest {
-            ip: ip.to_string(),
+            ip,
             data: customer_data.to_vec(),
             port,
         }
