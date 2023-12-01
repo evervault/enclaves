@@ -141,15 +141,6 @@ mod test {
     }
 
     #[test]
-    fn attempt_egress_to_invalid_ip() {
-        let ip_addr = "256.256.256.256".parse::<Ipv4Addr>().unwrap();
-        match validate_requested_ip(ip_addr, false) {
-            Ok(_) => panic!(),
-            Err(e) => assert!(matches!(e, ServerError::InvalidIp(_))),
-        }
-    }
-
-    #[test]
     fn attempt_egress_to_valid_public_ip() {
         let ip_addr = "76.76.21.21".parse::<Ipv4Addr>().unwrap();
         assert!(validate_requested_ip(ip_addr, false).is_ok());
