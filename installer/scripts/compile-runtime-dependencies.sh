@@ -64,6 +64,7 @@ echo "* copying ifconfig to outputs *"
 echo "*******************************"
 cp ./ifconfig "$OUTPUT_PATH/net-tools-2.10"
 
+
 cd $PACKAGES_PATH
 # libmnl is required for nftables support which is required for NAT
 echo "************************"
@@ -71,11 +72,28 @@ echo "* extracting libmnl *"
 echo "************************"
 tar -xvf libmnl-1.0.4.tar.bz2
 
+export CFLAGS='-static'
+export LDFLAGS='-static -dl'
+
 echo "************************"
 echo "* building libmnl *"
 echo "************************"
 cd libmnl-1.0.4
-./configure
+./configure --enable-static --disable-shared
+make
+make install
+
+cd $PACKAGES_PATH
+echo "************************"
+echo "* extracting libnftnl *"
+echo "************************"
+xz -d libnftnl-1.2.6.tar.xz ; tar -xf libnftnl-1.2.6.tar
+
+echo "************************"
+echo "* building libnftnl *"
+echo "************************"
+cd libnftnl-1.2.6
+./configure --enable-static --disable-shared
 make
 make install
 
@@ -89,11 +107,12 @@ echo "************************"
 echo "* building iptables *"
 echo "************************"
 cd iptables-1.8.10 
-./configure --disable-shared --enable-static --disable-nftables 
+./configure --disable-shared --enable-static
 export CFLAGS='-static'
 export LDFLAGS='-static -dl'
 make 
 make install
+
 
 # Copy iptables binary to output directory
 echo "*******************************"

@@ -19,6 +19,7 @@ if [ -z "$RUNIT_PATH" ]; then
   if [ -z "$RUNIT_PATH_POST_INSTALL" ]; then
     exit 2
   fi
+  cd ..
   echo "runit installed successfully"
 fi
 
