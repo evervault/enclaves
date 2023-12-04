@@ -11,8 +11,12 @@ pub use tcp::{TcpServer, TcpServerWithProxyProtocol};
 pub mod vsock;
 #[cfg(feature = "enclave")]
 use crate::ENCLAVE_CID;
+#[cfg(not(feature = "enclave"))]
+use crate::ENCLAVE_IP;
 #[cfg(feature = "enclave")]
 use crate::PARENT_CID;
+#[cfg(not(feature = "enclave"))]
+use crate::PARENT_IP;
 use async_trait::async_trait;
 use tokio::io::{AsyncRead, AsyncWrite};
 #[cfg(not(feature = "enclave"))]
@@ -76,12 +80,13 @@ pub async fn get_vsock_server_with_proxy_protocol(
 
 #[cfg(not(feature = "enclave"))]
 fn get_local_ip(cid: CID) -> std::net::IpAddr {
-    use std::net::IpAddr;
+    use std::net::Ipv4Addr;
+    // Local docker setup
     let ip = match cid {
-        CID::Parent => std::net::Ipv4Addr::new(172, 20, 0, 8),
-        CID::Enclave => std::net::Ipv4Addr::new(172, 20, 0, 7),
+        CID::Parent => PARENT_IP,
+        CID::Enclave => ENCLAVE_IP,
     };
-    IpAddr::V4(ip)
+    std::net::IpAddr::V4(ip.parse::<Ipv4Addr>().expect("Invalid IP address"))
 }
 
 #[cfg(not(feature = "enclave"))]

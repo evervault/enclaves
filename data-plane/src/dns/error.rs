@@ -5,10 +5,6 @@ use thiserror::Error;
 pub enum DNSError {
     #[error("{0}")]
     Io(#[from] std::io::Error),
-    #[error("{0}")]
-    DNSEncodeError(#[from] dns_message_parser::EncodeError),
-    #[error("{0}")]
-    DNSDecodeError(#[from] dns_message_parser::DecodeError),
     #[error("DNS query format error — no questions found")]
     DNSNoQuestionsFound,
     #[error("{0}")]

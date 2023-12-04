@@ -19,6 +19,8 @@ services:
     build:
       dockerfile: enclave.Dockerfile
     dns: 127.0.0.1
+    cap_add:
+      - NET_ADMIN
     ports:
       - "7777:7777"
       - "7779:7779"

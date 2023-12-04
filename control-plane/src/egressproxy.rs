@@ -1,6 +1,6 @@
 use crate::error::{Result, ServerError};
 use shared::rpc::request::ExternalRequest;
-use shared::server::egress::{check_allow_list, get_hostname, EgressDomains};
+use shared::server::egress::{check_allow_list, get_hostname, EgressDestinations};
 use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
 use shared::utils::pipe_streams;
@@ -56,7 +56,7 @@ impl EgressProxy {
 
     async fn handle_connection<T: AsyncReadExt + AsyncWriteExt + Unpin>(
         mut external_stream: T,
-        egress_domains: EgressDomains,
+        egress_destinations: EgressDestinations,
     ) -> Result<(u64, u64)> {
         log::debug!("Received request to egress proxy");
         let mut request_buffer = [0; 4096];
@@ -64,22 +64,26 @@ impl EgressProxy {
         let req = &request_buffer[..packet_size];
         let external_request = ExternalRequest::from_bytes(req.to_vec())?;
 
-        let connect_ip: Ipv4Addr =
-            match validate_requested_ip(&external_request.ip, *ALLOW_EGRESS_TO_INTERNAL_IPS) {
-                Ok(ip) => ip,
-                Err(e) => {
-                    let _ = external_stream.shutdown().await;
-                    return Err(e);
-                }
-            };
-
-        let hostname = get_hostname(external_request.data.clone())?;
-        if let Err(err) = check_allow_list(hostname.clone(), egress_domains) {
+        if let Err(e) = validate_requested_ip(external_request.ip, *ALLOW_EGRESS_TO_INTERNAL_IPS) {
             let _ = external_stream.shutdown().await;
-            log::info!("Blocking request to {hostname} - {err}");
+            return Err(e);
+        }
+
+        let hostname = get_hostname(external_request.data.clone()).ok();
+        if let Err(err) = check_allow_list(
+            hostname.clone(),
+            external_request.ip.to_string(),
+            egress_destinations,
+        ) {
+            let _ = external_stream.shutdown().await;
+            log::info!(
+                "Blocking request to hostname: {hostname:?} ip: {:?}  - {err}",
+                external_request.ip
+            );
             return Ok((0, 0));
         };
-        let mut remote_stream = TcpStream::connect((connect_ip, external_request.port)).await?;
+        let mut remote_stream =
+            TcpStream::connect((external_request.ip, external_request.port)).await?;
         remote_stream.write_all(&external_request.data).await?;
 
         let joined_streams = pipe_streams(external_stream, remote_stream).await?;
@@ -106,19 +110,12 @@ fn is_not_globally_reachable_ip(ip_addr: &Ipv4Addr) -> bool {
     }
 }
 
-fn validate_requested_ip(ip_addr: &str, allow_egress_to_internal: bool) -> Result<Ipv4Addr> {
-    match ip_addr.parse::<Ipv4Addr>() {
-        Ok(parsed_addr)
-            if is_not_globally_reachable_ip(&parsed_addr) && !allow_egress_to_internal =>
-        {
-            log::error!("Blocking request to internal IP");
-            Err(ServerError::IllegalInternalIp(parsed_addr))
-        }
-        Err(e) => {
-            log::error!("Failed to parse IP");
-            Err(ServerError::InvalidIp(e))
-        }
-        Ok(ip_addr) => Ok(ip_addr),
+fn validate_requested_ip(ip_addr: Ipv4Addr, allow_egress_to_internal: bool) -> Result<()> {
+    if is_not_globally_reachable_ip(&ip_addr) && !allow_egress_to_internal {
+        log::error!("Blocking request to internal IP");
+        Err(ServerError::IllegalInternalIp(ip_addr))
+    } else {
+        Ok(())
     }
 }
 
@@ -128,7 +125,7 @@ mod test {
 
     #[test]
     fn attempt_egress_to_private_ip_without_override() {
-        let ip_addr = "10.0.0.1";
+        let ip_addr = "10.0.0.1".parse::<Ipv4Addr>().unwrap();
         match validate_requested_ip(ip_addr, false) {
             Ok(_) => panic!(),
             Err(e) => {
@@ -139,34 +136,19 @@ mod test {
 
     #[test]
     fn attempt_egress_to_private_ip_with_override() {
-        let ip_addr = "10.0.0.1";
-        match validate_requested_ip(ip_addr, true) {
-            Ok(parsed_addr) => assert_eq!(ip_addr.parse::<Ipv4Addr>().unwrap(), parsed_addr),
-            Err(_) => panic!(),
-        }
-    }
-
-    #[test]
-    fn attempt_egress_to_invalid_ip() {
-        let ip_addr = "256.256.256.256";
-        match validate_requested_ip(ip_addr, false) {
-            Ok(_) => panic!(),
-            Err(e) => assert!(matches!(e, ServerError::InvalidIp(_))),
-        }
+        let ip_addr = "10.0.0.1".parse::<Ipv4Addr>().unwrap();
+        assert!(validate_requested_ip(ip_addr, true).is_ok());
     }
 
     #[test]
     fn attempt_egress_to_valid_public_ip() {
-        let ip_addr = "76.76.21.21";
-        match validate_requested_ip(ip_addr, false) {
-            Ok(parsed_addr) => assert_eq!(ip_addr.parse::<Ipv4Addr>().unwrap(), parsed_addr),
-            Err(_) => panic!(),
-        }
+        let ip_addr = "76.76.21.21".parse::<Ipv4Addr>().unwrap();
+        assert!(validate_requested_ip(ip_addr, false).is_ok());
     }
 
     #[test]
     fn attempt_egress_to_loopback() {
-        let ip_addr = "127.0.0.1";
+        let ip_addr = "127.0.0.1".parse::<Ipv4Addr>().unwrap();
         match validate_requested_ip(ip_addr, false) {
             Ok(_) => panic!(),
             Err(e) => assert!(matches!(e, ServerError::IllegalInternalIp(_))),
@@ -175,7 +157,7 @@ mod test {
 
     #[test]
     fn attempt_egress_to_link_local() {
-        let ip_addr = "169.254.0.1";
+        let ip_addr = "169.254.0.1".parse::<Ipv4Addr>().unwrap();
         match validate_requested_ip(ip_addr, false) {
             Ok(_) => panic!(),
             Err(e) => assert!(matches!(e, ServerError::IllegalInternalIp(_))),
@@ -184,7 +166,7 @@ mod test {
 
     #[test]
     fn attempt_egress_to_shared_address_space() {
-        let ip_addr = "100.64.0.2";
+        let ip_addr = "100.64.0.2".parse::<Ipv4Addr>().unwrap();
         match validate_requested_ip(ip_addr, false) {
             Ok(_) => panic!(),
             Err(e) => assert!(matches!(e, ServerError::IllegalInternalIp(_))),
@@ -193,7 +175,7 @@ mod test {
 
     #[test]
     fn attempt_egress_to_this_host() {
-        let ip_addr = "0.0.0.0";
+        let ip_addr = "0.0.0.0".parse::<Ipv4Addr>().unwrap();
         match validate_requested_ip(ip_addr, false) {
             Ok(_) => panic!(),
             Err(e) => assert!(matches!(e, ServerError::IllegalInternalIp(_))),

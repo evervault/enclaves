@@ -240,7 +240,6 @@ mod test {
             feature_context.trusted_headers,
             vec!["X-Error-Code".to_string()]
         );
-        assert_eq!(feature_context.egress.ports, vec![443, 8080]);
         assert!(feature_context.healthcheck.is_none());
         assert_eq!(
             feature_context.egress.allow_list.wildcard,
@@ -260,7 +259,6 @@ mod test {
         assert_eq!(feature_context.forward_proxy_protocol, true);
         let trusted_headers: Vec<String> = Vec::new();
         assert_eq!(feature_context.trusted_headers, trusted_headers);
-        assert_eq!(feature_context.egress.ports, vec![443, 8080]);
         assert_eq!(
             feature_context.egress.allow_list.wildcard,
             vec![".stripe.com".to_string()]
