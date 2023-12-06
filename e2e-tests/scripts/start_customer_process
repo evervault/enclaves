@@ -2,7 +2,7 @@
 CUSTOMER_PROCESS="$1"
 
 # Wait for environment to be placed in env faile before starting process
-while ! grep -q "EV_CAGE_INITIALIZED" /etc/customer-env;
+while ! grep -q "EV_INITIALIZED" /etc/customer-env;
 do 
     echo "Environment not ready, sleeping user process for one second";
     sleep 1;
