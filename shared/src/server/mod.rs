@@ -58,7 +58,7 @@ pub async fn get_vsock_server_with_proxy_protocol(
 
 pub enum CID {
     Parent,
-    Enclave,
+    Enclave
 }
 
 #[cfg(not(feature = "enclave"))]
@@ -81,6 +81,7 @@ pub async fn get_vsock_server_with_proxy_protocol(
 #[cfg(not(feature = "enclave"))]
 fn get_local_ip(cid: CID) -> std::net::IpAddr {
     use std::net::Ipv4Addr;
+
     // Local docker setup
     let ip = match cid {
         CID::Parent => PARENT_IP,
