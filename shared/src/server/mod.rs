@@ -17,6 +17,8 @@ use crate::ENCLAVE_IP;
 use crate::PARENT_CID;
 #[cfg(not(feature = "enclave"))]
 use crate::PARENT_IP;
+#[cfg(not(feature = "enclave"))]
+use crate::LOCAL_IP;
 use async_trait::async_trait;
 use tokio::io::{AsyncRead, AsyncWrite};
 #[cfg(not(feature = "enclave"))]
@@ -58,7 +60,8 @@ pub async fn get_vsock_server_with_proxy_protocol(
 
 pub enum CID {
     Parent,
-    Enclave
+    Enclave,
+    Local,
 }
 
 #[cfg(not(feature = "enclave"))]
@@ -86,6 +89,7 @@ fn get_local_ip(cid: CID) -> std::net::IpAddr {
     let ip = match cid {
         CID::Parent => PARENT_IP,
         CID::Enclave => ENCLAVE_IP,
+        CID::Local => LOCAL_IP,
     };
     std::net::IpAddr::V4(ip.parse::<Ipv4Addr>().expect("Invalid IP address"))
 }

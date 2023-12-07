@@ -20,6 +20,8 @@ pub const PARENT_CID: u32 = 3;
 pub const ENCLAVE_IP: &str = "172.20.0.7";
 #[cfg(not(feature = "enclave"))]
 pub const PARENT_IP: &str = "172.20.0.8";
+#[cfg(not(feature = "enclave"))]
+pub const LOCAL_IP: &str = "127.0.0.1";
 
 #[cfg(not(feature = "enclave"))]
 pub const TEST_EGRESS_IP: &str = "172.64.101.22";
