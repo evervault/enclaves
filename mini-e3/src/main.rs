@@ -1,14 +1,13 @@
-use hyper::{Request, Response};
+use hyper::{Request, Response, StatusCode};
 use http_body_util::Full;
 use shared::server::{get_vsock_server, Listener};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use bytes::Bytes;
 use hyper::server::conn::http1;
-use hyper::service::{service_fn};
+use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
-use serde::Deserialize;
 use std::convert::Infallible;
 use base64::{Engine as _, engine::{self, general_purpose}, alphabet};
+#[cfg(feature = "enclave")]
 use tokio_vsock::VsockStream;
 
 fn main() {
@@ -24,23 +23,25 @@ fn main() {
 async fn start_server() {
     println!("Staring Server");
 
-    let mut server = get_vsock_server(8001, shared::server::CID::Enclave)
+    #[cfg(feature = "enclave")]
+    let enclave_cid = shared::server::CID::Enclave;
+    #[cfg(not(feature = "enclave"))]
+    let enclave_cid = shared::server::CID::Local;
+
+    let mut server = get_vsock_server(8001, enclave_cid)
         .await
         .unwrap();
 
-
     loop {
         let stream = server.accept().await.unwrap();
-
-        // Use an adapter to access something implementing `tokio::io` traits as if they implement
-        // `hyper::rt` IO traits.
-        // let io = TokioIo::new(stream);
+        #[cfg(feature = "enclave")]
         let io: TokioIo<tokio_vsock::VsockStream> = TokioIo::new(stream);
-        // Spawn a tokio task to serve multiple connections concurrently
+    
+        #[cfg(not(feature = "enclave"))]
+        let io: TokioIo<tokio::net::TcpStream> = TokioIo::new(stream); 
+
         tokio::task::spawn(async move {
-            // Finally, we bind the incoming connection to our `hello` service
             if let Err(err) = http1::Builder::new()
-                // `service_fn` converts our function in a `Service`
                 .serve_connection(io, service_fn(hello))
                 .await
             {
@@ -51,5 +52,9 @@ async fn start_server() {
 }
 
 async fn hello(_: Request<impl hyper::body::Body>) -> Result<Response<Full<Bytes>>, Infallible> {
-    Ok(Response::new(Full::new(Bytes::from("Hello World!"))))
+    let mut response_body = Response::new(Full::<Bytes>::from("Request recieved \n"));
+    *response_body.status_mut() = StatusCode::OK;
+    let response = response_body;
+    
+    Ok(response)
 }
