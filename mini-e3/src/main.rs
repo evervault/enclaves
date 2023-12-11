@@ -13,36 +13,36 @@ fn main() {
 
 async fn start_server() {
     println!("Staring Server");
-    // let mut server = get_vsock_server(8001, shared::server::CID::Enclave)
-    //     .await
-    //     .unwrap();
-    // loop {
-    //     let mut buffer = [0;1024];
-    //     match server.accept().await {
-    //         Ok(mut stream) => {
-    //             match stream.read(&mut buffer).await {
-    //                 Ok(size) => {
-    //                     let incoming_data = String::from_utf8_lossy(&buffer[..size]);
-    //                     println!("recived data {:?}", incoming_data);
-    //                 },
-    //                 Err(e) => {
-    //                     println!("failed to read from socket; err = {:?}", e);
-    //                 }
-    //             }
+    let mut server = get_vsock_server(8001, shared::server::CID::Enclave)
+        .await
+        .unwrap();
+    loop {
+        let mut buffer = [0;1024];
+        match server.accept().await {
+            Ok(mut stream) => {
+                match stream.read(&mut buffer).await {
+                    Ok(size) => {
+                        let incoming_data = String::from_utf8_lossy(&buffer[..size]);
+                        println!("recived data {:?}", incoming_data);
+                    },
+                    Err(e) => {
+                        println!("failed to read from socket; err = {:?}", e);
+                    }
+                }
 
-    //             match stream.write(&buffer).await {
-    //                 Ok(size) => {
-    //                     println!("send data {:?}", size);
-    //                 },
-    //                 Err(e) => {
-    //                     println!("failed to write to socket; err = {:?}", e);
-    //                 }
-    //             }
-    //         },
-    //         Err(e) => {
-    //             println!("failed to accept client; error = {:?}", e);
-    //             continue;
-    //         }
-    //     };
-    // }
+                match stream.write(&buffer).await {
+                    Ok(size) => {
+                        println!("send data {:?}", size);
+                    },
+                    Err(e) => {
+                        println!("failed to write to socket; err = {:?}", e);
+                    }
+                }
+            },
+            Err(e) => {
+                println!("failed to accept client; error = {:?}", e);
+                continue;
+            }
+        };
+    }
 }
