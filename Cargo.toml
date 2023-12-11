@@ -1,4 +1,4 @@
 [workspace]
 resolver = "2"
-members = ["control-plane","data-plane","shared","crates/*","mini-e3"]
+members = ["shared","mini-e3"]
 exclude = ["./e2e-tests/mock-crypto"]

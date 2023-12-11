@@ -1,9 +1,13 @@
 FROM rust:1.74-bookworm
 
-COPY mini-e3/Cargo.toml /Cargo.toml
+ARG APP_NAME=mini-e3
+WORKDIR /app
 
-COPY mini-e3/src /src
-COPY shared .
-RUN cargo build --features enclave
+COPY Cargo.toml Cargo.toml
+COPY mini-e3 mini-e3
+COPY shared shared
 
-ENTRYPOINT [ "./target/release/mini-e3" ]
+RUN cargo build --features enclave --release
+
+# RUN cp target/release/${APP_NAME} /bin/mini-e3
+CMD ["/app/target/release/mini-e3"]
