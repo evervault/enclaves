@@ -1,4 +1,4 @@
-FROM rust:1.74-bookworm
+FROM rust:1.74-slim-bookworm
 
 ARG APP_NAME=mini-e3
 WORKDIR /app
