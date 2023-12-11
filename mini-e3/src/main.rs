@@ -12,12 +12,12 @@ fn main() {
 }
 
 async fn start_server() {
-    let mut server = get_vsock_server(8001, shared::server::CID::Local)
+    let mut server = get_vsock_server(8001, shared::server::CID::Enclave)
         .await
         .unwrap();
     loop {
         let mut buffer = [0;1024];
-        match server.accept().await {
+        match server.accept().await {   
             Ok(mut stream) => {
                 match stream.read(&mut buffer).await {
                     Ok(size) => {

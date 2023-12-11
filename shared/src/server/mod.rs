@@ -40,6 +40,7 @@ pub async fn get_vsock_server(port: u16, cid: CID) -> error::ServerResult<VsockS
     let context_id = match cid {
         CID::Parent => PARENT_CID,
         CID::Enclave => ENCLAVE_CID,
+        _ => PARENT_CID
     };
     let listener = VsockServer::bind(context_id, port.into()).await?;
     Ok(listener)
@@ -53,6 +54,7 @@ pub async fn get_vsock_server_with_proxy_protocol(
     let context_id = match cid {
         CID::Parent => PARENT_CID,
         CID::Enclave => ENCLAVE_CID,
+        _ => PARENT_CID
     };
     let listener = VsockServerWithProxyProtocol::bind(context_id, port.into()).await?;
     Ok(listener)
@@ -107,6 +109,7 @@ pub async fn get_vsock_client(port: u16, cid: CID) -> Result<VsockStream, tokio:
     let context_id = match cid {
         CID::Parent => PARENT_CID,
         CID::Enclave => ENCLAVE_CID,
+        _ => PARENT_CID,
     };
     VsockStream::connect(context_id, port.into()).await
 }
