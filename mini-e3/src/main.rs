@@ -9,6 +9,7 @@ use hyper_util::rt::TokioIo;
 use serde::Deserialize;
 use std::convert::Infallible;
 use base64::{Engine as _, engine::{self, general_purpose}, alphabet};
+use tokio_vsock::VsockStream;
 
 fn main() {
     println!("Hello, world!");
@@ -34,7 +35,7 @@ async fn start_server() {
         // Use an adapter to access something implementing `tokio::io` traits as if they implement
         // `hyper::rt` IO traits.
         // let io = TokioIo::new(stream);
-        let io: TokioIo<tokio::net::TcpStream> = TokioIo::new(stream);
+        let io: TokioIo<tokio_vsock::VsockStream> = TokioIo::new(stream);
         // Spawn a tokio task to serve multiple connections concurrently
         tokio::task::spawn(async move {
             // Finally, we bind the incoming connection to our `hello` service

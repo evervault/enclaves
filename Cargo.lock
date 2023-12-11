@@ -780,6 +780,7 @@ dependencies = [
  "serde",
  "shared",
  "tokio",
+ "tokio-vsock",
 ]
 
 [[package]]
