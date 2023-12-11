@@ -6,4 +6,4 @@ COPY mini-e3/src /src
 COPY shared .
 RUN cargo build --features enclave
 
-ENTRYPOINT [ "./mini-e3" ]
+ENTRYPOINT [ "./target/release/mini-e3" ]
