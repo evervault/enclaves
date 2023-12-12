@@ -11,10 +11,10 @@ config:
       arrivalRate: 5
       rampTo: 10
       name: Ramp up load
-    # - duration: 30
-      # arrivalRate: 10
-      # rampTo: 30
-      # name: Spike phase
+    - duration: 60
+      arrivalRate: 25
+      rampTo: 100
+      name: Spike phase
 scenarios:
   - flow:
     - get:
