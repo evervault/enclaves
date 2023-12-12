@@ -36,9 +36,9 @@ async fn start_server() {
         let stream = server.accept().await.unwrap();
         #[cfg(feature = "enclave")]
         let io: TokioIo<tokio_vsock::VsockStream> = TokioIo::new(stream);
-    
+
         #[cfg(not(feature = "enclave"))]
-        let io: TokioIo<tokio::net::TcpStream> = TokioIo::new(stream); 
+        let io: TokioIo<tokio::net::TcpStream> = TokioIo::new(stream);
 
         tokio::task::spawn(async move {
             if let Err(err) = http1::Builder::new()
@@ -55,6 +55,6 @@ async fn hello(_: Request<impl hyper::body::Body>) -> Result<Response<Full<Bytes
     let mut response_body = Response::new(Full::<Bytes>::from("Request recieved \n"));
     *response_body.status_mut() = StatusCode::OK;
     let response = response_body;
-    
+
     Ok(response)
 }
