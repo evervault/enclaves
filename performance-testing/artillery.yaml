@@ -1,17 +1,21 @@
 config:
   # This is a test server run by team Artillery
   # It's designed to be highly scalable
-  target: http://54.227.182.169:8008
+  target: http://ec2-54-227-182-169.compute-1.amazonaws.com:8008
   phases:
-    - duration: 60
+    - duration: 20
       arrivalRate: 1
       rampTo: 5
       name: Warm up phase
-    - duration: 60
+    - duration: 45
       arrivalRate: 5
       rampTo: 10
       name: Ramp up load
-    - duration: 30
-      arrivalRate: 10
-      rampTo: 30
-      name: Spike phase
+    # - duration: 30
+      # arrivalRate: 10
+      # rampTo: 30
+      # name: Spike phase
+scenarios:
+  - flow:
+    - get:
+        url: "/"
