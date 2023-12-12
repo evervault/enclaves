@@ -1,9 +1,15 @@
-FROM rust:1.74-bookworm
+FROM rust:1.74-slim-bookworm
 
-COPY mini-e3/Cargo.toml /Cargo.toml
+ARG APP_NAME=vsock-proxy
+WORKDIR /app
 
-COPY mini-e3/src /src
-COPY shared .
-RUN cargo build --features enclave
+COPY Cargo.toml Cargo.toml
+COPY crates/vsock-proxy vsock-proxy
+COPY shared shared
 
-ENTRYPOINT [ "./mini-e3" ]
+RUN apt-get update && apt-get install -y build-essential libssl-dev perl
+
+RUN cargo build --features enclave --release
+
+# RUN cp target/release/${APP_NAME} /bin/mini-e3
+CMD ["/app/target/release/mini-e3"]

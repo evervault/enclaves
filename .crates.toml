@@ -1,0 +1,2 @@
+[v1]
+"vsock-proxy 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = ["vsock-proxy"]
