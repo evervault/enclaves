@@ -172,6 +172,7 @@ mod health_check_tests {
     #[tokio::test]
     async fn test_cage_health_check_service() {
         // the data-plane status should error, as its not running
+        set_draining(false).await;
         let response = run_ecs_health_check_service(false).await.unwrap();
         assert_eq!(response.status(), 500);
         println!("deep response: {response:?}");
@@ -185,6 +186,7 @@ mod health_check_tests {
     #[tokio::test]
     async fn test_cage_health_check_service_with_skip_deep_set_to_true() {
         // the data-plane status should error, as its not running
+        set_draining(false).await;
         let response = run_ecs_health_check_service(true).await.unwrap();
         assert_eq!(response.status(), 200);
         println!("deep response: {response:?}");
