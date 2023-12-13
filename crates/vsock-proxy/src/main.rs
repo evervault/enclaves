@@ -3,8 +3,6 @@ use net::{Address, Error, Listener};
 use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 mod net;
 
-
-
 fn main() {
     let matches = Command::new("vsock-proxy")
         .about("A simple proxy to pipe traffic to/from a vsock connection")
