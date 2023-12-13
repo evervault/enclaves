@@ -1,27 +1,14 @@
 use crate::enclave_connection::get_connection_to_enclave;
 use crate::error::ServerError;
 use hyper::{Body, Request, Response};
-use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use shared::server::health::{HealthCheckLog, HealthCheckStatus};
 use shared::server::{error::ServerResult, tcp::TcpServer, Listener};
 use shared::{env_var_present_and_true, ENCLAVE_HEALTH_CHECK_PORT};
 use std::net::SocketAddr;
-use tokio::sync::Mutex;
+use std::sync::OnceLock;
 
-lazy_static! {
-    static ref IS_DRAINING: Mutex<bool> = Mutex::new(false);
-}
-
-pub async fn set_draining(value: bool) {
-    let mut bool_guard = IS_DRAINING.lock().await;
-    *bool_guard = value;
-}
-
-async fn is_draining() -> bool {
-    let bool_guard = IS_DRAINING.lock().await;
-    *bool_guard
-}
+pub static IS_DRAINING: OnceLock<bool> = OnceLock::new();
 
 pub const CONTROL_PLANE_HEALTH_CHECK_PORT: u16 = 3032;
 
@@ -39,7 +26,7 @@ struct CombinedHealthCheckLog {
 async fn run_ecs_health_check_service(
     skip_deep_healthcheck: bool,
 ) -> std::result::Result<Response<Body>, ServerError> {
-    if is_draining().await {
+    if IS_DRAINING.get().is_some() {
         let draining_log =
             HealthCheckLog::new(HealthCheckStatus::Err, Some("Cage is draining".into()));
 
@@ -172,7 +159,6 @@ mod health_check_tests {
     #[tokio::test]
     async fn test_cage_health_check_service() {
         // the data-plane status should error, as its not running
-        set_draining(false).await;
         let response = run_ecs_health_check_service(false).await.unwrap();
         assert_eq!(response.status(), 500);
         println!("deep response: {response:?}");
@@ -186,7 +172,6 @@ mod health_check_tests {
     #[tokio::test]
     async fn test_cage_health_check_service_with_skip_deep_set_to_true() {
         // the data-plane status should error, as its not running
-        set_draining(false).await;
         let response = run_ecs_health_check_service(true).await.unwrap();
         assert_eq!(response.status(), 200);
         println!("deep response: {response:?}");
@@ -200,7 +185,7 @@ mod health_check_tests {
     #[tokio::test]
     async fn test_cage_health_check_service_with_draining_set_to_true() {
         // the data-plane status should error, as its not running
-        set_draining(true).await;
+        IS_DRAINING.set(true).unwrap();
         let response = run_ecs_health_check_service(false).await.unwrap();
         assert_eq!(response.status(), 500);
         println!("deep response: {response:?}");
