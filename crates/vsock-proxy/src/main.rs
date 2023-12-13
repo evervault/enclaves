@@ -89,6 +89,8 @@ fn main() {
     let manager = Manager::new(destination_address.get_destination_address());
     let pool = Pool::new(manager, 16);
 
+    println!("Starting vsock-proxy");
+
     runtime.block_on(async move {
         let mut source = match source_address.into_listener().await {
             Ok(source_conn) => source_conn,
