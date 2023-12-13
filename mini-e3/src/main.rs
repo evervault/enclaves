@@ -23,6 +23,8 @@ fn main() {
 async fn start_server() {
     println!("Staring Server");
 
+    try_update_fd_limit(65535, 65535);
+
     #[cfg(feature = "enclave")]
     let enclave_cid = shared::server::CID::Enclave;
     #[cfg(not(feature = "enclave"))]
@@ -48,6 +50,18 @@ async fn start_server() {
                 println!("Error serving connection: {:?}", err);
             }
         });
+    }
+}
+
+fn try_update_fd_limit(soft_limit: u64, hard_limit: u64) {
+    if let Err(e) = rlimit::setrlimit(rlimit::Resource::NOFILE, soft_limit, hard_limit) {
+        eprintln!("Failed to set enclave file descriptor limit on startup - {e:?}");
+    }
+    if let Ok((soft_limit, hard_limit)) = rlimit::getrlimit(rlimit::Resource::NOFILE) {
+        println!(
+            "RLIMIT_NOFILE: SoftLimit={}, HardLimit={}",
+            soft_limit, hard_limit
+        );
     }
 }
 
