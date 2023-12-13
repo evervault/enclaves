@@ -1,11 +1,27 @@
 use crate::enclave_connection::get_connection_to_enclave;
 use crate::error::ServerError;
 use hyper::{Body, Request, Response};
+use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use shared::server::health::{HealthCheckLog, HealthCheckStatus};
 use shared::server::{error::ServerResult, tcp::TcpServer, Listener};
 use shared::{env_var_present_and_true, ENCLAVE_HEALTH_CHECK_PORT};
 use std::net::SocketAddr;
+use tokio::sync::Mutex;
+
+lazy_static! {
+    static ref IS_DRAINING: Mutex<bool> = Mutex::new(false);
+}
+
+pub async fn set_draining(value: bool) {
+    let mut bool_guard = IS_DRAINING.lock().await;
+    *bool_guard = value;
+}
+
+async fn is_draining() -> bool {
+    let bool_guard = IS_DRAINING.lock().await;
+    *bool_guard
+}
 
 pub const CONTROL_PLANE_HEALTH_CHECK_PORT: u16 = 3032;
 
@@ -13,7 +29,7 @@ pub struct HealthCheckServer {
     tcp_server: TcpServer,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 struct CombinedHealthCheckLog {
     control_plane: HealthCheckLog,
@@ -23,6 +39,23 @@ struct CombinedHealthCheckLog {
 async fn run_ecs_health_check_service(
     skip_deep_healthcheck: bool,
 ) -> std::result::Result<Response<Body>, ServerError> {
+    if is_draining().await {
+        let draining_log =
+            HealthCheckLog::new(HealthCheckStatus::Err, Some("Cage is draining".into()));
+
+        let combined_log = CombinedHealthCheckLog {
+            control_plane: draining_log.clone(),
+            data_plane: draining_log,
+        };
+
+        let combined_log_json = serde_json::to_string(&combined_log)?;
+
+        return Ok(Response::builder()
+            .status(500)
+            .header("Content-Type", "application/json")
+            .body(Body::from(combined_log_json))?);
+    };
+
     let control_plane = HealthCheckLog::new(
         HealthCheckStatus::Ok,
         Some("Control plane is running".into()),
@@ -159,6 +192,24 @@ mod health_check_tests {
         assert!(matches!(
             health_check_log.data_plane.status,
             HealthCheckStatus::Ignored
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_cage_health_check_service_with_draining_set_to_true() {
+        // the data-plane status should error, as its not running
+        set_draining(true).await;
+        let response = run_ecs_health_check_service(false).await.unwrap();
+        assert_eq!(response.status(), 500);
+        println!("deep response: {response:?}");
+        let health_check_log = response_to_health_check_log(response).await;
+        assert!(matches!(
+            health_check_log.data_plane.status,
+            HealthCheckStatus::Err
+        ));
+        assert!(matches!(
+            health_check_log.control_plane.status,
+            HealthCheckStatus::Err
         ));
     }
 

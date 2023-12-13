@@ -249,15 +249,7 @@ fn listen_for_shutdown_signal() {
 
         match rx.recv().await {
             Some(_) => {
-                log::info!("Received SIGTERM, deregistering.");
-                let sns_message = serde_json::to_string(&DeregistrationMessage::new(
-                    ec2_instance_id,
-                    cage_uuid,
-                    cage_name,
-                    app_uuid,
-                ))
-                .expect("Error deserialising SNS message with serde");
-                sns_client.publish_message(sns_message).await;
+                health::set_draining(true).await;
 
                 // Wait for 55 seconds before terminating enclave - ECS waits 60 seconds to kill the container
                 sleep(Duration::from_millis(55000)).await;
