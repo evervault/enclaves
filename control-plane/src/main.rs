@@ -14,7 +14,6 @@ use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 
 use control_plane::{
-    clients::sns::{ControlPlaneSnsClient, DeregistrationMessage},
     configuration::{self, Environment},
     e3proxy, enclave_connection,
     error::Result,
@@ -222,9 +221,6 @@ async fn tcp_server() -> Result<()> {
 fn listen_for_shutdown_signal() {
     log::debug!("Setting up listener for SIGTERM");
     tokio::spawn(async {
-        let sns_client =
-            ControlPlaneSnsClient::new(configuration::get_deregistration_topic_arn()).await;
-
         if configuration::get_rust_env() == Environment::Development {
             //Don't start ctrl-c listener is running locally
             return;
