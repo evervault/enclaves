@@ -1,7 +1,6 @@
 use clap::{Arg, Command};
-use deadpool::managed::Pool;
 use net::{Address, Error, Listener};
-use deadpool_tcp::{Manager, Pool};
+use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 mod net;
 
 
@@ -86,9 +85,6 @@ fn main() {
         .build()
         .expect("Failed to build tokio runtime");
 
-    let manager = Manager::new(destination_address.get_destination_address());
-    let pool = Pool::new(manager, 16);
-
     println!("Starting vsock-proxy");
 
     runtime.block_on(async move {
@@ -123,9 +119,7 @@ fn main() {
                 }
             };
 
-            let pool_clone = pool.clone();
             tokio::spawn(async move {
-                let destination = pool.get().await?;
                 let (mut client_reader, mut client_writer) = client.split();
                 let (mut destination_reader, mut destination_writer) = destination.get_mut().split();
 
