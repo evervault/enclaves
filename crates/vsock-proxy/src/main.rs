@@ -100,7 +100,10 @@ fn main() {
 
         loop {
             let mut accepted_conn = match source.accept().await {
-                Ok(source_conn) => source_conn,
+                Ok(source_conn) => {
+                    println!("Accepted connection from {:?}", source_conn.peer_addr());
+                    source_conn
+                }
                 Err(e) => {
                     eprintln!("Failed to accept incoming connection - {e}");
                     continue;
@@ -108,7 +111,10 @@ fn main() {
             };
 
             let mut destination = match destination_address.get_destination_connection().await {
-                Ok(dest_conn) => dest_conn,
+                Ok(dest_conn) => {
+                    println!("Connected to destination {:?}", dest_conn.peer_addr());
+                    dest_conn
+                }
                 Err(e) => {
                     eprintln!("Failed to create destination connection - {e}");
                     continue;
