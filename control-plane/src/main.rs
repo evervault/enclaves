@@ -226,11 +226,6 @@ fn listen_for_shutdown_signal() {
             return;
         };
 
-        let ec2_instance_id = configuration::get_ec2_instance_id();
-        let cage_uuid = configuration::get_cage_uuid();
-        let cage_name = configuration::get_cage_name();
-        let app_uuid = configuration::get_app_uuid();
-
         let (tx, mut rx) = mpsc::unbounded_channel();
 
         let _ = ctrlc::set_handler(move || {
