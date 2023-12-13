@@ -1,8 +1,10 @@
 use clap::{Arg, Command};
-
+use deadpool::managed::Pool;
+use net::{Address, Error, Listener};
+use deadpool_tcp::{Manager, Pool};
 mod net;
 
-use net::{Address, Error, Listener};
+
 
 fn main() {
     let matches = Command::new("vsock-proxy")
@@ -84,6 +86,9 @@ fn main() {
         .build()
         .expect("Failed to build tokio runtime");
 
+    let manager = Manager::new(destination_address.get_destination_address());
+    let pool = Pool::new(manager, 16);
+
     runtime.block_on(async move {
         let mut source = match source_address.into_listener().await {
             Ok(source_conn) => source_conn,
@@ -110,13 +115,19 @@ fn main() {
                 }
             };
 
+            let pool_clone = pool.clone();
+            tokio::spawn(async move {
+                let destination = pool.get().await?;
+                let (mut client_reader, mut client_writer) = client.split();
+                let (mut destination_reader, mut destination_writer) = destination.get_mut().split();
 
+                let client_to_server = io::copy(&mut client_reader, &mut destination_writer);
+                let server_to_client = io::copy(&mut destination_reader, &mut client_writer);
 
-            if let Err(e) =
-                tokio::io::copy_bidirectional(&mut accepted_conn, &mut destination).await
-            {
-                eprintln!("Error piping connections - {e}");
-            }
+                tokio::try_join!(client_to_server, server_to_client)?;
+
+                Ok(())
+            });
         }
     });
 }
