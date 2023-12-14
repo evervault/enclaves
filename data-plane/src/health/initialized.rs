@@ -10,6 +10,6 @@ impl InitializedHealthcheck for EnclaveEnvInitialized {
 
     fn is_initialized(&self) -> Result<bool, Self::Error> {
         let contents = std::fs::read_to_string("/etc/customer-env")?;
-        Ok(contents.contains("EV_CAGE_INITIALIZED"))
+        Ok(contents.contains("EV_INITIALIZED"))
     }
 }

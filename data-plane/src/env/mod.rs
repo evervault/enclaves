@@ -116,7 +116,7 @@ impl Environment {
             .append(true)
             .open("/etc/customer-env")?;
 
-        write!(file, "export EV_CAGE_INITIALIZED=true")?;
+        write!(file, "export EV_INITIALIZED=true")?;
 
         Ok(())
     }
