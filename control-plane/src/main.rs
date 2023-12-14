@@ -15,7 +15,6 @@ use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 
 use control_plane::{
-    clients::sns::{ControlPlaneSnsClient, DeregistrationMessage},
     configuration::{self, Environment},
     e3proxy, enclave_connection,
     error::Result,
@@ -254,18 +253,10 @@ async fn strip_proxy_protocol_and_pipe<
 fn listen_for_shutdown_signal() {
     log::debug!("Setting up listener for SIGTERM");
     tokio::spawn(async {
-        let sns_client =
-            ControlPlaneSnsClient::new(configuration::get_deregistration_topic_arn()).await;
-
         if configuration::get_rust_env() == Environment::Development {
             //Don't start ctrl-c listener is running locally
             return;
         };
-
-        let ec2_instance_id = configuration::get_ec2_instance_id();
-        let cage_uuid = configuration::get_cage_uuid();
-        let cage_name = configuration::get_cage_name();
-        let app_uuid = configuration::get_app_uuid();
 
         let (tx, mut rx) = mpsc::unbounded_channel();
 
@@ -281,15 +272,11 @@ fn listen_for_shutdown_signal() {
 
         match rx.recv().await {
             Some(_) => {
-                log::info!("Received SIGTERM, deregistering.");
-                let sns_message = serde_json::to_string(&DeregistrationMessage::new(
-                    ec2_instance_id,
-                    cage_uuid,
-                    cage_name,
-                    app_uuid,
-                ))
-                .expect("Error deserialising SNS message with serde");
-                sns_client.publish_message(sns_message).await;
+                if let Err(err) = health::IS_DRAINING.set(true) {
+                    log::error!(
+                        "Error setting IS_DRAINING to true: {err:?}, continuing to shutdown"
+                    );
+                }
 
                 // Wait for 55 seconds before terminating enclave - ECS waits 60 seconds to kill the container
                 sleep(Duration::from_millis(55000)).await;
