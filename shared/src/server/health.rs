@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HealthCheckLog {
     pub status: HealthCheckStatus,
     pub message: Option<String>,

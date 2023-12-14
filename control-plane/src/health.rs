@@ -6,6 +6,9 @@ use shared::server::health::{HealthCheckLog, HealthCheckStatus};
 use shared::server::{error::ServerResult, tcp::TcpServer, Listener};
 use shared::{env_var_present_and_true, ENCLAVE_HEALTH_CHECK_PORT};
 use std::net::SocketAddr;
+use std::sync::OnceLock;
+
+pub static IS_DRAINING: OnceLock<bool> = OnceLock::new();
 
 pub const CONTROL_PLANE_HEALTH_CHECK_PORT: u16 = 3032;
 
@@ -13,7 +16,7 @@ pub struct HealthCheckServer {
     tcp_server: TcpServer,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 struct CombinedHealthCheckLog {
     control_plane: HealthCheckLog,
@@ -23,6 +26,23 @@ struct CombinedHealthCheckLog {
 async fn run_ecs_health_check_service(
     skip_deep_healthcheck: bool,
 ) -> std::result::Result<Response<Body>, ServerError> {
+    if IS_DRAINING.get().is_some() {
+        let draining_log =
+            HealthCheckLog::new(HealthCheckStatus::Err, Some("Cage is draining".into()));
+
+        let combined_log = CombinedHealthCheckLog {
+            control_plane: draining_log.clone(),
+            data_plane: draining_log,
+        };
+
+        let combined_log_json = serde_json::to_string(&combined_log)?;
+
+        return Ok(Response::builder()
+            .status(500)
+            .header("Content-Type", "application/json")
+            .body(Body::from(combined_log_json))?);
+    };
+
     let control_plane = HealthCheckLog::new(
         HealthCheckStatus::Ok,
         Some("Control plane is running".into()),
@@ -159,6 +179,24 @@ mod health_check_tests {
         assert!(matches!(
             health_check_log.data_plane.status,
             HealthCheckStatus::Ignored
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_cage_health_check_service_with_draining_set_to_true() {
+        // the data-plane status should error, as its not running
+        IS_DRAINING.set(true).unwrap();
+        let response = run_ecs_health_check_service(false).await.unwrap();
+        assert_eq!(response.status(), 500);
+        println!("deep response: {response:?}");
+        let health_check_log = response_to_health_check_log(response).await;
+        assert!(matches!(
+            health_check_log.data_plane.status,
+            HealthCheckStatus::Err
+        ));
+        assert!(matches!(
+            health_check_log.control_plane.status,
+            HealthCheckStatus::Err
         ));
     }
 
