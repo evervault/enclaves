@@ -25,8 +25,9 @@ struct CombinedHealthCheckLog {
 
 async fn run_ecs_health_check_service(
     skip_deep_healthcheck: bool,
+    is_draining: bool,
 ) -> std::result::Result<Response<Body>, ServerError> {
-    if IS_DRAINING.get().is_some() {
+    if is_draining {
         let draining_log =
             HealthCheckLog::new(HealthCheckStatus::Err, Some("Cage is draining".into()));
 
@@ -127,7 +128,8 @@ impl HealthCheckServer {
                     .map(|value| value.as_bytes())
                 {
                     Some(b"ECS-HealthCheck") => {
-                        run_ecs_health_check_service(skip_deep_healthcheck).await
+                        let is_draining = IS_DRAINING.get().is_some();
+                        run_ecs_health_check_service(skip_deep_healthcheck, is_draining).await
                     }
                     _ => Response::builder()
                         .status(400)
@@ -159,7 +161,7 @@ mod health_check_tests {
     #[tokio::test]
     async fn test_cage_health_check_service() {
         // the data-plane status should error, as its not running
-        let response = run_ecs_health_check_service(false).await.unwrap();
+        let response = run_ecs_health_check_service(false, false).await.unwrap();
         assert_eq!(response.status(), 500);
         println!("deep response: {response:?}");
         let health_check_log = response_to_health_check_log(response).await;
@@ -172,7 +174,7 @@ mod health_check_tests {
     #[tokio::test]
     async fn test_cage_health_check_service_with_skip_deep_set_to_true() {
         // the data-plane status should error, as its not running
-        let response = run_ecs_health_check_service(true).await.unwrap();
+        let response = run_ecs_health_check_service(true, false).await.unwrap();
         assert_eq!(response.status(), 200);
         println!("deep response: {response:?}");
         let health_check_log = response_to_health_check_log(response).await;
@@ -186,7 +188,7 @@ mod health_check_tests {
     async fn test_cage_health_check_service_with_draining_set_to_true() {
         // the data-plane status should error, as its not running
         IS_DRAINING.set(true).unwrap();
-        let response = run_ecs_health_check_service(false).await.unwrap();
+        let response = run_ecs_health_check_service(false, true).await.unwrap();
         assert_eq!(response.status(), 500);
         println!("deep response: {response:?}");
         let health_check_log = response_to_health_check_log(response).await;
