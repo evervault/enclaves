@@ -1,6 +1,7 @@
 use crate::error::{Result, ServerError};
 use shared::rpc::request::ExternalRequest;
-use shared::server::egress::{check_allow_list, get_hostname, EgressDestinations};
+use shared::server::egress::check_ip_allow_list;
+use shared::server::egress::EgressDestinations;
 use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
 use shared::utils::pipe_streams;
@@ -69,17 +70,10 @@ impl EgressProxy {
             return Err(e);
         }
 
-        let hostname = get_hostname(external_request.data.clone()).ok();
-        if let Err(err) = check_allow_list(
-            hostname.clone(),
-            external_request.ip.to_string(),
-            egress_destinations,
-        ) {
+        if let Err(err) = check_ip_allow_list(external_request.ip.to_string(), egress_destinations)
+        {
             let _ = external_stream.shutdown().await;
-            log::info!(
-                "Blocking request to hostname: {hostname:?} ip: {:?}  - {err}",
-                external_request.ip
-            );
+            log::info!("Blocking request to ip: {:?}  - {err}", external_request.ip);
             return Ok((0, 0));
         };
         let mut remote_stream =

@@ -1,11 +1,12 @@
+use dns_parser::RData;
+use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde::Deserializer;
 use std::net::Ipv4Addr;
+use std::sync::Mutex;
+use std::time::Duration;
 use thiserror::Error;
-use tls_parser::{
-    nom::Finish, parse_tls_extensions, parse_tls_plaintext, TlsExtension, TlsMessage,
-    TlsMessageHandshake,
-};
+use ttl_cache::TtlCache;
 
 #[derive(Debug, Error)]
 pub enum EgressError {
@@ -19,38 +20,12 @@ pub enum EgressError {
     ClientHelloMissing,
     #[error("TLS extension missing")]
     ExtensionMissing,
+    #[error(transparent)]
+    DNSParseError(#[from] dns_parser::Error),
 }
 
-pub fn get_hostname(data: Vec<u8>) -> Result<String, EgressError> {
-    let (_, parsed_request) = parse_tls_plaintext(&data)
-        .finish()
-        .map_err(|tls_parse_err| EgressError::HostnameError(format!("{tls_parse_err:?}")))?;
-
-    let client_hello = match &parsed_request.msg[0] {
-        TlsMessage::Handshake(TlsMessageHandshake::ClientHello(client_hello)) => client_hello,
-        _ => return Err(EgressError::ClientHelloMissing),
-    };
-
-    let raw_extensions = match client_hello.ext {
-        Some(raw_extensions) => raw_extensions,
-        _ => return Err(EgressError::ExtensionMissing),
-    };
-    let mut destination = "".to_string();
-    let (_, extensions) = parse_tls_extensions(raw_extensions)
-        .finish()
-        .map_err(|tls_parse_err| EgressError::HostnameError(format!("{tls_parse_err:?}")))?;
-
-    for extension in extensions {
-        if let TlsExtension::SNI(sni_vec) = extension {
-            for (_, item) in sni_vec {
-                if let Ok(hostname) = std::str::from_utf8(item) {
-                    destination = hostname.to_string();
-                }
-            }
-        }
-    }
-    Ok(destination)
-}
+pub static ALLOWED_IPS_FROM_DNS: Lazy<Mutex<TtlCache<String, String>>> =
+    Lazy::new(|| Mutex::new(TtlCache::new(1000)));
 
 pub fn get_egress_allow_list_from_env() -> EgressDestinations {
     let domain_str = std::env::var("EV_EGRESS_ALLOW_LIST").unwrap_or("".to_string());
@@ -78,30 +53,69 @@ pub fn get_egress_allow_list(domain_str: String) -> EgressDestinations {
     }
 }
 
-pub fn check_allow_list(
-    hostname: Option<String>,
+pub fn check_domain_allow_list(
+    domain: String,
+    allowed_destinations: EgressDestinations,
+) -> Result<(), EgressError> {
+    let valid_wildcard = allowed_destinations
+        .wildcard
+        .iter()
+        .any(|wildcard| domain.ends_with(wildcard));
+    if allowed_destinations.exact.contains(&domain)
+        || allowed_destinations.allow_all
+        || valid_wildcard
+    {
+        Ok(())
+    } else {
+        Err(EgressError::EgressDomainNotAllowed(domain))
+    }
+}
+
+pub fn check_dns_packet(
+    packet: &[u8],
+    destinations: EgressDestinations,
+) -> Result<(), EgressError> {
+    let packet = dns_parser::Packet::parse(packet).unwrap();
+    packet
+        .questions
+        .iter()
+        .try_for_each(|q| check_domain_allow_list(q.qname.to_string(), destinations.clone()))
+}
+
+pub fn cache_dns_packet(packet: &[u8]) -> Result<(), EgressError> {
+    let packet = dns_parser::Packet::parse(packet)?;
+    let answers: &dns_parser::ResourceRecord<'_> = packet.answers.first().unwrap();
+    let ip = get_ip(&answers.data)?;
+    let mut cache = ALLOWED_IPS_FROM_DNS.lock().unwrap(); // TODO: handle error properly
+    cache.insert(
+        ip.to_string(),
+        answers.name.to_string(),
+        Duration::from_secs(answers.ttl.into()),
+    );
+    Ok(())
+}
+
+fn get_ip(data: &RData<'_>) -> Result<Ipv4Addr, EgressError> {
+    match data {
+        RData::A(ip) => Ok(ip.0),
+        _ => Err(EgressError::ClientHelloMissing),
+    }
+}
+
+pub fn check_ip_allow_list(
     ip: String,
     allowed_destinations: EgressDestinations,
 ) -> Result<(), EgressError> {
-    match hostname {
-        Some(domain) => {
-            let valid_wildcard = allowed_destinations
-                .wildcard
-                .iter()
-                .any(|wildcard| domain.ends_with(wildcard));
-            if allowed_destinations.exact.contains(&domain)
-                || allowed_destinations.allow_all
-                || valid_wildcard
-                || allowed_destinations.ips.contains(&ip)
-            {
-                Ok(())
-            } else {
-                Err(EgressError::EgressDomainNotAllowed(domain))
-            }
-        }
-        None if allowed_destinations.ips.contains(&ip) => Ok(()),
-        None => Err(EgressError::EgressIpNotAllowed(ip)),
+    if allowed_destinations.ips.contains(&ip) || check_dns_ip(ip.clone()) {
+        Ok(())
+    } else {
+        Err(EgressError::EgressIpNotAllowed(ip))
     }
+}
+
+fn check_dns_ip(ip: String) -> bool {
+    let binding = ALLOWED_IPS_FROM_DNS.lock().unwrap();
+    binding.get(&ip).is_some()
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize)]

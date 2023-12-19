@@ -1,4 +1,5 @@
 use crate::error::{Result, ServerError};
+use shared::server::egress::cache_dns_packet;
 use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
 use shared::DNS_PROXY_VSOCK_PORT;
@@ -73,8 +74,9 @@ impl DnsProxy {
         let mut response_buffer = [0; 512];
         socket.send(&request_buffer[..packet_size]).await?;
         let (amt, _) = socket.recv_from(&mut response_buffer).await?;
-
-        stream.write_all(&response_buffer[..amt]).await?;
+        let response_bytes = &response_buffer[..amt];
+        cache_dns_packet(&response_bytes)?;
+        stream.write_all(&response_bytes).await?;
         stream.flush().await?;
         Ok(())
     }
