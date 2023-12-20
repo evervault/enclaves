@@ -45,7 +45,7 @@ impl std::convert::From<AuthError> for Response<Body> {
         .to_string();
         Response::builder()
             .status(err.to_status())
-            .header("content-type", "appliction/json")
+            .header("content-type", "application/json")
             .header("content-length", body.len())
             .body(body.into())
             .expect("Failed to build auth error to response")
