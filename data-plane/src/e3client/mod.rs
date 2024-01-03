@@ -211,17 +211,17 @@ impl E3Api for E3Client {
 pub struct AuthRequest {
     pub team_uuid: String,
     pub app_uuid: String,
-    pub cage_uuid: Option<String>,
+    pub enclave_uuid: Option<String>,
 }
 
 impl E3Payload for AuthRequest {}
 
-impl<C: Deref<Target = crate::CageContext>> std::convert::From<C> for AuthRequest {
+impl<C: Deref<Target = crate::EnclaveContext>> std::convert::From<C> for AuthRequest {
     fn from(context: C) -> Self {
         Self {
             team_uuid: context.team_uuid().to_string(),
             app_uuid: context.app_uuid().to_string(),
-            cage_uuid: Some(context.cage_uuid().to_string()),
+            enclave_uuid: Some(context.enclave_uuid().to_string()),
         }
     }
 }

@@ -21,7 +21,7 @@ use tokio_rustls::rustls::sign::{self, CertifiedKey};
 use tokio_rustls::rustls::{Certificate, PrivateKey};
 
 use crate::server::error::{ServerResult, TlsError};
-use crate::CageContext;
+use crate::EnclaveContext;
 
 /// Shared struct to implement cert expiry checks and refreshes
 struct CertContainer {
@@ -86,7 +86,7 @@ impl CertContainer {
 /// resolver will attempt to serve a fresh, attestable cert with the nonce embedded in the attestation document
 /// Standard requests will be served a standard attestable cert as a fallback
 pub struct AttestableCertResolver {
-    cage_context: CageContext,
+    enclave_context: EnclaveContext,
     internal_ca: X509,
     internal_pk: PKey<Private>,
     // if we don't receive a nonce, we should return a generic, attestable cert
@@ -100,8 +100,8 @@ impl AttestableCertResolver {
         internal_pk: PKey<Private>,
         trusted_cert: Option<CertifiedKey>,
     ) -> ServerResult<Self> {
-        let cage_context = CageContext::get()?;
-        let hostnames = cage_context.get_cert_names();
+        let enclave_context = EnclaveContext::get()?;
+        let hostnames = enclave_context.get_cert_names();
         let (created_at, cert_and_key) = Self::generate_self_signed_cert(
             internal_ca.as_ref(),
             internal_pk.as_ref(),
@@ -110,7 +110,7 @@ impl AttestableCertResolver {
         )?;
 
         Ok(Self {
-            cage_context,
+            enclave_context,
             internal_ca,
             internal_pk,
             base_cert_container: CertContainer::new(created_at, cert_and_key),
@@ -300,7 +300,7 @@ impl AttestableCertResolver {
         // sni header should always be some given cages routing approach, fallback to default hostname
         let sni_header = server_name
             .map(String::from)
-            .unwrap_or_else(|| self.cage_context.get_cert_name());
+            .unwrap_or_else(|| self.enclave_context.get_cert_name());
         let maybe_decoded_nonce = server_name.and_then(Self::extract_nonce_from_servername);
         // if nonce is set, we need to generate a fresh cert
         if let Some(nonce) = maybe_decoded_nonce {
@@ -327,7 +327,7 @@ impl AttestableCertResolver {
         } else {
             // no nonce given - serve base cert
             self.base_cert_container.resolve_cert(|| {
-                let cage_hostnames = self.cage_context.get_cert_names();
+                let cage_hostnames = self.enclave_context.get_cert_names();
                 Self::generate_self_signed_cert(
                     self.internal_ca.as_ref(),
                     self.internal_pk.as_ref(),
@@ -398,9 +398,9 @@ mod tests {
     fn test_base_cert_used_without_nonce() {
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
-        let cage_uuid = "cage_123".to_string();
-        let cage_name = "my-sick-cage".to_string();
-        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name);
+        let enclave_uuid = "enclave_123".to_string();
+        let enclave_name = "my-sick-enclave".to_string();
+        let ctx = EnclaveContext::new(app_uuid, team_uuid, enclave_uuid, enclave_name);
         let server_name = Some(ctx.get_cert_name());
         test_cert_with_hostname(server_name);
     }
@@ -409,9 +409,9 @@ mod tests {
     fn test_base_cert_using_hyphen_without_nonce() {
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
-        let cage_uuid = "cage_123".to_string();
-        let cage_name = "my-sick-cage".to_string();
-        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name);
+        let enclave_uuid = "enclave_123".to_string();
+        let enclave_name = "my-sick-enclave".to_string();
+        let ctx = EnclaveContext::new(app_uuid, team_uuid, enclave_uuid, enclave_name);
         let server_name = Some(ctx.get_hyphenated_cert_name());
         test_cert_with_hostname(server_name);
     }
@@ -420,10 +420,10 @@ mod tests {
     fn test_base_cert_used_with_nonce() {
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
-        let cage_uuid = "cage_123".to_string();
-        let cage_name = "my-sick-cage".to_string();
-        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name);
-        CageContext::set(ctx.clone());
+        let enclave_uuid = "enclave_123".to_string();
+        let enclave_name = "my-sick-enclave".to_string();
+        let ctx = EnclaveContext::new(app_uuid, team_uuid, enclave_uuid, enclave_name);
+        EnclaveContext::set(ctx.clone());
         let server_name = Some(ctx.get_cert_name());
         let (cert, key) = generate_ca().unwrap();
         let test_trustable_cert = generate_end_cert();
@@ -458,20 +458,20 @@ mod tests {
     fn test_tld_is_correct_when_compiler_flag_is_set() {
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
-        let cage_uuid = "cage_123".to_string();
-        let cage_name = "a-cage".to_string();
-        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name);
+        let enclave_uuid = "enclave_123".to_string();
+        let enclave_name = "a-enclave".to_string();
+        let ctx = EnclaveContext::new(app_uuid, team_uuid, enclave_uuid, enclave_name);
         let hostname = ctx.get_cert_name();
         assert!(hostname.ends_with(".dev"));
     }
 
     #[test]
-    fn test_common_name_not_included_for_long_cage_name() {
+    fn test_common_name_not_included_for_long_enclave_name() {
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
-        let cage_uuid = "cage_123".to_string();
-        let cage_name = "a-sick-cage-that-has-a-very-long-name".to_string();
-        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name);
+        let enclave_uuid = "enclave_123".to_string();
+        let enclave_name = "a-sick-enclave-that-has-a-very-long-name".to_string();
+        let ctx = EnclaveContext::new(app_uuid, team_uuid, enclave_uuid, enclave_name);
         let hostname = ctx.get_cert_name();
 
         if cfg!(staging) {
@@ -499,12 +499,12 @@ mod tests {
     }
 
     #[test]
-    fn test_common_name_is_included_for_shorter_cage_name() {
+    fn test_common_name_is_included_for_shorter_enclave_name() {
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
-        let cage_uuid = "cage_123".to_string();
-        let cage_name = "my-sick-cage".to_string();
-        let ctx = CageContext::new(app_uuid, team_uuid, cage_uuid, cage_name);
+        let enclave_uuid = "enclave_123".to_string();
+        let enclave_name = "my-sick-enclave".to_string();
+        let ctx = EnclaveContext::new(app_uuid, team_uuid, enclave_uuid, enclave_name);
         let hostname = ctx.get_cert_name();
         if cfg!(staging) {
             assert!(hostname.ends_with(".dev"));

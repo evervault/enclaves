@@ -12,7 +12,7 @@ use tower::{Layer, Service};
 use crate::base_tls_client::ClientError;
 use crate::{
     e3client::{AuthRequest, E3Api},
-    CageContext,
+    EnclaveContext,
 };
 
 #[derive(Debug, Error)]
@@ -55,11 +55,11 @@ impl std::convert::From<AuthError> for Response<Body> {
 #[derive(Clone)]
 pub struct AuthLayer<T: E3Api + Send + Sync + 'static> {
     e3_client: Arc<T>,
-    context: Arc<CageContext>,
+    context: Arc<EnclaveContext>,
 }
 
 impl<T: E3Api + Send + Sync + 'static> AuthLayer<T> {
-    pub fn new(e3_client: Arc<T>, context: Arc<CageContext>) -> Self {
+    pub fn new(e3_client: Arc<T>, context: Arc<EnclaveContext>) -> Self {
         Self { e3_client, context }
     }
 }
@@ -79,7 +79,7 @@ impl<S, T: E3Api + Send + Sync + 'static> Layer<S> for AuthLayer<T> {
 #[derive(Clone)]
 pub struct AuthService<S, T: E3Api + Send + Sync + 'static> {
     e3_client: Arc<T>,
-    context: Arc<CageContext>,
+    context: Arc<EnclaveContext>,
     inner: S,
 }
 
@@ -138,7 +138,7 @@ fn compute_base64_sha512(input: impl AsRef<[u8]>) -> Vec<u8> {
 }
 
 pub async fn auth_request<
-    C: std::ops::Deref<Target = CageContext>,
+    C: std::ops::Deref<Target = EnclaveContext>,
     T: E3Api + Send + Sync + 'static,
 >(
     api_key: &HeaderValue,
@@ -192,7 +192,7 @@ mod test {
             .returning(|_, _| Ok(()));
 
         let api_key = HeaderValue::from_str("my-api-key").unwrap();
-        let context = CageContext::new(
+        let context = EnclaveContext::new(
             "team_uuid".into(),
             "app_uuid".into(),
             "cage_uuid".into(),
@@ -221,7 +221,7 @@ mod test {
                 }
             });
 
-        let context = CageContext::new(
+        let context = EnclaveContext::new(
             "team_uuid".into(),
             "app_uuid".into(),
             "cage_uuid".into(),
@@ -245,7 +245,7 @@ mod test {
                 ))
             });
 
-        let context = CageContext::new(
+        let context = EnclaveContext::new(
             "team_uuid".into(),
             "app_uuid".into(),
             "cage_uuid".into(),
@@ -271,7 +271,7 @@ mod test {
                 ))
             });
 
-        let context = CageContext::new(
+        let context = EnclaveContext::new(
             "team_uuid".into(),
             "app_uuid".into(),
             "cage_uuid".into(),

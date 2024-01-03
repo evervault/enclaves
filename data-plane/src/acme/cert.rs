@@ -16,7 +16,7 @@ use crate::{
     config_client::{ConfigClient, StorageConfigClientInterface},
     configuration,
     e3client::{CryptoRequest, CryptoResponse, E3Api, E3Client},
-    CageContext,
+    EnclaveContext,
 };
 
 use super::{
@@ -168,7 +168,7 @@ impl AcmeCertificateRetreiver {
     pub async fn get_or_create_cage_certificate(
         &mut self,
         key: PKey<Private>,
-        cage_context: CageContext,
+        enclave_context: EnclaveContext,
     ) -> Result<CertifiedKey, AcmeError> {
         log::info!("[ACME] Starting polling for ACME certificate");
         let mut persisted_certificate: Option<CertifiedKey> = None;
@@ -186,7 +186,7 @@ impl AcmeCertificateRetreiver {
             }
 
             if let Some(decrypted_certificate) = self
-                .fetch_and_decrypt_certificate(key.clone(), &cage_context)
+                .fetch_and_decrypt_certificate(key.clone(), &enclave_context)
                 .await?
             {
                 persisted_certificate = Some(decrypted_certificate);
@@ -201,7 +201,7 @@ impl AcmeCertificateRetreiver {
                     );
                     //No Lock on order - create lock - create Certificate - encrypt Certificate - persist Certificate - delete lock
                     let decrypted_certificate_maybe = self
-                        .create_certificate_and_persist_with_lock(key.clone(), &cage_context)
+                        .create_certificate_and_persist_with_lock(key.clone(), &enclave_context)
                         .await?;
                     persisted_certificate = decrypted_certificate_maybe;
                 }
@@ -226,7 +226,7 @@ impl AcmeCertificateRetreiver {
     async fn fetch_and_decrypt_certificate(
         &self,
         key: PKey<Private>,
-        cage_context: &CageContext,
+        enclave_context: &EnclaveContext,
     ) -> Result<Option<CertifiedKey>, AcmeError> {
         if let Some(raw_acme_certificate) =
             RawAcmeCertificate::from_storage(self.config_client.clone()).await?
@@ -243,12 +243,12 @@ impl AcmeCertificateRetreiver {
                     log::info!("[ACME] Certificate expires in the comming month. Should be renewed asynchronously");
                     let mut self_clone = self.clone();
                     let key_clone = key.clone();
-                    let cage_context_clone = cage_context.clone();
+                    let enclave_context_clone = enclave_context.clone();
                     tokio::spawn(async move {
                         let _ = self_clone
                             .create_certificate_and_persist_with_lock(
                                 key_clone,
-                                &cage_context_clone,
+                                &enclave_context_clone,
                             )
                             .await;
                     });
@@ -280,14 +280,14 @@ impl AcmeCertificateRetreiver {
     async fn create_certificate_and_persist_with_lock(
         &mut self,
         key: PKey<Private>,
-        cage_context: &CageContext,
+        enclave_context: &EnclaveContext,
     ) -> Result<Option<CertifiedKey>, AcmeError> {
         let certificate_lock = StorageLock::new_with_config_client(
             CERTIFICATE_LOCK_NAME.into(),
             self.config_client.clone(),
         );
         if certificate_lock.write_and_check_persisted().await? {
-            let cert_domains = cage_context.get_trusted_cert_domains();
+            let cert_domains = enclave_context.get_trusted_cert_domains();
             let raw_acme_certificate = self.order_certificate(cert_domains, key.clone()).await?;
 
             let encrypted_raw_certificate =

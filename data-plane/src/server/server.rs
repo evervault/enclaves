@@ -5,7 +5,7 @@ use super::tls::TlsServerBuilder;
 
 use crate::e3client::E3Client;
 use crate::server::http::{build_internal_error_response, parse};
-use crate::{CageContext, FeatureContext};
+use crate::{EnclaveContext, FeatureContext};
 
 use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
 
@@ -55,7 +55,7 @@ where
     }
 
     log::info!("TLS Server Created - Listening for new connections.");
-    let cage_context = match CageContext::get() {
+    let cage_context = match EnclaveContext::get() {
         Ok(context) => Arc::new(context),
         Err(e) => {
             log::error!("Failed to read cage context in data plane server - {e}");
@@ -157,13 +157,13 @@ async fn handle_websocket_request<S: AsyncRead + AsyncWrite + Unpin>(
     request: Request<Body>,
     tx_for_connection: &UnboundedSender<LogHandlerMessage>,
     remote_ip: Option<String>,
-    cage_context: Arc<CageContext>,
+    enclave_context: Arc<EnclaveContext>,
     feature_context: Arc<FeatureContext>,
     e3_client: Arc<E3Client>,
     port: u16,
 ) {
     let context_builder =
-        init_request_context(&request, cage_context.clone(), feature_context.clone());
+        init_request_context(&request, enclave_context.clone(), feature_context.clone());
     let api_key = match request
         .headers()
         .get("api-key")
@@ -177,7 +177,7 @@ async fn handle_websocket_request<S: AsyncRead + AsyncWrite + Unpin>(
             return;
         }
     };
-    if let Err(auth_err) = auth_request(api_key, cage_context, e3_client).await {
+    if let Err(auth_err) = auth_request(api_key, enclave_context, e3_client).await {
         let response_bytes = response_to_bytes(auth_err.into()).await;
         log_non_http_trx(tx_for_connection, false, remote_ip, Some(context_builder));
         let _ = stream.write_all(&response_bytes).await;
@@ -217,14 +217,14 @@ fn log_non_http_trx(
     remote_ip: Option<String>,
     context_builder: Option<TrxContextBuilder>,
 ) {
-    let cage_context = CageContext::get().unwrap();
+    let enclave_context = EnclaveContext::get().unwrap();
     let mut context_builder = match context_builder {
         Some(context_builder) => context_builder,
         _ => TrxContextBuilder::init_trx_context_with_cage_details(
-            &cage_context.cage_uuid,
-            &cage_context.cage_name,
-            &cage_context.app_uuid,
-            &cage_context.team_uuid,
+            &enclave_context.enclave_uuid,
+            &enclave_context.enclave_name,
+            &enclave_context.app_uuid,
+            &enclave_context.team_uuid,
             RequestType::TCP,
         ),
     };

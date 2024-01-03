@@ -1,6 +1,6 @@
+use crate::EnclaveContext;
 use crate::server::http::RemoteIp;
 use crate::utils::trx_handler::LogHandlerMessage;
-use crate::CageContext;
 use crate::FeatureContext;
 use hyper::http::{Request, Response};
 use hyper::{Body, HeaderMap};
@@ -13,14 +13,14 @@ use tower::{Layer, Service};
 
 #[derive(Clone)]
 pub struct ContextLogLayer {
-    context: Arc<CageContext>,
+    context: Arc<EnclaveContext>,
     feature_context: Arc<FeatureContext>,
     tx_sender: UnboundedSender<LogHandlerMessage>,
 }
 
 impl ContextLogLayer {
     pub fn new(
-        context: Arc<CageContext>,
+        context: Arc<EnclaveContext>,
         feature_context: Arc<FeatureContext>,
         tx_sender: UnboundedSender<LogHandlerMessage>,
     ) -> Self {
@@ -47,7 +47,7 @@ impl<S> Layer<S> for ContextLogLayer {
 
 #[derive(Clone)]
 pub struct ContextLogService<S> {
-    context: Arc<CageContext>,
+    context: Arc<EnclaveContext>,
     feature_context: Arc<FeatureContext>,
     tx_sender: UnboundedSender<LogHandlerMessage>,
     inner: S,
@@ -118,7 +118,7 @@ where
 }
 
 pub fn init_request_context<
-    C: std::ops::Deref<Target = CageContext>,
+    C: std::ops::Deref<Target = EnclaveContext>,
     F: std::ops::Deref<Target = FeatureContext>,
 >(
     req: &Request<Body>,
@@ -126,8 +126,8 @@ pub fn init_request_context<
     feature_context: F,
 ) -> TrxContextBuilder {
     let mut trx_ctx = TrxContextBuilder::init_trx_context_with_cage_details(
-        &cage_context.cage_uuid,
-        &cage_context.cage_name,
+        &cage_context.enclave_uuid,
+        &cage_context.enclave_name,
         &cage_context.app_uuid,
         &cage_context.team_uuid,
         RequestType::HTTP,
@@ -138,7 +138,7 @@ pub fn init_request_context<
 
 fn add_ev_ctx_to_headers(headers: &mut HeaderMap, trx_id: &str) {
     headers.insert(
-        "x-evervault-cage-ctx",
+        "x-evervault-ctx",
         hyper::header::HeaderValue::from_str(trx_id).expect("Infallible: txids are valid headers"),
     );
 }

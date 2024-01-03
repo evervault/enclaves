@@ -42,36 +42,36 @@ pub fn get_aws_region() -> aws_types::region::Region {
     aws_types::region::Region::new(region)
 }
 #[derive(Clone)]
-pub struct CageContext {
-    pub cage_uuid: String,
-    pub cage_version: String,
-    pub cage_name: String,
+pub struct EnclaveContext {
+    pub enclave_uuid: String,
+    pub enclave_version: String,
+    pub enclave_name: String,
     pub app_uuid: String,
     pub team_uuid: String,
 }
 
-impl CageContext {
+impl EnclaveContext {
     pub fn new(
-        cage_uuid: String,
-        cage_version: String,
-        cage_name: String,
+        enclave_uuid: String,
+        enclave_version: String,
+        enclave_name: String,
         app_uuid: String,
         team_uuid: String,
-    ) -> CageContext {
-        CageContext {
-            cage_uuid,
-            cage_version,
-            cage_name,
+    ) -> Self {
+        Self {
+            enclave_uuid,
+            enclave_version,
+            enclave_name,
             app_uuid,
             team_uuid,
         }
     }
 
-    pub fn from_env_vars() -> CageContext {
-        CageContext {
-            cage_uuid: get_cage_uuid(),
-            cage_version: get_cage_version(),
-            cage_name: get_cage_name(),
+    pub fn from_env_vars() -> Self {
+        Self {
+            enclave_uuid: get_enclave_uuid(),
+            enclave_version: get_enclave_version(),
+            enclave_name: get_enclave_name(),
             app_uuid: get_app_uuid(),
             team_uuid: get_team_uuid(),
         }
@@ -82,20 +82,20 @@ impl CageContext {
     }
 
     pub fn get_namespace_string(&self) -> String {
-        format!("{}/{}", self.hyphenated_app_uuid(), self.cage_name)
+        format!("{}/{}", self.hyphenated_app_uuid(), self.enclave_name)
     }
 }
 
-pub fn get_cage_uuid() -> String {
-    std::env::var("CAGE_UUID").expect("CAGE_UUID is not set in env")
+pub fn get_enclave_uuid() -> String {
+    std::env::var("ENCLAVE_UUID").expect("ENCLAVE_UUID is not set in env")
 }
 
-pub fn get_cage_version() -> String {
-    std::env::var("EV_CAGE_VERSION_ID").expect("EV_CAGE_VERSION_ID is not set in env")
+pub fn get_enclave_version() -> String {
+    std::env::var("EV_ENCLAVE_VERSION_ID").expect("EV_ENCLAVE_VERSION_ID is not set in env")
 }
 
-pub fn get_cage_name() -> String {
-    std::env::var("EV_CAGE_NAME").expect("EV_CAGE_NAME is not set in env")
+pub fn get_enclave_name() -> String {
+    std::env::var("EV_ENCLAVE_NAME").expect("EV_ENCLAVE_NAME is not set in env")
 }
 
 pub fn get_ec2_instance_id() -> String {

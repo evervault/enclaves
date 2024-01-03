@@ -40,8 +40,8 @@ pub struct TrxContext {
     response_code: Option<String>,
     #[builder(default)]
     status_group: Option<String>,
-    pub cage_name: String,
-    pub cage_uuid: String,
+    pub enclave_name: String,
+    pub enclave_uuid: String,
     pub app_uuid: String,
     pub team_uuid: String,
     #[builder(default)]
@@ -113,11 +113,11 @@ impl TrxContextBuilder {
     fn new(request_type: RequestType) -> TrxContextBuilder {
         let timestamp = get_iso_timestamp();
         let trx_id = format!("{}", TrxContextId::new());
-        let trx_type = "cage_trx".to_string();
+        let trx_type = "enclave_trx".to_string();
         TrxContextBuilder {
             txid: Some(trx_id),
             ts: Some(timestamp),
-            msg: Some("Cage Transaction Complete".to_string()),
+            msg: Some("Transaction Complete".to_string()),
             uri: None,
             r#type: Some(trx_type),
             request_method: None,
@@ -126,8 +126,8 @@ impl TrxContextBuilder {
             response_headers: None,
             response_code: None,
             status_group: None,
-            cage_name: None,
-            cage_uuid: None,
+            enclave_name: None,
+            enclave_uuid: None,
             team_uuid: None,
             app_uuid: None,
             n_decrypted_fields: None,
@@ -153,15 +153,15 @@ impl TrxContextBuilder {
     }
 
     pub fn init_trx_context_with_cage_details(
-        cage_uuid: &str,
-        cage_name: &str,
+        enclave_uuid: &str,
+        enclave_name: &str,
         app_uuid: &str,
         team_uuid: &str,
         request_type: RequestType,
     ) -> Self {
         let mut trx_context = Self::new(request_type);
-        trx_context.cage_uuid(cage_uuid.to_string());
-        trx_context.cage_name(cage_name.to_string());
+        trx_context.enclave_uuid(enclave_uuid.to_string());
+        trx_context.enclave_name(enclave_name.to_string());
         trx_context.app_uuid(app_uuid.to_string());
         trx_context.team_uuid(team_uuid.to_string());
         trx_context
@@ -266,8 +266,8 @@ impl TrxContextBuilder {
 
     pub fn can_build(&mut self) -> bool {
         self.uri.is_some()
-            & self.cage_name.is_some()
-            & self.cage_uuid.is_some()
+            & self.enclave_name.is_some()
+            & self.enclave_uuid.is_some()
             & self.request_method.is_some()
             & self.request_headers.is_some()
     }
@@ -500,17 +500,17 @@ mod test {
         let mut trx = TrxContextBuilder::new(super::RequestType::Websocket);
         trx.app_uuid("123".to_string());
         trx.team_uuid("123".to_string());
-        trx.cage_uuid("123".to_string());
-        trx.cage_name("name".to_string());
+        trx.enclave_uuid("123".to_string());
+        trx.enclave_name("name".to_string());
         trx.add_httparse_to_trx(true, Some(request), Some("1.1.1.1".to_string()));
         let log = trx.build().unwrap();
 
         let expected_log = TrxContext {
             txid: trx.txid.unwrap(),
             ts: trx.ts.unwrap(),
-            msg: "Cage Transaction Complete".to_owned(),
+            msg: "Transaction Complete".to_owned(),
             uri: Some("/hello".to_string()),
-            r#type: "cage_trx".to_string(),
+            r#type: "enclave_trx".to_string(),
             request_method: Some("GET".to_string()),
             remote_ip: Some("1.1.1.1".to_string()),
             request_headers: Some("{\"anotherTest\":\"value\",\"test\":\"value\"}".to_string()),
@@ -518,8 +518,8 @@ mod test {
             response_headers: None,
             response_code: None,
             status_group: None,
-            cage_name: "name".to_string(),
-            cage_uuid: "123".to_string(),
+            enclave_name: "name".to_string(),
+            enclave_uuid: "123".to_string(),
             app_uuid: "123".to_string(),
             team_uuid: "123".to_string(),
             n_decrypted_fields: None,
@@ -581,7 +581,7 @@ mod test {
         let path_and_query = "/path?query=true".to_string();
         let uri = Uri::builder()
             .scheme("https")
-            .authority("cages.evervault.com")
+            .authority("enclave.evervault.com")
             .path_and_query(&path_and_query)
             .build()
             .unwrap();
@@ -590,7 +590,7 @@ mod test {
         let path_only = "/path".to_string();
         let uri = Uri::builder()
             .scheme("https")
-            .authority("cages.evervault.com")
+            .authority("enclave.evervault.com")
             .path_and_query(&path_only)
             .build()
             .unwrap();
@@ -599,7 +599,7 @@ mod test {
         let base_path = "/".to_string();
         let uri = Uri::builder()
             .scheme("https")
-            .authority("cages.evervault.com")
+            .authority("enclave.evervault.com")
             .path_and_query(&base_path)
             .build()
             .unwrap();
@@ -608,7 +608,7 @@ mod test {
         let base_query = "?query".to_string();
         let uri = Uri::builder()
             .scheme("https")
-            .authority("cages.evervault.com")
+            .authority("enclave.evervault.com")
             .path_and_query(&base_query)
             .build()
             .unwrap();

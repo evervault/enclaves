@@ -150,8 +150,8 @@ pub mod requests {
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct ProvisionerContext {
-        pub cage_uuid: String,
-        pub cage_name: String,
+        pub enclave_uuid: String,
+        pub enclave_name: String,
         pub team_uuid: String,
         pub app_uuid: String,
     }

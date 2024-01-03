@@ -29,7 +29,7 @@ use std::str::FromStr;
 pub struct ConfigServer<T: StorageClientInterface> {
     cert_provisioner_client: CertProvisionerClient,
     storage_client: T,
-    cage_context: configuration::CageContext,
+    enclave_context: configuration::EnclaveContext,
     acme_account_details: AcmeAccountDetails,
 }
 
@@ -40,7 +40,7 @@ impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> 
         Self {
             cert_provisioner_client,
             storage_client,
-            cage_context: configuration::CageContext::from_env_vars(),
+            enclave_context: configuration::EnclaveContext::from_env_vars(),
             acme_account_details,
         }
     }
@@ -52,13 +52,13 @@ impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> 
 
         let cert_client = self.cert_provisioner_client.clone();
         let storage_client = self.storage_client.clone();
-        let cage_context = self.cage_context.clone();
+        let enclave_context = self.enclave_context.clone();
         let acme_account_details = self.acme_account_details.clone();
         log::info!("Running config server on {}", shared::ENCLAVE_CONFIG_PORT);
         loop {
             let cert_client = cert_client.clone();
             let storage_client = storage_client.clone();
-            let cage_context = cage_context.clone();
+            let enclave_context = enclave_context.clone();
             let acme_account_details = acme_account_details.clone();
             let connection = match enclave_conn.accept().await {
                 Ok(conn) => conn,
@@ -73,7 +73,7 @@ impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> 
             tokio::spawn(async move {
                 let cert_client = cert_client.clone();
                 let storage_client = storage_client.clone();
-                let cage_context = cage_context.clone();
+                let enclave_context = enclave_context.clone();
                 let acme_account_details = acme_account_details.clone();
                 let sent_response = server
                     .serve_connection(
@@ -81,14 +81,14 @@ impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> 
                         service_fn(|req: Request<Body>| {
                             let cert_client = cert_client.clone();
                             let storage_client = storage_client.clone();
-                            let cage_context = cage_context.clone();
+                            let enclave_context = enclave_context.clone();
                             let acme_account_details = acme_account_details.clone();
                             async move {
                                 handle_incoming_request(
                                     req,
                                     cert_client,
                                     storage_client,
-                                    cage_context,
+                                    enclave_context,
                                     acme_account_details,
                                 )
                                 .await
@@ -119,7 +119,7 @@ async fn handle_incoming_request<T: StorageClientInterface>(
     req: Request<Body>,
     cert_provisioner_client: CertProvisionerClient,
     storage_client: T,
-    cage_context: configuration::CageContext,
+    enclave_context: configuration::EnclaveContext,
     acme_account_details: AcmeAccountDetails,
 ) -> ServerResult<Response<Body>> {
     match ConfigServerPath::from_str(req.uri().path()) {
@@ -134,17 +134,17 @@ async fn handle_incoming_request<T: StorageClientInterface>(
         )
         .await),
         Ok(ConfigServerPath::PostTrxLogs) => {
-            Ok(handle_post_trx_logs_request(req, cage_context).await)
+            Ok(handle_post_trx_logs_request(req, enclave_context).await)
         }
         Ok(ConfigServerPath::AcmeSign) => {
-            Ok(handle_acme_signing_request(req, acme_account_details, cage_context).await)
+            Ok(handle_acme_signing_request(req, acme_account_details, enclave_context).await)
         }
         Ok(ConfigServerPath::AcmeJWK) => Ok(handle_acme_jwk_request(acme_account_details).await),
         Ok(ConfigServerPath::Storage) => match *req.method() {
-            Method::GET => handle_acme_storage_get_request(req, storage_client, cage_context).await,
-            Method::PUT => handle_acme_storage_put_request(req, storage_client, cage_context).await,
+            Method::GET => handle_acme_storage_get_request(req, storage_client, enclave_context).await,
+            Method::PUT => handle_acme_storage_put_request(req, storage_client, enclave_context).await,
             Method::DELETE => {
-                handle_acme_storage_delete_request(req, storage_client, cage_context).await
+                handle_acme_storage_delete_request(req, storage_client, enclave_context).await
             }
             _ => Ok(build_bad_request_response()),
         },
@@ -194,23 +194,23 @@ async fn get_token(
     Ok(res)
 }
 
-fn validate_trx_log(trx_log: &TrxContext, cage_context: &configuration::CageContext) -> bool {
-    trx_log.cage_uuid == cage_context.cage_uuid
-        && trx_log.cage_name == cage_context.cage_name
-        && trx_log.team_uuid == cage_context.team_uuid
-        && trx_log.app_uuid == cage_context.app_uuid
+fn validate_trx_log(trx_log: &TrxContext, context: &configuration::EnclaveContext) -> bool {
+    trx_log.enclave_uuid == context.enclave_uuid
+        && trx_log.enclave_name == context.enclave_name
+        && trx_log.team_uuid == context.team_uuid
+        && trx_log.app_uuid == context.app_uuid
 }
 
 async fn handle_post_trx_logs_request(
     req: Request<Body>,
-    cage_context: configuration::CageContext,
+    enclave_context: configuration::EnclaveContext,
 ) -> Response<Body> {
     log::debug!("Recieved request in config server to log transactions");
     let parsed_result: ServerResult<PostTrxLogsRequest> = parse_request(req).await;
     match parsed_result {
         Ok(log_body) => {
             log_body.trx_logs().into_iter().for_each(|trx| {
-                if validate_trx_log(&trx, &cage_context) {
+                if validate_trx_log(&trx, &enclave_context) {
                     trx.record_trx();
                 }
             });
@@ -226,12 +226,12 @@ async fn handle_post_trx_logs_request(
 async fn handle_acme_storage_get_request<T: StorageClientInterface>(
     req: Request<Body>,
     storage_client: T,
-    cage_context: configuration::CageContext,
+    enclave_context: configuration::EnclaveContext,
 ) -> ServerResult<Response<Body>> {
     let parsed_result: ServerResult<GetObjectRequest> = parse_request(req).await;
     match parsed_result {
         Ok(request_body) => {
-            let namespaced_key = namespace_key(request_body.key(), &cage_context);
+            let namespaced_key = namespace_key(request_body.key(), &enclave_context);
             log::info!(
                 "Received get request in config server for {}",
                 namespaced_key
@@ -271,12 +271,12 @@ async fn handle_acme_storage_get_request<T: StorageClientInterface>(
 async fn handle_acme_storage_put_request<T: StorageClientInterface>(
     req: Request<Body>,
     storage_client: T,
-    cage_context: configuration::CageContext,
+    enclave_context: configuration::EnclaveContext,
 ) -> ServerResult<Response<Body>> {
     let parsed_result: ServerResult<PutObjectRequest> = parse_request(req).await;
     match parsed_result {
         Ok(request_body) => {
-            let namespaced_key = namespace_key(request_body.key(), &cage_context);
+            let namespaced_key = namespace_key(request_body.key(), &enclave_context);
             log::info!(
                 "Received post request in config server for {}",
                 namespaced_key
@@ -303,12 +303,12 @@ async fn handle_acme_storage_put_request<T: StorageClientInterface>(
 async fn handle_acme_storage_delete_request<T: StorageClientInterface>(
     req: Request<Body>,
     storage_client: T,
-    cage_context: configuration::CageContext,
+    enclave_context: configuration::EnclaveContext,
 ) -> ServerResult<Response<Body>> {
     let parsed_result: ServerResult<DeleteObjectRequest> = parse_request(req).await;
     match parsed_result {
         Ok(request_body) => {
-            let namespaced_key = namespace_key(request_body.key(), &cage_context);
+            let namespaced_key = namespace_key(request_body.key(), &enclave_context);
             log::info!(
                 "Received delete request in config server for {}",
                 namespaced_key
@@ -332,9 +332,9 @@ async fn handle_acme_storage_delete_request<T: StorageClientInterface>(
 async fn handle_acme_signing_request(
     req: Request<Body>,
     acme_account_details: AcmeAccountDetails,
-    cage_context: configuration::CageContext,
+    enclave_context: configuration::EnclaveContext,
 ) -> Response<Body> {
-    match sign_acme_payload(req, acme_account_details, cage_context).await {
+    match sign_acme_payload(req, acme_account_details, enclave_context).await {
         Ok(response) => response,
         Err(err) => build_error_response(format!("Failed to sign JWS request. Err: {}", err)),
     }
@@ -343,7 +343,7 @@ async fn handle_acme_signing_request(
 async fn sign_acme_payload(
     req: Request<Body>,
     acme_account_details: AcmeAccountDetails,
-    cage_context: configuration::CageContext,
+    enclave_context: configuration::EnclaveContext,
 ) -> ServerResult<Response<Body>> {
     let parsed_result: ServerResult<JwsRequest> = parse_request(req).await;
 
@@ -366,7 +366,7 @@ async fn sign_acme_payload(
             if jws_request.url.contains("/newOrder") {
                 let order_payload: NewOrderPayload = serde_json::from_str(&jws_request.payload)?;
 
-                if !valid_order_identifiers(order_payload, cage_context) {
+                if !valid_order_identifiers(order_payload, enclave_context) {
                     log::error!("[ACME] Domain for order was not for valid Evervault Enclave domain. Rejecting signing request.");
                     return Ok(build_bad_request_response());
                 }
@@ -426,7 +426,7 @@ async fn get_acme_jwk(acme_account_details: AcmeAccountDetails) -> ServerResult<
 
 fn valid_order_identifiers(
     payload: NewOrderPayload,
-    cage_context: configuration::CageContext,
+    enclave_context: configuration::EnclaveContext,
 ) -> bool {
     let trusted_base_domains = configuration::get_trusted_cert_base_domains();
 
@@ -435,8 +435,8 @@ fn valid_order_identifiers(
         .map(|base_domain| {
             format!(
                 "{}.{}.{}",
-                &cage_context.cage_name,
-                &cage_context.hyphenated_app_uuid(),
+                &enclave_context.enclave_name,
+                &enclave_context.hyphenated_app_uuid(),
                 base_domain
             )
         })
@@ -473,8 +473,8 @@ fn build_error_response(body_msg: String) -> Response<Body> {
         .expect("Infallible")
 }
 
-fn namespace_key(key: String, cage_context: &configuration::CageContext) -> String {
-    format!("{}/{}", cage_context.get_namespace_string(), key)
+fn namespace_key(key: String, enclave_context: &configuration::EnclaveContext) -> String {
+    format!("{}/{}", enclave_context.get_namespace_string(), key)
 }
 
 async fn parse_request<T: DeserializeOwned>(req: Request<Body>) -> ServerResult<T> {
@@ -493,9 +493,9 @@ mod tests {
     use mockall::predicate::eq;
     use storage_client_interface::StorageClientError;
 
-    fn get_cage_context() -> configuration::CageContext {
-        configuration::CageContext::new(
-            "cage_123".to_string(),
+    fn get_enclave_context() -> configuration::EnclaveContext {
+        configuration::EnclaveContext::new(
+            "enclave_123".to_string(),
             "v1".to_string(),
             "test-me".to_string(),
             "app_123".to_string(),
@@ -515,12 +515,12 @@ mod tests {
             .body(req_body)
             .unwrap();
 
-        let cage_context = get_cage_context();
+        let enclave_context = get_enclave_context();
 
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.hyphenated_app_uuid(),
-            cage_context.cage_name,
+            enclave_context.hyphenated_app_uuid(),
+            enclave_context.enclave_name,
             key
         );
 
@@ -529,7 +529,7 @@ mod tests {
             .with(eq(expected_key))
             .returning(move |_| Ok(Some("super_secret".to_string())));
 
-        let result = handle_acme_storage_get_request(req, mock_storage_client, cage_context).await;
+        let result = handle_acme_storage_get_request(req, mock_storage_client, enclave_context).await;
 
         assert!(result.is_ok());
         assert!(result.unwrap().status().is_success());
@@ -547,12 +547,12 @@ mod tests {
             .body(req_body)
             .unwrap();
 
-        let cage_context = get_cage_context();
+        let enclave_context = get_enclave_context();
 
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.hyphenated_app_uuid(),
-            cage_context.cage_name,
+            enclave_context.hyphenated_app_uuid(),
+            enclave_context.enclave_name,
             key
         );
 
@@ -565,7 +565,7 @@ mod tests {
                 ))
             });
 
-        let result = handle_acme_storage_get_request(req, mock_storage_client, cage_context).await;
+        let result = handle_acme_storage_get_request(req, mock_storage_client, enclave_context).await;
 
         assert!(result.is_ok());
         assert!(result.unwrap().status().is_server_error());
@@ -586,12 +586,12 @@ mod tests {
             .body(req_body)
             .unwrap();
 
-        let cage_context = get_cage_context();
+        let enclave_context = get_enclave_context();
 
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.hyphenated_app_uuid(),
-            cage_context.cage_name,
+            enclave_context.hyphenated_app_uuid(),
+            enclave_context.enclave_name,
             key
         );
 
@@ -600,7 +600,7 @@ mod tests {
             .with(eq(expected_key), eq(object))
             .returning(move |_, _| Ok(()));
 
-        let result = handle_acme_storage_put_request(req, mock_storage_client, cage_context).await;
+        let result = handle_acme_storage_put_request(req, mock_storage_client, enclave_context).await;
 
         assert!(result.is_ok());
         assert!(result.unwrap().status().is_success());
@@ -621,12 +621,12 @@ mod tests {
             .body(req_body)
             .unwrap();
 
-        let cage_context = get_cage_context();
+        let enclave_context = get_enclave_context();
 
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.hyphenated_app_uuid(),
-            cage_context.cage_name,
+            enclave_context.hyphenated_app_uuid(),
+            enclave_context.enclave_name,
             key
         );
 
@@ -639,7 +639,7 @@ mod tests {
                 ))
             });
 
-        let result = handle_acme_storage_put_request(req, mock_storage_client, cage_context).await;
+        let result = handle_acme_storage_put_request(req, mock_storage_client, enclave_context).await;
 
         assert!(result.is_ok());
         assert!(result.unwrap().status().is_server_error());
@@ -657,12 +657,12 @@ mod tests {
             .body(req_body)
             .unwrap();
 
-        let cage_context = get_cage_context();
+        let enclave_context = get_enclave_context();
 
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.hyphenated_app_uuid(),
-            cage_context.cage_name,
+            enclave_context.hyphenated_app_uuid(),
+            enclave_context.enclave_name,
             key
         );
 
@@ -672,7 +672,7 @@ mod tests {
             .returning(move |_| Ok(()));
 
         let result =
-            handle_acme_storage_delete_request(req, mock_storage_client, cage_context).await;
+            handle_acme_storage_delete_request(req, mock_storage_client, enclave_context).await;
 
         assert!(result.is_ok());
         assert!(result.unwrap().status().is_success());
@@ -690,12 +690,12 @@ mod tests {
             .body(req_body)
             .unwrap();
 
-        let cage_context = get_cage_context();
+        let enclave_context = get_enclave_context();
 
         let expected_key = format!(
             "{}/{}/{}",
-            cage_context.hyphenated_app_uuid(),
-            cage_context.cage_name,
+            enclave_context.hyphenated_app_uuid(),
+            enclave_context.enclave_name,
             key
         );
 
@@ -709,7 +709,7 @@ mod tests {
             });
 
         let result =
-            handle_acme_storage_delete_request(req, mock_storage_client, cage_context).await;
+            handle_acme_storage_delete_request(req, mock_storage_client, enclave_context).await;
 
         assert!(result.is_ok());
         assert!(result.unwrap().status().is_server_error());
@@ -717,7 +717,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_acme_signing_request_success() {
-        let cage_context = get_cage_context();
+        let enclave_context = get_enclave_context();
         let acme_account_details = AcmeAccountDetails {
             account_ec_key: helpers::gen_ec_private_key().unwrap(),
             eab_config: None,
@@ -739,7 +739,7 @@ mod tests {
                 .body(req_body)
                 .unwrap(),
             acme_account_details,
-            cage_context,
+            enclave_context,
         )
         .await;
 
@@ -748,7 +748,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_acme_signing_request_bad_request_new_order() {
-        let cage_context = get_cage_context();
+        let enclave_context = get_enclave_context();
         let acme_account_details = AcmeAccountDetails {
             account_ec_key: helpers::gen_ec_private_key().unwrap(),
             eab_config: None,
@@ -779,7 +779,7 @@ mod tests {
                 .body(req_body)
                 .unwrap(),
             acme_account_details,
-            cage_context,
+            enclave_context,
         )
         .await;
 
@@ -788,24 +788,28 @@ mod tests {
 
     #[test]
     fn test_validate_new_order_valid() {
-        let cage_context = get_cage_context();
+        let enclave_context = get_enclave_context();
+        #[cfg(not(staging))]
+        let base_domain = "cage.evervault.com";
+        #[cfg(staging)]
+        let base_domain = "cage.evervault.dev";
         let payload = NewOrderPayload {
             identifiers: vec![Identifier {
                 r#type: "dns".to_string(),
                 value: format!(
-                    "{}.{}.cage.evervault.com",
-                    cage_context.cage_name,
-                    cage_context.app_uuid.replace('_', "-")
+                    "{}.{}.{base_domain}",
+                    enclave_context.enclave_name,
+                    enclave_context.app_uuid.replace('_', "-")
                 ),
             }],
         };
 
-        assert!(valid_order_identifiers(payload, cage_context));
+        assert!(valid_order_identifiers(payload, enclave_context));
     }
 
     #[test]
     fn test_validate_new_order_invalid() {
-        let cage_context = get_cage_context();
+        let enclave_context = get_enclave_context();
         let payload = NewOrderPayload {
             identifiers: vec![Identifier {
                 r#type: "dns".to_string(),
@@ -813,12 +817,12 @@ mod tests {
             }],
         };
 
-        assert!(!valid_order_identifiers(payload, cage_context));
+        assert!(!valid_order_identifiers(payload, enclave_context));
     }
 
     #[test]
     fn test_validate_new_order_multiple_domains_invalid() {
-        let cage_context = get_cage_context();
+        let enclave_context = get_enclave_context();
         let payload = NewOrderPayload {
             identifiers: vec![
                 Identifier {
@@ -829,13 +833,13 @@ mod tests {
                     r#type: "dns".to_string(),
                     value: format!(
                         "{}.{}.cage.evervault.com",
-                        cage_context.cage_name,
-                        cage_context.app_uuid.replace('_', "-")
+                        enclave_context.enclave_name,
+                        enclave_context.app_uuid.replace('_', "-")
                     ),
                 },
             ],
         };
 
-        assert!(!valid_order_identifiers(payload, cage_context));
+        assert!(!valid_order_identifiers(payload, enclave_context));
     }
 }
