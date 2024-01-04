@@ -369,15 +369,16 @@ mod tests {
         };
     }
 
-    fn test_cert_with_hostname(server_name: Option<String>) {
+    fn test_cert_with_hostname(server_name: String) {
         let (cert, key) = generate_ca().unwrap();
-        let test_trustable_cert = generate_end_cert();
+        let test_trustable_cert = generate_end_cert(&server_name);
+        let sni_hostname = Some(server_name.clone());
         let resolver = AttestableCertResolver::new(cert, key, Some(test_trustable_cert)).unwrap();
         let first_cert = resolver
-            .resolve_cert_using_sni(server_name.as_deref())
+            .resolve_cert_using_sni(sni_hostname.as_deref())
             .unwrap();
         let second_cert = resolver
-            .resolve_cert_using_sni(server_name.as_deref())
+            .resolve_cert_using_sni(sni_hostname.as_deref())
             .unwrap();
 
         let first_x509 = parse_x509_from_rustls_certified_key(&first_cert);
@@ -386,7 +387,7 @@ mod tests {
         assert_eq!(get_digest!(&first_x509), get_digest!(&second_x509));
 
         // assert that base cert will only be generated for the cage context hostname regardless of sni
-        let new_server_name = Some(format!("new-{}", server_name.unwrap()));
+        let new_server_name = Some(format!("new-{}", server_name));
         let cert_with_diff_sni = resolver
             .resolve_cert_using_sni(new_server_name.as_deref())
             .unwrap();
@@ -401,8 +402,7 @@ mod tests {
         let enclave_uuid = "enclave_123".to_string();
         let enclave_name = "my-sick-enclave".to_string();
         let ctx = EnclaveContext::new(app_uuid, team_uuid, enclave_uuid, enclave_name);
-        let server_name = Some(ctx.get_cert_name());
-        test_cert_with_hostname(server_name);
+        test_cert_with_hostname(ctx.get_cert_name());
     }
 
     #[test]
@@ -412,8 +412,7 @@ mod tests {
         let enclave_uuid = "enclave_123".to_string();
         let enclave_name = "my-sick-enclave".to_string();
         let ctx = EnclaveContext::new(app_uuid, team_uuid, enclave_uuid, enclave_name);
-        let server_name = Some(ctx.get_hyphenated_cert_name());
-        test_cert_with_hostname(server_name);
+        test_cert_with_hostname(ctx.get_hyphenated_cert_name());
     }
 
     #[test]
@@ -424,9 +423,10 @@ mod tests {
         let enclave_name = "my-sick-enclave".to_string();
         let ctx = EnclaveContext::new(app_uuid, team_uuid, enclave_uuid, enclave_name);
         EnclaveContext::set(ctx.clone());
-        let server_name = Some(ctx.get_cert_name());
+        let hostname = ctx.get_cert_name();
+        let server_name = Some(hostname.clone());
         let (cert, key) = generate_ca().unwrap();
-        let test_trustable_cert = generate_end_cert();
+        let test_trustable_cert = generate_end_cert(&hostname);
         let resolver = AttestableCertResolver::new(cert, key, Some(test_trustable_cert)).unwrap();
         let first_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
@@ -482,7 +482,7 @@ mod tests {
 
         let server_name = Some(hostname.clone());
         let (cert, key) = generate_ca().unwrap();
-        let test_trustable_cert = generate_end_cert();
+        let test_trustable_cert = generate_end_cert(&hostname);
         let resolver = AttestableCertResolver::new(cert, key, Some(test_trustable_cert)).unwrap();
         let first_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
@@ -514,7 +514,7 @@ mod tests {
 
         let server_name = Some(hostname.clone());
         let (cert, key) = generate_ca().unwrap();
-        let test_trustable_cert = generate_end_cert();
+        let test_trustable_cert = generate_end_cert(&hostname);
         let resolver = AttestableCertResolver::new(cert, key, Some(test_trustable_cert)).unwrap();
         let first_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
@@ -532,16 +532,14 @@ mod tests {
         assert!(final_name_entry.is_some());
     }
 
-    fn test_trusted_cert_with_hostname(
-        server_name: Option<String>,
-        should_return_trusted_cert: bool,
-    ) {
+    fn test_trusted_cert_with_hostname(server_name: String, should_return_trusted_cert: bool) {
         let (cert, key) = generate_ca().unwrap();
-        let test_trustable_cert = generate_end_cert();
+        let test_trustable_cert = generate_end_cert(&server_name);
+        let sni_hostname = Some(server_name);
         let resolver =
             AttestableCertResolver::new(cert, key, Some(test_trustable_cert.clone())).unwrap();
         let returned_cert = resolver
-            .resolve_cert_using_sni(server_name.as_deref())
+            .resolve_cert_using_sni(sni_hostname.as_deref())
             .unwrap();
 
         let returned_x509 = parse_x509_from_rustls_certified_key(&returned_cert);
@@ -556,19 +554,19 @@ mod tests {
 
     #[test]
     fn test_trusted_cert_used_with_trusted_hostname() {
-        let server_name = Some("wicked_cage.app_123543.cage.evervault.com".to_string());
+        let server_name = "wicked_cage.app_123543.cage.evervault.com".to_string();
         test_trusted_cert_with_hostname(server_name, true);
     }
 
     #[test]
     fn test_trusted_cert_used_with_trusted_enclave_hostname() {
-        let server_name = Some("wicked_cage.app_123543.enclave.evervault.com".to_string());
+        let server_name = "wicked_cage.app_123543.enclave.evervault.com".to_string();
         test_trusted_cert_with_hostname(server_name, true);
     }
 
     #[test]
     fn test_trusted_cert_used_with_other_hostname() {
-        let server_name = Some("wicked_cage.app_123543.cages.evervault.com".to_string());
+        let server_name = "wicked_cage.app_123543.cages.evervault.com".to_string();
         test_trusted_cert_with_hostname(server_name, false);
     }
 
@@ -651,7 +649,7 @@ mod tests {
         Ok((cert, key_pair))
     }
 
-    pub fn generate_cert() -> Result<(X509, PKey<Private>), ErrorStack> {
+    pub fn generate_cert(hostname: &str) -> Result<(X509, PKey<Private>), ErrorStack> {
         let ec_group = EcGroup::from_curve_name(Nid::SECP384R1)?;
         let ec_key = EcKey::generate(ec_group.as_ref())?;
         let key_pair = PKey::from_ec_key(ec_key)?;
@@ -660,7 +658,9 @@ mod tests {
         x509_name.append_entry_by_text("C", "IE")?;
         x509_name.append_entry_by_text("ST", "DUB")?;
         x509_name.append_entry_by_text("O", "Evervault")?;
-        x509_name.append_entry_by_text("CN", "test_cage.app123654.cage.evervault.dev")?;
+        if hostname.len() <= 64 {
+            x509_name.append_entry_by_text("CN", hostname)?;
+        }
         let x509_name = x509_name.build();
 
         let mut cert_builder = X509::builder()?;
@@ -686,8 +686,8 @@ mod tests {
         Ok((cert, key_pair))
     }
 
-    pub fn generate_end_cert() -> CertifiedKey {
-        let (cert, key) = generate_cert().unwrap();
+    pub fn generate_end_cert(hostname: &str) -> CertifiedKey {
+        let (cert, key) = generate_cert(hostname).unwrap();
         let der_encoded_private_key = key.private_key_to_der().unwrap();
         let ecdsa_private_key = sign::any_ecdsa_type(&PrivateKey(der_encoded_private_key)).unwrap();
         let pem_encoded_cert: Vec<u8> = cert.to_pem().unwrap();
