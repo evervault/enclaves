@@ -14,7 +14,7 @@ describe("POST data to enclave", () => {
   it("enclave responds and echos back body", () => {
     return allowAllCerts
       .post(
-        "https://cage.localhost:443/hello",
+        "https://enclave.localhost:443/hello",
         { secret: "ev:123" },
         { headers: { "api-key": "placeholder" } }
       )
@@ -34,7 +34,7 @@ describe("POST data to enclave", () => {
   it("calls out to the internet for allowed domain", () => {
     console.log("Sending get request to the enclave");
     return allowAllCerts
-      .get("https://cage.localhost:443/egress", {
+      .get("https://enclave.localhost:443/egress", {
         headers: { "api-key": "placeholder" },
       })
       .then((result) => {
@@ -55,7 +55,7 @@ describe("POST data to enclave", () => {
   it("calls out to the internet for banned domain", () => {
     console.log("Sending get request to the enclave");
     return allowAllCerts
-      .get("https://cage.localhost:443/egressBanned", {
+      .get("https://enclave.localhost:443/egressBanned", {
         headers: { "api-key": "placeholder" },
       })
       .then((result) => {
@@ -73,7 +73,7 @@ describe("POST data to enclave", () => {
     // test full cycle crypto in the customer process
     const {
       data: { decrypted },
-    } = await allowAllCerts.post("https://cage.localhost:443/crypto", data, {
+    } = await allowAllCerts.post("https://enclave.localhost:443/crypto", data, {
       headers: { "api-key": "placeholder" },
     });
     expect(data).to.deep.equal(decrypted);
@@ -89,12 +89,12 @@ describe("POST data to enclave", () => {
     };
     // test data plane stream decryption
     const encryptResult = await allowAllCerts.post(
-      "https://cage.localhost:443/encrypt",
+      "https://enclave.localhost:443/encrypt",
       data,
       { headers: { "api-key": "placeholder" } }
     );
     const decryptResult = await allowAllCerts.post(
-      "https://cage.localhost:443/hello",
+      "https://enclave.localhost:443/hello",
       encryptResult.data,
       { headers: { "api-key": "placeholder" } }
     );
@@ -103,7 +103,7 @@ describe("POST data to enclave", () => {
   });
 
   it("returns the injected environment", async () => {
-    const result = await allowAllCerts.get("https://cage.localhost:443/env", {
+    const result = await allowAllCerts.get("https://enclave.localhost:443/env", {
       headers: { "api-key": "placeholder" },
     });
     expect("123").to.deep.equal(result.data.ANOTHER_ENV_VAR);
@@ -112,7 +112,7 @@ describe("POST data to enclave", () => {
   it("attestation doc", async () => {
     const doc = await allowAllCerts
       .post(
-        "https://cage.localhost:443/attestation-doc",
+        "https://enclave.localhost:443/attestation-doc",
         {},
         { headers: { "api-key": "placeholder" }, responseType: "arraybuffer" }
       )
@@ -132,7 +132,7 @@ describe("POST data to enclave", () => {
   it("enclave responds and echos back body without transfer-encoding", () => {
     return allowAllCerts
       .post(
-        "https://cage.localhost:443/chunked",
+        "https://enclave.localhost:443/chunked",
         { secret: "ev:123" },
         { headers: { "api-key": "placeholder" } }
       )
@@ -167,16 +167,16 @@ describe("Enclave is runnning", () => {
         const stats = JSON.parse(result);
         const keys = Object.keys(stats);
         expect(keys).to.include(
-          "memory.total;cage_uuid=cage_123;app_uuid=app_12345678"
+          "memory.total;cage_uuid=enclave_123;app_uuid=app_12345678"
         );
         expect(keys).to.include(
-          "memory.avail;cage_uuid=cage_123;app_uuid=app_12345678"
+          "memory.avail;cage_uuid=enclave_123;app_uuid=app_12345678"
         );
         expect(keys).to.include(
-          "cpu.one;cage_uuid=cage_123;app_uuid=app_12345678"
+          "cpu.one;cage_uuid=enclave_123;app_uuid=app_12345678"
         );
         expect(keys).to.include(
-          "cpu.cores;cage_uuid=cage_123;app_uuid=app_12345678"
+          "cpu.cores;cage_uuid=enclave_123;app_uuid=app_12345678"
         );
       } finally {
         sysClient.destroy();
@@ -199,7 +199,7 @@ describe("Enclave is runnning", () => {
         const keys = Object.keys(stats);
 
         expect(keys).to.include(
-          "decrypt.count;cage_uuid=cage_123;app_uuid=app_12345678"
+          "decrypt.count;cage_uuid=enclave_123;app_uuid=app_12345678"
         );
       } finally {
         prodClient.destroy();

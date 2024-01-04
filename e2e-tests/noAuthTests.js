@@ -11,7 +11,7 @@ describe("POST data to enclave", () => {
   context("api key auth is disabled", () => {
     it("returns successfully", () => {
       return allowAllCerts
-        .post("https://cage.localhost:443/hello", { secret: "ev:123" })
+        .post("https://enclave.localhost:443/hello", { secret: "ev:123" })
         .then((result) => {
           console.log("Post request sent to the enclave");
           expect(result.data).to.deep.equal({

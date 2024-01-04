@@ -40,20 +40,20 @@ fi
 
 export CUSTOMER_PROCESS=httpCustomerProcess.js
 
-echo "Building cage container CI"
+echo "Building enclave container CI"
 export EV_API_KEY_AUTH=true
 docker compose build --build-arg CUSTOMER_PROCESS=httpCustomerProcess.js
 
-echo "Running cage container"
+echo "Running enclave container"
 # run the container
 docker compose up -d
-echo "SLEEPING 15 SECONDS to let cage initialize..."
+echo "SLEEPING 15 SECONDS to let enclave initialize..."
 sleep 15
 
-docker compose logs --tail cages-cages
+docker compose logs --tail enclaves-enclaves
 
-echo "Running end-to-end tests for cage without TLS termination"
-cd e2e-tests && npm run no-tls-termination-tests || ($(docker compose logs --tail cages-cages) && false)
+echo "Running end-to-end tests for enclave without TLS termination"
+cd e2e-tests && npm run no-tls-termination-tests || ($(docker compose logs --tail enclaves-enclaves) && false)
 
 echo "Tests complete"
 docker compose down

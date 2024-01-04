@@ -216,12 +216,12 @@ pub struct AuthRequest {
 
 impl E3Payload for AuthRequest {}
 
-impl<C: Deref<Target = crate::CageContext>> std::convert::From<C> for AuthRequest {
+impl<C: Deref<Target = crate::EnclaveContext>> std::convert::From<C> for AuthRequest {
     fn from(context: C) -> Self {
         Self {
             team_uuid: context.team_uuid().to_string(),
             app_uuid: context.app_uuid().to_string(),
-            cage_uuid: Some(context.cage_uuid().to_string()),
+            cage_uuid: Some(context.uuid().to_string()),
         }
     }
 }

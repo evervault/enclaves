@@ -1,6 +1,6 @@
 use crate::server::http::RemoteIp;
 use crate::utils::trx_handler::LogHandlerMessage;
-use crate::CageContext;
+use crate::EnclaveContext;
 use crate::FeatureContext;
 use hyper::http::{Request, Response};
 use hyper::{Body, HeaderMap};
@@ -13,14 +13,14 @@ use tower::{Layer, Service};
 
 #[derive(Clone)]
 pub struct ContextLogLayer {
-    context: Arc<CageContext>,
+    context: Arc<EnclaveContext>,
     feature_context: Arc<FeatureContext>,
     tx_sender: UnboundedSender<LogHandlerMessage>,
 }
 
 impl ContextLogLayer {
     pub fn new(
-        context: Arc<CageContext>,
+        context: Arc<EnclaveContext>,
         feature_context: Arc<FeatureContext>,
         tx_sender: UnboundedSender<LogHandlerMessage>,
     ) -> Self {
@@ -47,7 +47,7 @@ impl<S> Layer<S> for ContextLogLayer {
 
 #[derive(Clone)]
 pub struct ContextLogService<S> {
-    context: Arc<CageContext>,
+    context: Arc<EnclaveContext>,
     feature_context: Arc<FeatureContext>,
     tx_sender: UnboundedSender<LogHandlerMessage>,
     inner: S,
@@ -75,13 +75,13 @@ where
     fn call(&mut self, mut req: Request<Body>) -> Self::Future {
         let clone = self.inner.clone();
         let mut inner = std::mem::replace(&mut self.inner, clone);
-        let cage_context = self.context.clone();
+        let enclave_context = self.context.clone();
         let feature_context = self.feature_context.clone();
         let log_tx_sender = self.tx_sender.clone();
         Box::pin(async move {
             let timer = std::time::SystemTime::now();
             let mut base_context =
-                init_request_context(&req, cage_context, feature_context.clone());
+                init_request_context(&req, enclave_context, feature_context.clone());
             // add context id as request header
             let request_id = base_context.get_trx_id();
             add_ev_ctx_to_headers(req.headers_mut(), &request_id);
@@ -118,18 +118,18 @@ where
 }
 
 pub fn init_request_context<
-    C: std::ops::Deref<Target = CageContext>,
+    C: std::ops::Deref<Target = EnclaveContext>,
     F: std::ops::Deref<Target = FeatureContext>,
 >(
     req: &Request<Body>,
-    cage_context: C,
+    enclave_context: C,
     feature_context: F,
 ) -> TrxContextBuilder {
-    let mut trx_ctx = TrxContextBuilder::init_trx_context_with_cage_details(
-        &cage_context.cage_uuid,
-        &cage_context.cage_name,
-        &cage_context.app_uuid,
-        &cage_context.team_uuid,
+    let mut trx_ctx = TrxContextBuilder::init_trx_context_with_enclave_details(
+        &enclave_context.uuid,
+        &enclave_context.name,
+        &enclave_context.app_uuid,
+        &enclave_context.team_uuid,
         RequestType::HTTP,
     );
     trx_ctx.add_req_to_trx_context(req, &feature_context.trusted_headers);

@@ -3,7 +3,7 @@ use cadence_macros::{set_global_default, statsd_count};
 use shared::{publish_count, stats::StatsError};
 use std::net::{Ipv4Addr, UdpSocket};
 
-use crate::configuration::CageContext;
+use crate::configuration::EnclaveContext;
 
 pub struct StatsClient;
 
@@ -29,7 +29,7 @@ impl StatsClient {
     }
 
     pub fn record_request() {
-        let context = CageContext::from_env_vars();
+        let context = EnclaveContext::from_env_vars();
         publish_count!("request.count", 1, context);
     }
 }

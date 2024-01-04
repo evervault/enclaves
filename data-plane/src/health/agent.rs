@@ -7,7 +7,7 @@ use tokio::sync::oneshot::{
     channel as oneshot_channel, Receiver as OneshotReceiver, Sender as OneshotSender,
 };
 
-use crate::{CageContext, ContextError};
+use crate::{ContextError, EnclaveContext};
 
 enum HealthcheckAgentState {
     Initializing,
@@ -116,7 +116,7 @@ impl<T: InitializedHealthcheck> HealthcheckAgent<T> {
             Err(_) => return Ok(HealthCheckStatus::Err),
         };
         if is_initialized {
-            let _ = CageContext::get()?;
+            let _ = EnclaveContext::get()?;
             self.state = HealthcheckAgentState::Ready;
             Ok(HealthCheckStatus::Ok)
         } else {

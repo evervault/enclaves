@@ -26,7 +26,7 @@ else
   ACME_ACCOUNT_EC_KEY=`cat ./e2e-tests/acme-key/key.pem` && export ACME_ACCOUNT_EC_KEY
   ACME_ACCOUNT_HMAC_KEY="cGxhY2Vob2xkZXI=" && export ACME_ACCOUNT_HMAC_KEY
   ACME_ACCOUNT_HMAC_KEY_ID="placeholder_id" && export ACME_ACCOUNT_HMAC_KEY_ID
-  ACME_S3_BUCKET="cages-acme-local && export ACME_S3_BUCKET"
+  ACME_S3_BUCKET="enclaves-acme-local && export ACME_S3_BUCKET"
 fi
 
 cargo build --release --target x86_64-unknown-linux-musl      
@@ -43,9 +43,9 @@ then
 fi
 
 export CUSTOMER_PROCESS=httpCustomerProcess.js
-echo "Building cage container"
+echo "Building enclave container"
 docker compose build --build-arg CUSTOMER_PROCESS=httpCustomerProcess.js
 
-echo "Running cage container"
+echo "Running enclave container"
 # run the container
 EV_API_KEY_AUTH=true docker compose up

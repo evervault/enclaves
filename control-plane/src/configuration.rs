@@ -42,36 +42,36 @@ pub fn get_aws_region() -> aws_types::region::Region {
     aws_types::region::Region::new(region)
 }
 #[derive(Clone)]
-pub struct CageContext {
-    pub cage_uuid: String,
-    pub cage_version: String,
-    pub cage_name: String,
+pub struct EnclaveContext {
+    pub uuid: String,
+    pub version: String,
+    pub name: String,
     pub app_uuid: String,
     pub team_uuid: String,
 }
 
-impl CageContext {
+impl EnclaveContext {
     pub fn new(
-        cage_uuid: String,
-        cage_version: String,
-        cage_name: String,
+        uuid: String,
+        version: String,
+        name: String,
         app_uuid: String,
         team_uuid: String,
-    ) -> CageContext {
-        CageContext {
-            cage_uuid,
-            cage_version,
-            cage_name,
+    ) -> EnclaveContext {
+        EnclaveContext {
+            uuid,
+            version,
+            name,
             app_uuid,
             team_uuid,
         }
     }
 
-    pub fn from_env_vars() -> CageContext {
-        CageContext {
-            cage_uuid: get_cage_uuid(),
-            cage_version: get_cage_version(),
-            cage_name: get_cage_name(),
+    pub fn from_env_vars() -> EnclaveContext {
+        EnclaveContext {
+            uuid: get_enclave_uuid(),
+            version: get_enclave_version(),
+            name: get_enclave_name(),
             app_uuid: get_app_uuid(),
             team_uuid: get_team_uuid(),
         }
@@ -82,19 +82,19 @@ impl CageContext {
     }
 
     pub fn get_namespace_string(&self) -> String {
-        format!("{}/{}", self.hyphenated_app_uuid(), self.cage_name)
+        format!("{}/{}", self.hyphenated_app_uuid(), self.name)
     }
 }
 
-pub fn get_cage_uuid() -> String {
+pub fn get_enclave_uuid() -> String {
     std::env::var("CAGE_UUID").expect("CAGE_UUID is not set in env")
 }
 
-pub fn get_cage_version() -> String {
+pub fn get_enclave_version() -> String {
     std::env::var("EV_CAGE_VERSION_ID").expect("EV_CAGE_VERSION_ID is not set in env")
 }
 
-pub fn get_cage_name() -> String {
+pub fn get_enclave_name() -> String {
     std::env::var("EV_CAGE_NAME").expect("EV_CAGE_NAME is not set in env")
 }
 
@@ -116,7 +116,9 @@ pub fn get_team_uuid() -> String {
 
 pub fn get_cert_provisoner_host() -> String {
     match get_rust_env() {
-        Environment::Staging | Environment::Production => "provisioner.cages.internal".to_string(),
+        Environment::Staging | Environment::Production => {
+            "provisioner.enclaves.internal".to_string()
+        }
         _ => "localhost".to_string(),
     }
 }
@@ -166,15 +168,15 @@ pub fn get_acme_hmac_key_id() -> String {
 
 pub fn get_trusted_cert_base_domains() -> Vec<String> {
     #[cfg(not(staging))]
-    let cage_base_domains = vec![
+    let enclave_base_domains = vec![
         "cage.evervault.com".to_string(),
         "enclave.evervault.com".to_string(),
     ];
     #[cfg(staging)]
-    let cage_base_domains = vec![
+    let enclave_base_domains = vec![
         "cage.evervault.dev".to_string(),
         "enclave.evervault.dev".to_string(),
     ];
 
-    cage_base_domains
+    enclave_base_domains
 }
