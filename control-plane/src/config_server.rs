@@ -162,9 +162,12 @@ async fn handle_token_request(
 ) -> Response<Body> {
     match get_token(cert_provisioner_client, token_type.clone()).await {
         Ok(res) => res,
-        Err(e) => build_error_response(format!(
-            "Failed to get token for token {token_type:?} err: {e}"
-        )),
+        Err(e) => {
+            log::error!("Failed to get token for token {token_type:?} err: {e}");
+            build_error_response(format!(
+                "Failed to get token for token {token_type:?} err: {e}"
+            ))
+        }
     }
 }
 
