@@ -159,16 +159,8 @@ pub async fn auth_request<
 
     match err {
         ClientError::FailedRequest(status) if status.as_u16() == 401 => {
-            log::debug!("Failed to auth with scoped api key hash, attempting with app api key");
-            let Err(err) = e3_client.authenticate(api_key, auth_payload).await else {
-                return Ok(());
-            };
-            match err {
-                ClientError::FailedRequest(status) if status.as_u16() == 401 => {
-                    Err(AuthError::FailedToAuthenticateApiKey)
-                }
-                e => Err(e.into()),
-            }
+            log::debug!("Failed to auth with scoped api key hash");
+            Err(AuthError::FailedToAuthenticateApiKey)
         }
         e => Err(e.into()),
     }
@@ -204,41 +196,12 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_request_auth_success_with_second_attempt() {
+    async fn test_request_auth_maps_401_to_correct_error() {
         let mut e3_test_client = MockE3TestClient::new();
         let api_key = HeaderValue::from_str("my-api-key").unwrap();
         e3_test_client
             .expect_authenticate()
-            .times(2)
-            .returning(|received_api_key, _| {
-                // first request hashes the api key, second sends it in the clear
-                if received_api_key.to_str().unwrap() == "my-api-key" {
-                    Ok(())
-                } else {
-                    Err(ClientError::FailedRequest(
-                        StatusCode::from_u16(401).unwrap(),
-                    ))
-                }
-            });
-
-        let context = EnclaveContext::new(
-            "team_uuid".into(),
-            "app_uuid".into(),
-            "enclave_uuid".into(),
-            "enclave_name".into(),
-        );
-
-        let result = auth_request(&api_key, &context, Arc::new(e3_test_client)).await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_request_auth_receives_401_on_both_requests() {
-        let mut e3_test_client = MockE3TestClient::new();
-        let api_key = HeaderValue::from_str("my-api-key").unwrap();
-        e3_test_client
-            .expect_authenticate()
-            .times(2)
+            .times(1)
             .returning(|_, _| {
                 Err(ClientError::FailedRequest(
                     StatusCode::from_u16(401).unwrap(),
