@@ -167,16 +167,16 @@ describe("Enclave is runnning", () => {
         const stats = JSON.parse(result);
         const keys = Object.keys(stats);
         expect(keys).to.include(
-          "memory.total;cage_uuid=cage_123;app_uuid=app_12345678"
+          "memory.total;cage_uuid=enclave_123;app_uuid=app_12345678"
         );
         expect(keys).to.include(
-          "memory.avail;cage_uuid=cage_123;app_uuid=app_12345678"
+          "memory.avail;cage_uuid=enclave_123;app_uuid=app_12345678"
         );
         expect(keys).to.include(
-          "cpu.one;cage_uuid=cage_123;app_uuid=app_12345678"
+          "cpu.one;cage_uuid=enclave_123;app_uuid=app_12345678"
         );
         expect(keys).to.include(
-          "cpu.cores;cage_uuid=cage_123;app_uuid=app_12345678"
+          "cpu.cores;cage_uuid=enclave_123;app_uuid=app_12345678"
         );
       } finally {
         sysClient.destroy();
@@ -199,7 +199,7 @@ describe("Enclave is runnning", () => {
         const keys = Object.keys(stats);
 
         expect(keys).to.include(
-          "decrypt.count;cage_uuid=cage_123;app_uuid=app_12345678"
+          "decrypt.count;cage_uuid=enclave_123;app_uuid=app_12345678"
         );
       } finally {
         prodClient.destroy();
