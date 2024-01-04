@@ -19,7 +19,7 @@ macro_rules! publish_gauge {
         statsd_gauge!(
           $label,
           $val,
-          "cage_uuid" => &$context.cage_uuid,
+          "cage_uuid" => &$context.uuid,
           "app_uuid" => &$context.app_uuid
         );
     };
@@ -31,7 +31,7 @@ macro_rules! publish_count {
         statsd_count!(
           $label,
           $val,
-          "cage_uuid" => &$context.cage_uuid,
+          "cage_uuid" => &$context.uuid,
           "app_uuid" => &$context.app_uuid
         );
     };

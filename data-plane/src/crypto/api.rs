@@ -31,8 +31,8 @@ impl Default for CryptoApi {
 
 #[derive(Debug, Error)]
 pub enum CryptoApiError {
-    #[error("Missing cage context — {0:?}")]
-    MissingCageContext(#[from] std::env::VarError),
+    #[error("Missing enclave context — {0:?}")]
+    MissingEnclaveContext(#[from] std::env::VarError),
     #[error("Deserialization Error — {0:?}")]
     SerdeError(#[from] serde_json::Error),
     #[error("Hyper Error — {0:?}")]

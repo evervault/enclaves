@@ -1,20 +1,20 @@
-<a href="https://evervault.com/cages"><img src="https://evervault.com/images/logo-color.svg" height="45" /></a>
+<a href="https://evervault.com/enclaves"><img src="https://evervault.com/images/logo-color.svg" height="45" /></a>
 
-# Evervault Cages
+# Evervault Enclaves
 
-Evervault Cages are the easiest way to build, deploy and scale Secure Enclaves.
+Evervault Enclaves are the easiest way to build, deploy and scale Secure Enclaves.
 
-Evervault Cages allow developers to easily deploy Docker containers in a Secure Enclave, powered by AWS Nitro Enclaves. Cages offer easy deployment, invocation and attestation of Secure Enclaves without the engineering overhead.
+Evervault Enclaves allow developers to easily deploy Docker containers in a Secure Enclave, powered by AWS Nitro Enclaves. Enclaves offer easy deployment, invocation and attestation of Secure Enclaves without the engineering overhead.
 
 This repo consists of two components: the runtime which is run _inside_ the Secure Enclave (the "data plane") and the code used for proxying network traffic and initializing the enclave (the "control plane").
 
 ## Notice on Open Source Status of this project
 
-The Evervault Cages product is open source with the aim of providing transparency to users — this is vital given that our process runs in the enclave, and is accounted for in the attestation.
+The Evervault Enclaves product is open source with the aim of providing transparency to users — this is vital given that our process runs in the enclave, and is accounted for in the attestation.
 
-The current state of this project does not allow for self-hosting. We plan on addressing this by abstracting away the Evervault-specific elements of the Cages product.
+The current state of this project does not allow for self-hosting. We plan on addressing this by abstracting away the Evervault-specific elements of the Enclaves product.
 
-## Steps to get Cages running in local dev (macOSarm64)
+## Steps to get Enclaves running in local dev (macOSarm64)
 Add a `.cargo` directory to the project root, and create a `.cargo/config.toml` containing the following:
 
 ```toml
@@ -86,7 +86,7 @@ docker compose up
 
 Test it out:
 ```sh
-curl https://cage.localhost:443/encrypt -k -H 'api-key: placeholder' --data '{"hello": "world"}' -H "Content-Type: application/json"
+curl https://enclave.localhost:443/encrypt -k -H 'api-key: placeholder' --data '{"hello": "world"}' -H "Content-Type: application/json"
 ```
 
 ## Feature flags

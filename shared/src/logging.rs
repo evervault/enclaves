@@ -152,7 +152,7 @@ impl TrxContextBuilder {
         self.build()
     }
 
-    pub fn init_trx_context_with_cage_details(
+    pub fn init_trx_context_with_enclave_details(
         cage_uuid: &str,
         cage_name: &str,
         app_uuid: &str,

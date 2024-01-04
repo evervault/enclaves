@@ -5,7 +5,7 @@ use shared::stats::StatsError;
 use shared::{publish_count, publish_gauge, ENCLAVE_STATSD_PORT};
 use std::net::UdpSocket;
 
-use crate::CageContext;
+use crate::EnclaveContext;
 
 pub struct StatsClient;
 
@@ -26,13 +26,13 @@ impl StatsClient {
     }
 
     pub fn record_decrypt() {
-        if let Ok(context) = CageContext::get() {
+        if let Ok(context) = EnclaveContext::get() {
             publish_count!("decrypt.count", 1, context);
         }
     }
 
     pub fn record_encrypt() {
-        if let Ok(context) = CageContext::get() {
+        if let Ok(context) = EnclaveContext::get() {
             publish_count!("encrypt.count", 1, context);
         }
     }
@@ -48,7 +48,7 @@ impl StatsClient {
         let cpu = sys_info::loadavg()?;
         let cpu_num = sys_info::cpu_num()?;
 
-        if let Ok(context) = CageContext::get() {
+        if let Ok(context) = EnclaveContext::get() {
             publish_gauge!("memory.total", mem_info.total as f64, context);
             publish_gauge!("memory.avail", mem_info.avail as f64, context);
             publish_gauge!("cpu.cores", cpu_num as f64, context);
