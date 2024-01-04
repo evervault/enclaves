@@ -10,7 +10,7 @@ describe('POST data to enclave with api key auth enabled', async () => {
     });
     context('Valid api key is sent as header', () => {
         it('returns successfully', async () => {
-            let result = await allowAllCerts.post('https://cage.localhost:443/hello', { secret: 'ev:123' }, { headers: { 'api-key': 'placeholder' } })
+            let result = await allowAllCerts.post('https://enclave.localhost:443/hello', { secret: 'ev:123' }, { headers: { 'api-key': 'placeholder' } })
             expect(result.data).to.deep.equal({ response: 'Hello from enclave', secret: 'ev:123' });
         });
     });
@@ -18,7 +18,7 @@ describe('POST data to enclave with api key auth enabled', async () => {
     context('Invalid api key is sent as header', () => {
         it('returns 401', async () => {
             try {
-                let result = await allowAllCerts.post('https://cage.localhost:443/hello', { secret: 'ev:123' }, { headers: { 'api-key': 'invalid' } })
+                let result = await allowAllCerts.post('https://enclave.localhost:443/hello', { secret: 'ev:123' }, { headers: { 'api-key': 'invalid' } })
                 expect(result.status).to.not.equal(200)
             } catch (err) {
                 expect(err.response.status).to.equal(401);
@@ -29,7 +29,7 @@ describe('POST data to enclave with api key auth enabled', async () => {
     context('No api key is sent as header', () => {
         it('returns 401', async () => {
             try {
-                let result = await allowAllCerts.post('https://cage.localhost:443/hello', { secret: 'ev:123' })
+                let result = await allowAllCerts.post('https://enclave.localhost:443/hello', { secret: 'ev:123' })
                 expect(result.status).to.not.equal(200)
             } catch (err) {
                 expect(err.response.status).to.equal(401);

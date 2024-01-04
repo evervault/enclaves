@@ -56,15 +56,15 @@ fn get_mtls_connector(
 }
 
 fn get_token_request_metadata_from_env() -> GetCertTokenRequestControlPlane {
-    let cage_uuid = configuration::get_enclave_uuid();
+    let uuid = configuration::get_enclave_uuid();
     let version_id = configuration::get_enclave_version()
         .parse::<i32>()
         .expect("Can't parse Cage version ENV var into integer");
-    let cage_name = configuration::get_enclave_name();
+    let name = configuration::get_enclave_name();
     let app_uuid = configuration::get_app_uuid();
     let team_uuid = configuration::get_team_uuid();
 
-    GetCertTokenRequestControlPlane::new(cage_uuid, version_id, cage_name, app_uuid, team_uuid)
+    GetCertTokenRequestControlPlane::new(uuid, version_id, name, app_uuid, team_uuid)
 }
 
 #[derive(Clone)]

@@ -1,4 +1,4 @@
-<a href="https://evervault.com/enclaves"><img src="https://evervault.com/images/logo-color.svg" height="45" /></a>
+<a href="https://evervault.com/primitives/enclaves"><img src="https://evervault.com/images/logo-color.svg" height="45" /></a>
 
 # Evervault Enclaves
 
