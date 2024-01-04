@@ -82,12 +82,12 @@ impl Environment {
 
     #[cfg(not(feature = "tls_termination"))]
     pub async fn init_without_certs(self) -> Result<(), EnvError> {
-        use crate::CageContext;
+        use crate::EnclaveContext;
 
         log::info!("Initializing env without TLS termination, sending request to control plane for cert provisioner token.");
         let token = self.config_client.get_cert_token().await.unwrap().token();
         let secrets_response = self.cert_provisioner_client.get_secrets(token).await?;
-        CageContext::set(secrets_response.context.clone().into());
+        EnclaveContext::set(secrets_response.context.clone().into());
 
         self.init(secrets_response.clone().secrets).await?;
 
