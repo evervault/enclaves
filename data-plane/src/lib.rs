@@ -52,7 +52,7 @@ pub enum ContextError {
 
 impl EnclaveContext {
     fn get() -> Result<Self, ContextError> {
-      ENCLAVE_CONTEXT
+        ENCLAVE_CONTEXT
             .get()
             .map(|context| context.to_owned())
             .ok_or(ContextError::Uninitialized)
@@ -62,7 +62,12 @@ impl EnclaveContext {
         ENCLAVE_CONTEXT.get_or_init(|| ctx);
     }
 
-    pub fn new(team_uuid: String, app_uuid: String, enclave_uuid: String, enclave_name: String) -> Self {
+    pub fn new(
+        team_uuid: String,
+        app_uuid: String,
+        enclave_uuid: String,
+        enclave_name: String,
+    ) -> Self {
         Self {
             enclave_uuid,
             app_uuid,
@@ -93,7 +98,10 @@ impl EnclaveContext {
 
     #[cfg(staging)]
     pub fn get_cert_name(&self) -> String {
-        format!("{}.{}.enclave.evervault.dev", &self.enclave_name, &self.app_uuid)
+        format!(
+            "{}.{}.enclave.evervault.dev",
+            &self.enclave_name, &self.app_uuid
+        )
     }
 
     #[cfg(staging)]
@@ -108,7 +116,10 @@ impl EnclaveContext {
 
     #[cfg(not(staging))]
     pub fn get_cert_name(&self) -> String {
-        format!("{}.{}.enclave.evervault.com", &self.enclave_name, &self.app_uuid)
+        format!(
+            "{}.{}.enclave.evervault.com",
+            &self.enclave_name, &self.app_uuid
+        )
     }
 
     #[cfg(not(staging))]
@@ -149,7 +160,7 @@ impl EnclaveContext {
 
 impl From<ProvisionerContext> for EnclaveContext {
     fn from(context: ProvisionerContext) -> Self {
-      EnclaveContext::new(
+        EnclaveContext::new(
             context.team_uuid,
             context.app_uuid,
             context.enclave_uuid,

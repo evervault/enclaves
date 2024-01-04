@@ -1,6 +1,6 @@
-use crate::EnclaveContext;
 use crate::server::http::RemoteIp;
 use crate::utils::trx_handler::LogHandlerMessage;
+use crate::EnclaveContext;
 use crate::FeatureContext;
 use hyper::http::{Request, Response};
 use hyper::{Body, HeaderMap};

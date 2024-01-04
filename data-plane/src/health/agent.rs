@@ -7,7 +7,7 @@ use tokio::sync::oneshot::{
     channel as oneshot_channel, Receiver as OneshotReceiver, Sender as OneshotSender,
 };
 
-use crate::{EnclaveContext, ContextError};
+use crate::{ContextError, EnclaveContext};
 
 enum HealthcheckAgentState {
     Initializing,

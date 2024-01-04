@@ -141,8 +141,12 @@ async fn handle_incoming_request<T: StorageClientInterface>(
         }
         Ok(ConfigServerPath::AcmeJWK) => Ok(handle_acme_jwk_request(acme_account_details).await),
         Ok(ConfigServerPath::Storage) => match *req.method() {
-            Method::GET => handle_acme_storage_get_request(req, storage_client, enclave_context).await,
-            Method::PUT => handle_acme_storage_put_request(req, storage_client, enclave_context).await,
+            Method::GET => {
+                handle_acme_storage_get_request(req, storage_client, enclave_context).await
+            }
+            Method::PUT => {
+                handle_acme_storage_put_request(req, storage_client, enclave_context).await
+            }
             Method::DELETE => {
                 handle_acme_storage_delete_request(req, storage_client, enclave_context).await
             }
@@ -529,7 +533,8 @@ mod tests {
             .with(eq(expected_key))
             .returning(move |_| Ok(Some("super_secret".to_string())));
 
-        let result = handle_acme_storage_get_request(req, mock_storage_client, enclave_context).await;
+        let result =
+            handle_acme_storage_get_request(req, mock_storage_client, enclave_context).await;
 
         assert!(result.is_ok());
         assert!(result.unwrap().status().is_success());
@@ -565,7 +570,8 @@ mod tests {
                 ))
             });
 
-        let result = handle_acme_storage_get_request(req, mock_storage_client, enclave_context).await;
+        let result =
+            handle_acme_storage_get_request(req, mock_storage_client, enclave_context).await;
 
         assert!(result.is_ok());
         assert!(result.unwrap().status().is_server_error());
@@ -600,7 +606,8 @@ mod tests {
             .with(eq(expected_key), eq(object))
             .returning(move |_, _| Ok(()));
 
-        let result = handle_acme_storage_put_request(req, mock_storage_client, enclave_context).await;
+        let result =
+            handle_acme_storage_put_request(req, mock_storage_client, enclave_context).await;
 
         assert!(result.is_ok());
         assert!(result.unwrap().status().is_success());
@@ -639,7 +646,8 @@ mod tests {
                 ))
             });
 
-        let result = handle_acme_storage_put_request(req, mock_storage_client, enclave_context).await;
+        let result =
+            handle_acme_storage_put_request(req, mock_storage_client, enclave_context).await;
 
         assert!(result.is_ok());
         assert!(result.unwrap().status().is_server_error());

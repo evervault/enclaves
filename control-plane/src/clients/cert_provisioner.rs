@@ -64,7 +64,13 @@ fn get_token_request_metadata_from_env() -> GetCertTokenRequestControlPlane {
     let app_uuid = configuration::get_app_uuid();
     let team_uuid = configuration::get_team_uuid();
 
-    GetCertTokenRequestControlPlane::new(enclave_uuid, version_id, enclave_name, app_uuid, team_uuid)
+    GetCertTokenRequestControlPlane::new(
+        enclave_uuid,
+        version_id,
+        enclave_name,
+        app_uuid,
+        team_uuid,
+    )
 }
 
 #[derive(Clone)]
