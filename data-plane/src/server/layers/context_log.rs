@@ -138,7 +138,7 @@ pub fn init_request_context<
 
 fn add_ev_ctx_to_headers(headers: &mut HeaderMap, trx_id: &str) {
     headers.insert(
-        "x-evervault-cage-ctx",
+        "x-evervault-ctx",
         hyper::header::HeaderValue::from_str(trx_id).expect("Infallible: txids are valid headers"),
     );
 }
