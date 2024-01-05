@@ -137,15 +137,19 @@ pub fn init_request_context<
 }
 
 fn add_ev_ctx_to_headers(headers: &mut HeaderMap, trx_id: &str) {
-    if let Some(header) = headers.get_mut("x-evervault-ctx").and_then(|header| header.to_str().ok()) {
-      let concatenated_trx_id = format!("{header};{trx_id}");
-      if let Ok(id) = hyper::header::HeaderValue::from_str(&concatenated_trx_id) {
-        headers.insert("x-evervault-ctx", id);  
-      }
+    if let Some(header) = headers
+        .get_mut("x-evervault-ctx")
+        .and_then(|header| header.to_str().ok())
+    {
+        let concatenated_trx_id = format!("{header};{trx_id}");
+        if let Ok(id) = hyper::header::HeaderValue::from_str(&concatenated_trx_id) {
+            headers.insert("x-evervault-ctx", id);
+        }
     } else {
-      headers.insert(
-          "x-evervault-ctx",
-          hyper::header::HeaderValue::from_str(trx_id).expect("Infallible: txids are valid headers"),
-      );
+        headers.insert(
+            "x-evervault-ctx",
+            hyper::header::HeaderValue::from_str(trx_id)
+                .expect("Infallible: txids are valid headers"),
+        );
     }
 }
