@@ -34,8 +34,8 @@ pub enum RenewalStrategy {
     NoRenewal,
 }
 
-const CERTIFICATE_LOCK_NAME: &str = "certificate";
-const CERTIFICATE_OBJECT_KEY: &str = "certificate.pem";
+const CERTIFICATE_LOCK_NAME: &str = "certificate-v1";
+const CERTIFICATE_OBJECT_KEY: &str = "certificate-v1.pem";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RawAcmeCertificate {
