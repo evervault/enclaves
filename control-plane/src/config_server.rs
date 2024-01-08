@@ -196,14 +196,14 @@ async fn get_token(
         .header("Content-Type", "application/json")
         .body(body)?;
 
-    log::info!("Token returned from cert provisioner, sending it back to the cage");
+    log::info!("Token returned from cert provisioner, sending it back to the Enclave");
 
     Ok(res)
 }
 
 fn validate_trx_log(trx_log: &TrxContext, enclave_context: &configuration::EnclaveContext) -> bool {
-    trx_log.cage_uuid == enclave_context.uuid
-        && trx_log.cage_name == enclave_context.name
+    trx_log.resource_uuid == enclave_context.uuid
+        && trx_log.resource_name == enclave_context.name
         && trx_log.team_uuid == enclave_context.team_uuid
         && trx_log.app_uuid == enclave_context.app_uuid
 }
