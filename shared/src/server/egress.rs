@@ -22,6 +22,10 @@ pub enum EgressError {
     ExtensionMissing,
     #[error(transparent)]
     DNSParseError(#[from] dns_parser::Error),
+    #[error("Protocol not support, only IPv4 is supported")]
+    ProtocolNotSupported,
+    #[error("Could not obtain lock for IP cache")]
+    CouldntObtainLock,
 }
 
 pub static ALLOWED_IPS_FROM_DNS: Lazy<Mutex<TtlCache<String, String>>> =
@@ -75,7 +79,7 @@ pub fn check_dns_packet(
     packet: &[u8],
     destinations: EgressDestinations,
 ) -> Result<(), EgressError> {
-    let packet = dns_parser::Packet::parse(packet).unwrap();
+    let packet = dns_parser::Packet::parse(packet)?;
     packet
         .questions
         .iter()
@@ -86,19 +90,20 @@ pub fn cache_dns_packet(packet: &[u8]) -> Result<(), EgressError> {
     let packet = dns_parser::Packet::parse(packet)?;
     let answers: &dns_parser::ResourceRecord<'_> = packet.answers.first().unwrap();
     let ip = get_ip(&answers.data)?;
+    let _ = cache_ip(ip.to_string(), answers.name.to_string());
+    Ok(())
+}
+
+fn cache_ip(ip: String, domain: String) -> Result<(), EgressError> {
     let mut cache = ALLOWED_IPS_FROM_DNS.lock().unwrap(); // TODO: handle error properly
-    cache.insert(
-        ip.to_string(),
-        answers.name.to_string(),
-        Duration::from_secs(answers.ttl.into()),
-    );
+    cache.insert(ip, domain, Duration::from_secs(300));
     Ok(())
 }
 
 fn get_ip(data: &RData<'_>) -> Result<Ipv4Addr, EgressError> {
     match data {
         RData::A(ip) => Ok(ip.0),
-        _ => Err(EgressError::ClientHelloMissing),
+        _ => Err(EgressError::ProtocolNotSupported),
     }
 }
 
@@ -142,7 +147,8 @@ pub struct EgressConfig {
 
 #[cfg(test)]
 mod tests {
-    use crate::server::egress::check_allow_list;
+    use crate::server::egress::check_domain_allow_list;
+    use crate::server::egress::check_ip_allow_list;
     use crate::server::egress::get_egress_allow_list_from_env;
     use crate::server::egress::EgressDestinations;
     use crate::server::egress::EgressError::{EgressDomainNotAllowed, EgressIpNotAllowed};
@@ -210,11 +216,7 @@ mod tests {
             allow_all: false,
             ips: vec![],
         };
-        let result = check_allow_list(
-            Some("invalid.domain.com".to_string()),
-            "1.1.1.1".to_string(),
-            destinations,
-        );
+        let result = check_domain_allow_list("invalid.domain.com".to_string(), destinations);
         assert!(matches!(result, Err(EgressDomainNotAllowed(_))));
     }
 
@@ -225,7 +227,7 @@ mod tests {
             allow_all: true,
             ips: vec!["2.2.2.2".to_string()],
         };
-        let result = check_allow_list(None, "1.1.1.1".to_string(), destinations);
+        let result = check_ip_allow_list("1.1.1.1".to_string(), destinations);
         assert!(matches!(result, Err(EgressIpNotAllowed(_))));
     }
 
@@ -236,7 +238,7 @@ mod tests {
             allow_all: true,
             ips: vec!["1.1.1.1".to_string()],
         };
-        let result = check_allow_list(None, "1.1.1.1".to_string(), destinations);
+        let result = check_ip_allow_list("1.1.1.1".to_string(), destinations);
         assert!(result.is_ok());
     }
 
@@ -247,7 +249,7 @@ mod tests {
             allow_all: true,
             ips: vec!["1.1.1.1".to_string()],
         };
-        let result = check_allow_list(None, "1.1.1.1".to_string(), destinations);
+        let result = check_domain_allow_list("a.domain.com".to_string(), destinations);
         assert!(result.is_ok());
     }
 }

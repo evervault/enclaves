@@ -75,8 +75,8 @@ impl DnsProxy {
         socket.send(&request_buffer[..packet_size]).await?;
         let (amt, _) = socket.recv_from(&mut response_buffer).await?;
         let response_bytes = &response_buffer[..amt];
-        cache_dns_packet(&response_bytes)?;
-        stream.write_all(&response_bytes).await?;
+        cache_dns_packet(response_bytes)?;
+        stream.write_all(response_bytes).await?;
         stream.flush().await?;
         Ok(())
     }

@@ -120,8 +120,10 @@ impl EgressProxy {
 #[cfg(test)]
 mod tests {
     use crate::dns::egressproxy::EgressDestinations;
+    use shared::server::egress::check_domain_allow_list;
+    use shared::server::egress::check_ip_allow_list;
     use shared::server::egress::{
-        check_allow_list, EgressError::EgressDomainNotAllowed, EgressError::EgressIpNotAllowed,
+        EgressError::EgressDomainNotAllowed, EgressError::EgressIpNotAllowed,
     };
 
     #[test]
@@ -133,12 +135,7 @@ mod tests {
             ips: vec![],
         };
         assert_eq!(
-            check_allow_list(
-                Some("app.evervault.com".to_string()),
-                "1.1.1.1".to_string(),
-                egress_domains
-            )
-            .unwrap(),
+            check_domain_allow_list("app.evervault.com".to_string(), egress_domains).unwrap(),
             ()
         );
     }
@@ -151,12 +148,7 @@ mod tests {
             ips: vec![],
         };
         assert_eq!(
-            check_allow_list(
-                Some("app.evervault.com".to_string()),
-                "1.1.1.1".to_string(),
-                egress_domains
-            )
-            .unwrap(),
+            check_domain_allow_list("app.evervault.com".to_string(), egress_domains).unwrap(),
             ()
         );
     }
@@ -169,12 +161,7 @@ mod tests {
             ips: vec![],
         };
         assert_eq!(
-            check_allow_list(
-                Some("app.evervault.com".to_string()),
-                "1.1.1.1".to_string(),
-                egress_domains
-            )
-            .unwrap(),
+            check_domain_allow_list("app.evervault.com".to_string(), egress_domains).unwrap(),
             ()
         );
     }
@@ -186,11 +173,7 @@ mod tests {
             allow_all: false,
             ips: vec![],
         };
-        let result = check_allow_list(
-            Some("google.com".to_string()),
-            "1.1.1.1".to_string(),
-            egress_domains,
-        );
+        let result = check_domain_allow_list("google.com".to_string(), egress_domains);
         assert!(matches!(result, Err(EgressDomainNotAllowed(_))));
     }
 
@@ -202,7 +185,7 @@ mod tests {
             allow_all: false,
             ips: vec!["2.2.2.2".to_string()],
         };
-        let result = check_allow_list(None, "1.1.1.1".to_string(), egress_domains);
+        let result = check_ip_allow_list("1.1.1.1".to_string(), egress_domains);
         assert!(matches!(result, Err(EgressIpNotAllowed(_))));
     }
 }
