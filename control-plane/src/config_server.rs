@@ -202,8 +202,8 @@ async fn get_token(
 }
 
 fn validate_trx_log(trx_log: &TrxContext, enclave_context: &configuration::EnclaveContext) -> bool {
-    trx_log.enclave_uuid == enclave_context.uuid
-        && trx_log.enclave_name == enclave_context.name
+    trx_log.resource_uuid == enclave_context.uuid
+        && trx_log.resource_name == enclave_context.name
         && trx_log.team_uuid == enclave_context.team_uuid
         && trx_log.app_uuid == enclave_context.app_uuid
 }
