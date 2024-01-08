@@ -98,7 +98,7 @@ pub fn cache_ip_for_allowlist(packet: &[u8]) -> Result<(), EgressError> {
 }
 
 fn cache_ip(ip: String, answer: &dns_parser::ResourceRecord<'_>) -> Result<(), EgressError> {
-    let     mut cache = match ALLOWED_IPS_FROM_DNS.lock() {
+    let mut cache = match ALLOWED_IPS_FROM_DNS.lock() {
         Ok(cache) => cache,
         Err(_) => return Err(EgressError::CouldntObtainLock),
     };
@@ -114,7 +114,10 @@ pub fn check_ip_allow_list(
     ip: String,
     allowed_destinations: EgressDestinations,
 ) -> Result<(), EgressError> {
-    if allowed_destinations.ips.contains(&ip) || is_valid_ip_from_dns(ip.clone())? {
+    if allowed_destinations.allow_all
+        || allowed_destinations.ips.contains(&ip)
+        || is_valid_ip_from_dns(ip.clone())?
+    {
         Ok(())
     } else {
         Err(EgressError::EgressIpNotAllowed(ip))
@@ -168,6 +171,7 @@ mod tests {
         test_block_invalid_ip();
         test_allow_valid_ip();
         test_allow_valid_domain();
+        test_allow_valid_ip_for_all_allowed();
     }
 
     fn test_valid_all_domains() {
@@ -228,9 +232,9 @@ mod tests {
 
     fn test_block_invalid_ip() {
         let destinations = EgressDestinations {
-            exact: vec!["*".to_string()],
+            exact: vec![],
             wildcard: vec![],
-            allow_all: true,
+            allow_all: false,
             ips: vec!["2.2.2.2".to_string()],
         };
         let result = check_ip_allow_list("1.1.1.1".to_string(), destinations);
@@ -239,10 +243,21 @@ mod tests {
 
     fn test_allow_valid_ip() {
         let destinations = EgressDestinations {
+            exact: vec![],
+            wildcard: vec![],
+            allow_all: false,
+            ips: vec!["1.1.1.1".to_string()],
+        };
+        let result = check_ip_allow_list("1.1.1.1".to_string(), destinations);
+        assert!(result.is_ok());
+    }
+
+    fn test_allow_valid_ip_for_all_allowed() {
+        let destinations = EgressDestinations {
             exact: vec!["*".to_string()],
             wildcard: vec![],
             allow_all: true,
-            ips: vec!["1.1.1.1".to_string()],
+            ips: vec![],
         };
         let result = check_ip_allow_list("1.1.1.1".to_string(), destinations);
         assert!(result.is_ok());
