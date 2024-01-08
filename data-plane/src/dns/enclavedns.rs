@@ -1,7 +1,7 @@
 use super::error::DNSError;
 use bytes::Bytes;
 use shared::server::egress::check_dns_allowed_for_domain;
-use shared::server::egress::{cache_dns_packet, EgressDestinations};
+use shared::server::egress::{cache_ip_for_allowlist, EgressDestinations};
 use shared::server::get_vsock_client;
 use shared::server::CID::Parent;
 use shared::DNS_PROXY_VSOCK_PORT;
@@ -132,7 +132,7 @@ impl EnclaveDnsDriver {
         // Attempt DNS lookup wth a timeout, flatten timeout errors into a DNS Error
         let dns_response =
             timeout(request_upper_bound, Self::forward_dns_lookup(dns_packet)).await??;
-        cache_dns_packet(&dns_response.clone())?;
+        cache_ip_for_allowlist(&dns_response.clone())?;
         Ok(dns_response)
     }
 

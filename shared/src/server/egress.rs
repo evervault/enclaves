@@ -86,7 +86,7 @@ pub fn check_dns_allowed_for_domain(
         .try_for_each(|q| check_domain_allow_list(q.qname.to_string(), destinations.clone()))
 }
 
-pub fn cache_dns_packet(packet: &[u8]) -> Result<(), EgressError> {
+pub fn cache_ip_for_allowlist(packet: &[u8]) -> Result<(), EgressError> {
     let packet = dns_parser::Packet::parse(packet)?;
     packet.answers.iter().try_for_each(|ans| {
         if let RData::A(ip) = ans.data {
@@ -98,7 +98,7 @@ pub fn cache_dns_packet(packet: &[u8]) -> Result<(), EgressError> {
 }
 
 fn cache_ip(ip: String, answer: &dns_parser::ResourceRecord<'_>) -> Result<(), EgressError> {
-    let mut cache = match ALLOWED_IPS_FROM_DNS.lock() {
+    let     mut cache = match ALLOWED_IPS_FROM_DNS.lock() {
         Ok(cache) => cache,
         Err(_) => return Err(EgressError::CouldntObtainLock),
     };
@@ -114,14 +114,14 @@ pub fn check_ip_allow_list(
     ip: String,
     allowed_destinations: EgressDestinations,
 ) -> Result<(), EgressError> {
-    if allowed_destinations.ips.contains(&ip) || check_ip_against_dns_lookups(ip.clone())? {
+    if allowed_destinations.ips.contains(&ip) || is_valid_ip_from_dns(ip.clone())? {
         Ok(())
     } else {
         Err(EgressError::EgressIpNotAllowed(ip))
     }
 }
 
-fn check_ip_against_dns_lookups(ip: String) -> Result<bool, EgressError> {
+fn is_valid_ip_from_dns(ip: String) -> Result<bool, EgressError> {
     let cache = match ALLOWED_IPS_FROM_DNS.lock() {
         Ok(cache) => cache,
         Err(_) => return Err(EgressError::CouldntObtainLock),
