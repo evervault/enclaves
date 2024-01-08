@@ -75,7 +75,7 @@ pub fn check_domain_allow_list(
     }
 }
 
-pub fn check_dns_packet(
+pub fn check_dns_allowed_for_domain(
     packet: &[u8],
     destinations: EgressDestinations,
 ) -> Result<(), EgressError> {
@@ -88,39 +88,45 @@ pub fn check_dns_packet(
 
 pub fn cache_dns_packet(packet: &[u8]) -> Result<(), EgressError> {
     let packet = dns_parser::Packet::parse(packet)?;
-    let answers: &dns_parser::ResourceRecord<'_> = packet.answers.first().unwrap();
-    let ip = get_ip(&answers.data)?;
-    let _ = cache_ip(ip.to_string(), answers.name.to_string());
-    Ok(())
+    packet.answers.iter().try_for_each(|ans| {
+        if let RData::A(ip) = ans.data {
+            cache_ip(ip.0.to_string(), ans)
+        } else {
+            Err(EgressError::ProtocolNotSupported)
+        }
+    })
 }
 
-fn cache_ip(ip: String, domain: String) -> Result<(), EgressError> {
-    let mut cache = ALLOWED_IPS_FROM_DNS.lock().unwrap(); // TODO: handle error properly
-    cache.insert(ip, domain, Duration::from_secs(300));
+fn cache_ip(ip: String, answer: &dns_parser::ResourceRecord<'_>) -> Result<(), EgressError> {
+    let mut cache = match ALLOWED_IPS_FROM_DNS.lock() {
+        Ok(cache) => cache,
+        Err(_) => return Err(EgressError::CouldntObtainLock),
+    };
+    cache.insert(
+        ip,
+        answer.name.to_string(),
+        Duration::from_secs(answer.ttl.into()),
+    );
     Ok(())
-}
-
-fn get_ip(data: &RData<'_>) -> Result<Ipv4Addr, EgressError> {
-    match data {
-        RData::A(ip) => Ok(ip.0),
-        _ => Err(EgressError::ProtocolNotSupported),
-    }
 }
 
 pub fn check_ip_allow_list(
     ip: String,
     allowed_destinations: EgressDestinations,
 ) -> Result<(), EgressError> {
-    if allowed_destinations.ips.contains(&ip) || check_dns_ip(ip.clone()) {
+    if allowed_destinations.ips.contains(&ip) || check_ip_against_dns_lookups(ip.clone())? {
         Ok(())
     } else {
         Err(EgressError::EgressIpNotAllowed(ip))
     }
 }
 
-fn check_dns_ip(ip: String) -> bool {
-    let binding = ALLOWED_IPS_FROM_DNS.lock().unwrap();
-    binding.get(&ip).is_some()
+fn check_ip_against_dns_lookups(ip: String) -> Result<bool, EgressError> {
+    let cache = match ALLOWED_IPS_FROM_DNS.lock() {
+        Ok(cache) => cache,
+        Err(_) => return Err(EgressError::CouldntObtainLock),
+    };
+    Ok(cache.get(&ip).is_some())
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize)]

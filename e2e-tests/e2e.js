@@ -63,7 +63,7 @@ describe("POST data to enclave", () => {
       })
       .catch((err) => {
         expect(err.response.data.message).to.deep.equal(
-          "getaddrinfo EAI_AGAIN jsonplaceholder.typicode.com"
+          "getaddrinfo EAI_AGAIN evervault.com"
         );
       });
   });
