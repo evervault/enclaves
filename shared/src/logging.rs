@@ -40,8 +40,8 @@ pub struct TrxContext {
     response_code: Option<String>,
     #[builder(default)]
     status_group: Option<String>,
-    pub enclave_name: String,
-    pub enclave_uuid: String,
+    pub resource_name: String,
+    pub resource_uuid: String,
     pub app_uuid: String,
     pub team_uuid: String,
     #[builder(default)]
@@ -126,8 +126,8 @@ impl TrxContextBuilder {
             response_headers: None,
             response_code: None,
             status_group: None,
-            enclave_name: None,
-            enclave_uuid: None,
+            resource_name: None,
+            resource_uuid: None,
             team_uuid: None,
             app_uuid: None,
             n_decrypted_fields: None,
@@ -153,15 +153,15 @@ impl TrxContextBuilder {
     }
 
     pub fn init_trx_context_with_enclave_details(
-        enclave_uuid: &str,
-        enclave_name: &str,
+        uuid: &str,
+        name: &str,
         app_uuid: &str,
         team_uuid: &str,
         request_type: RequestType,
     ) -> Self {
         let mut trx_context = Self::new(request_type);
-        trx_context.enclave_uuid(enclave_uuid.to_string());
-        trx_context.enclave_name(enclave_name.to_string());
+        trx_context.resource_uuid(uuid.to_string());
+        trx_context.resource_name(name.to_string());
         trx_context.app_uuid(app_uuid.to_string());
         trx_context.team_uuid(team_uuid.to_string());
         trx_context
@@ -266,8 +266,8 @@ impl TrxContextBuilder {
 
     pub fn can_build(&mut self) -> bool {
         self.uri.is_some()
-            & self.enclave_name.is_some()
-            & self.enclave_uuid.is_some()
+            & self.resource_name.is_some()
+            & self.resource_uuid.is_some()
             & self.request_method.is_some()
             & self.request_headers.is_some()
     }
@@ -500,8 +500,8 @@ mod test {
         let mut trx = TrxContextBuilder::new(super::RequestType::Websocket);
         trx.app_uuid("123".to_string());
         trx.team_uuid("123".to_string());
-        trx.enclave_uuid("123".to_string());
-        trx.enclave_name("name".to_string());
+        trx.resource_uuid("123".to_string());
+        trx.resource_name("name".to_string());
         trx.add_httparse_to_trx(true, Some(request), Some("1.1.1.1".to_string()));
         let log = trx.build().unwrap();
 
@@ -518,8 +518,8 @@ mod test {
             response_headers: None,
             response_code: None,
             status_group: None,
-            enclave_name: "name".to_string(),
-            enclave_uuid: "123".to_string(),
+            resource_name: "name".to_string(),
+            resource_uuid: "123".to_string(),
             app_uuid: "123".to_string(),
             team_uuid: "123".to_string(),
             n_decrypted_fields: None,
