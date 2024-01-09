@@ -159,7 +159,7 @@ mod health_check_tests {
     }
 
     #[tokio::test]
-    async fn test_cage_health_check_service() {
+    async fn test_enclave_health_check_service() {
         // the data-plane status should error, as its not running
         let response = run_ecs_health_check_service(false, false).await.unwrap();
         assert_eq!(response.status(), 500);
@@ -172,7 +172,7 @@ mod health_check_tests {
     }
 
     #[tokio::test]
-    async fn test_cage_health_check_service_with_skip_deep_set_to_true() {
+    async fn test_enclave_health_check_service_with_skip_deep_set_to_true() {
         // the data-plane status should error, as its not running
         let response = run_ecs_health_check_service(true, false).await.unwrap();
         assert_eq!(response.status(), 200);
@@ -185,7 +185,7 @@ mod health_check_tests {
     }
 
     #[tokio::test]
-    async fn test_cage_health_check_service_with_draining_set_to_true() {
+    async fn test_enclave_health_check_service_with_draining_set_to_true() {
         // the data-plane status should error, as its not running
         IS_DRAINING.set(true).unwrap();
         let response = run_ecs_health_check_service(false, true).await.unwrap();

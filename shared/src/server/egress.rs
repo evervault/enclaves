@@ -1,11 +1,12 @@
+use dns_parser::RData;
+use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde::Deserializer;
 use std::net::Ipv4Addr;
+use std::sync::Mutex;
+use std::time::Duration;
 use thiserror::Error;
-use tls_parser::{
-    nom::Finish, parse_tls_extensions, parse_tls_plaintext, TlsExtension, TlsMessage,
-    TlsMessageHandshake,
-};
+use ttl_cache::TtlCache;
 
 #[derive(Debug, Error)]
 pub enum EgressError {
@@ -19,38 +20,16 @@ pub enum EgressError {
     ClientHelloMissing,
     #[error("TLS extension missing")]
     ExtensionMissing,
+    #[error(transparent)]
+    DNSParseError(#[from] dns_parser::Error),
+    #[error("Protocol not support, only IPv4 is supported")]
+    ProtocolNotSupported,
+    #[error("Could not obtain lock for IP cache")]
+    CouldntObtainLock,
 }
 
-pub fn get_hostname(data: Vec<u8>) -> Result<String, EgressError> {
-    let (_, parsed_request) = parse_tls_plaintext(&data)
-        .finish()
-        .map_err(|tls_parse_err| EgressError::HostnameError(format!("{tls_parse_err:?}")))?;
-
-    let client_hello = match &parsed_request.msg[0] {
-        TlsMessage::Handshake(TlsMessageHandshake::ClientHello(client_hello)) => client_hello,
-        _ => return Err(EgressError::ClientHelloMissing),
-    };
-
-    let raw_extensions = match client_hello.ext {
-        Some(raw_extensions) => raw_extensions,
-        _ => return Err(EgressError::ExtensionMissing),
-    };
-    let mut destination = "".to_string();
-    let (_, extensions) = parse_tls_extensions(raw_extensions)
-        .finish()
-        .map_err(|tls_parse_err| EgressError::HostnameError(format!("{tls_parse_err:?}")))?;
-
-    for extension in extensions {
-        if let TlsExtension::SNI(sni_vec) = extension {
-            for (_, item) in sni_vec {
-                if let Ok(hostname) = std::str::from_utf8(item) {
-                    destination = hostname.to_string();
-                }
-            }
-        }
-    }
-    Ok(destination)
-}
+pub static ALLOWED_IPS_FROM_DNS: Lazy<Mutex<TtlCache<String, String>>> =
+    Lazy::new(|| Mutex::new(TtlCache::new(1000)));
 
 pub fn get_egress_allow_list_from_env() -> EgressDestinations {
     let domain_str = std::env::var("EV_EGRESS_ALLOW_LIST").unwrap_or("".to_string());
@@ -78,30 +57,79 @@ pub fn get_egress_allow_list(domain_str: String) -> EgressDestinations {
     }
 }
 
-pub fn check_allow_list(
-    hostname: Option<String>,
+pub fn check_domain_allow_list(
+    domain: String,
+    allowed_destinations: EgressDestinations,
+) -> Result<(), EgressError> {
+    let valid_wildcard = allowed_destinations
+        .wildcard
+        .iter()
+        .any(|wildcard| domain.ends_with(wildcard));
+    if allowed_destinations.exact.contains(&domain)
+        || allowed_destinations.allow_all
+        || valid_wildcard
+    {
+        Ok(())
+    } else {
+        Err(EgressError::EgressDomainNotAllowed(domain))
+    }
+}
+
+pub fn check_dns_allowed_for_domain(
+    packet: &[u8],
+    destinations: EgressDestinations,
+) -> Result<(), EgressError> {
+    let packet = dns_parser::Packet::parse(packet)?;
+    packet
+        .questions
+        .iter()
+        .try_for_each(|q| check_domain_allow_list(q.qname.to_string(), destinations.clone()))
+}
+
+pub fn cache_ip_for_allowlist(packet: &[u8]) -> Result<(), EgressError> {
+    let packet = dns_parser::Packet::parse(packet)?;
+    packet.answers.iter().try_for_each(|ans| {
+        if let RData::A(ip) = ans.data {
+            cache_ip(ip.0.to_string(), ans)
+        } else {
+            Err(EgressError::ProtocolNotSupported)
+        }
+    })
+}
+
+fn cache_ip(ip: String, answer: &dns_parser::ResourceRecord<'_>) -> Result<(), EgressError> {
+    let mut cache = match ALLOWED_IPS_FROM_DNS.lock() {
+        Ok(cache) => cache,
+        Err(_) => return Err(EgressError::CouldntObtainLock),
+    };
+    cache.insert(
+        ip,
+        answer.name.to_string(),
+        Duration::from_secs(answer.ttl.into()),
+    );
+    Ok(())
+}
+
+pub fn check_ip_allow_list(
     ip: String,
     allowed_destinations: EgressDestinations,
 ) -> Result<(), EgressError> {
-    match hostname {
-        Some(domain) => {
-            let valid_wildcard = allowed_destinations
-                .wildcard
-                .iter()
-                .any(|wildcard| domain.ends_with(wildcard));
-            if allowed_destinations.exact.contains(&domain)
-                || allowed_destinations.allow_all
-                || valid_wildcard
-                || allowed_destinations.ips.contains(&ip)
-            {
-                Ok(())
-            } else {
-                Err(EgressError::EgressDomainNotAllowed(domain))
-            }
-        }
-        None if allowed_destinations.ips.contains(&ip) => Ok(()),
-        None => Err(EgressError::EgressIpNotAllowed(ip)),
+    if allowed_destinations.allow_all
+        || allowed_destinations.ips.contains(&ip)
+        || is_valid_ip_from_dns(ip.clone())?
+    {
+        Ok(())
+    } else {
+        Err(EgressError::EgressIpNotAllowed(ip))
     }
+}
+
+fn is_valid_ip_from_dns(ip: String) -> Result<bool, EgressError> {
+    let cache = match ALLOWED_IPS_FROM_DNS.lock() {
+        Ok(cache) => cache,
+        Err(_) => return Err(EgressError::CouldntObtainLock),
+    };
+    Ok(cache.get(&ip).is_some())
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize)]
@@ -128,7 +156,8 @@ pub struct EgressConfig {
 
 #[cfg(test)]
 mod tests {
-    use crate::server::egress::check_allow_list;
+    use crate::server::egress::check_domain_allow_list;
+    use crate::server::egress::check_ip_allow_list;
     use crate::server::egress::get_egress_allow_list_from_env;
     use crate::server::egress::EgressDestinations;
     use crate::server::egress::EgressError::{EgressDomainNotAllowed, EgressIpNotAllowed};
@@ -142,6 +171,7 @@ mod tests {
         test_block_invalid_ip();
         test_allow_valid_ip();
         test_allow_valid_domain();
+        test_allow_valid_ip_for_all_allowed();
     }
 
     fn test_valid_all_domains() {
@@ -196,33 +226,40 @@ mod tests {
             allow_all: false,
             ips: vec![],
         };
-        let result = check_allow_list(
-            Some("invalid.domain.com".to_string()),
-            "1.1.1.1".to_string(),
-            destinations,
-        );
+        let result = check_domain_allow_list("invalid.domain.com".to_string(), destinations);
         assert!(matches!(result, Err(EgressDomainNotAllowed(_))));
     }
 
     fn test_block_invalid_ip() {
         let destinations = EgressDestinations {
-            exact: vec!["*".to_string()],
+            exact: vec![],
             wildcard: vec![],
-            allow_all: true,
+            allow_all: false,
             ips: vec!["2.2.2.2".to_string()],
         };
-        let result = check_allow_list(None, "1.1.1.1".to_string(), destinations);
+        let result = check_ip_allow_list("1.1.1.1".to_string(), destinations);
         assert!(matches!(result, Err(EgressIpNotAllowed(_))));
     }
 
     fn test_allow_valid_ip() {
         let destinations = EgressDestinations {
+            exact: vec![],
+            wildcard: vec![],
+            allow_all: false,
+            ips: vec!["1.1.1.1".to_string()],
+        };
+        let result = check_ip_allow_list("1.1.1.1".to_string(), destinations);
+        assert!(result.is_ok());
+    }
+
+    fn test_allow_valid_ip_for_all_allowed() {
+        let destinations = EgressDestinations {
             exact: vec!["*".to_string()],
             wildcard: vec![],
             allow_all: true,
-            ips: vec!["1.1.1.1".to_string()],
+            ips: vec![],
         };
-        let result = check_allow_list(None, "1.1.1.1".to_string(), destinations);
+        let result = check_ip_allow_list("1.1.1.1".to_string(), destinations);
         assert!(result.is_ok());
     }
 
@@ -233,7 +270,7 @@ mod tests {
             allow_all: true,
             ips: vec!["1.1.1.1".to_string()],
         };
-        let result = check_allow_list(None, "1.1.1.1".to_string(), destinations);
+        let result = check_domain_allow_list("a.domain.com".to_string(), destinations);
         assert!(result.is_ok());
     }
 }

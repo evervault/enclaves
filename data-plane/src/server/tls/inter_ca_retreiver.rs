@@ -4,7 +4,7 @@ use openssl::x509::X509;
 use crate::e3client::E3Client;
 use crate::env::Environment;
 use crate::error::{Error, Result};
-use crate::{cert_provisioner_client, config_client, CageContext};
+use crate::{cert_provisioner_client, config_client, EnclaveContext};
 use crate::{cert_provisioner_client::CertProvisionerClient, config_client::ConfigClient};
 
 pub struct InterCaRetreiver {
@@ -37,7 +37,7 @@ impl InterCaRetreiver {
             .get_cert(token)
             .await
             .map_err(|err| Error::CertServer(err.to_string()))?;
-        CageContext::set(cert_response.context.clone().into());
+        EnclaveContext::set(cert_response.context.clone().into());
         self.env
             .clone()
             .init(cert_response.clone().secrets.unwrap())

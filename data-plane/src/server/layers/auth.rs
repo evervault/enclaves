@@ -12,7 +12,7 @@ use tower::{Layer, Service};
 use crate::base_tls_client::ClientError;
 use crate::{
     e3client::{AuthRequest, E3Api},
-    CageContext,
+    EnclaveContext,
 };
 
 #[derive(Debug, Error)]
@@ -45,7 +45,7 @@ impl std::convert::From<AuthError> for Response<Body> {
         .to_string();
         Response::builder()
             .status(err.to_status())
-            .header("content-type", "appliction/json")
+            .header("content-type", "application/json")
             .header("content-length", body.len())
             .body(body.into())
             .expect("Failed to build auth error to response")
@@ -55,11 +55,11 @@ impl std::convert::From<AuthError> for Response<Body> {
 #[derive(Clone)]
 pub struct AuthLayer<T: E3Api + Send + Sync + 'static> {
     e3_client: Arc<T>,
-    context: Arc<CageContext>,
+    context: Arc<EnclaveContext>,
 }
 
 impl<T: E3Api + Send + Sync + 'static> AuthLayer<T> {
-    pub fn new(e3_client: Arc<T>, context: Arc<CageContext>) -> Self {
+    pub fn new(e3_client: Arc<T>, context: Arc<EnclaveContext>) -> Self {
         Self { e3_client, context }
     }
 }
@@ -79,7 +79,7 @@ impl<S, T: E3Api + Send + Sync + 'static> Layer<S> for AuthLayer<T> {
 #[derive(Clone)]
 pub struct AuthService<S, T: E3Api + Send + Sync + 'static> {
     e3_client: Arc<T>,
-    context: Arc<CageContext>,
+    context: Arc<EnclaveContext>,
     inner: S,
 }
 
@@ -107,7 +107,7 @@ where
         let clone = self.inner.clone();
         let mut inner = std::mem::replace(&mut self.inner, clone);
         let e3_client = self.e3_client.clone();
-        let cage_context = self.context.clone();
+        let enclave_context = self.context.clone();
         Box::pin(async move {
             let Some(api_key) = req.headers().get("api-key") else {
                 let mut error_response: Response<Body> = AuthError::NoApiKeyGiven.into();
@@ -117,7 +117,7 @@ where
                 return Ok(error_response);
             };
 
-            if let Err(err) = auth_request(api_key, cage_context, e3_client).await {
+            if let Err(err) = auth_request(api_key, enclave_context, e3_client).await {
                 let mut error_response: Response<Body> = err.into();
                 if let Some(context) = req.extensions_mut().remove::<TrxContextBuilder>() {
                     error_response.extensions_mut().insert(context);
@@ -138,17 +138,17 @@ fn compute_base64_sha512(input: impl AsRef<[u8]>) -> Vec<u8> {
 }
 
 pub async fn auth_request<
-    C: std::ops::Deref<Target = CageContext>,
+    C: std::ops::Deref<Target = EnclaveContext>,
     T: E3Api + Send + Sync + 'static,
 >(
     api_key: &HeaderValue,
-    cage_context: C,
+    enclave_context: C,
     e3_client: Arc<T>,
 ) -> Result<(), AuthError> {
     log::debug!("Authenticating request");
     let hashed_api_key = HeaderValue::from_bytes(&compute_base64_sha512(api_key.as_bytes()))?;
 
-    let auth_payload = AuthRequest::from(cage_context);
+    let auth_payload = AuthRequest::from(enclave_context);
     // matching on error to handle retry with alternative key
     let Err(err) = e3_client
         .authenticate(&hashed_api_key, auth_payload.clone())
@@ -159,16 +159,8 @@ pub async fn auth_request<
 
     match err {
         ClientError::FailedRequest(status) if status.as_u16() == 401 => {
-            log::debug!("Failed to auth with scoped api key hash, attempting with app api key");
-            let Err(err) = e3_client.authenticate(api_key, auth_payload).await else {
-                return Ok(());
-            };
-            match err {
-                ClientError::FailedRequest(status) if status.as_u16() == 401 => {
-                    Err(AuthError::FailedToAuthenticateApiKey)
-                }
-                e => Err(e.into()),
-            }
+            log::debug!("Failed to auth with scoped api key hash");
+            Err(AuthError::FailedToAuthenticateApiKey)
         }
         e => Err(e.into()),
     }
@@ -192,11 +184,11 @@ mod test {
             .returning(|_, _| Ok(()));
 
         let api_key = HeaderValue::from_str("my-api-key").unwrap();
-        let context = CageContext::new(
+        let context = EnclaveContext::new(
             "team_uuid".into(),
             "app_uuid".into(),
-            "cage_uuid".into(),
-            "cage_name".into(),
+            "enclave_uuid".into(),
+            "enclave_name".into(),
         );
 
         let result = auth_request(&api_key, &context, Arc::new(e3_test_client)).await;
@@ -204,52 +196,23 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_request_auth_success_with_second_attempt() {
+    async fn test_request_auth_maps_401_to_correct_error() {
         let mut e3_test_client = MockE3TestClient::new();
         let api_key = HeaderValue::from_str("my-api-key").unwrap();
         e3_test_client
             .expect_authenticate()
-            .times(2)
-            .returning(|received_api_key, _| {
-                // first request hashes the api key, second sends it in the clear
-                if received_api_key.to_str().unwrap() == "my-api-key" {
-                    Ok(())
-                } else {
-                    Err(ClientError::FailedRequest(
-                        StatusCode::from_u16(401).unwrap(),
-                    ))
-                }
-            });
-
-        let context = CageContext::new(
-            "team_uuid".into(),
-            "app_uuid".into(),
-            "cage_uuid".into(),
-            "cage_name".into(),
-        );
-
-        let result = auth_request(&api_key, &context, Arc::new(e3_test_client)).await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_request_auth_receives_401_on_both_requests() {
-        let mut e3_test_client = MockE3TestClient::new();
-        let api_key = HeaderValue::from_str("my-api-key").unwrap();
-        e3_test_client
-            .expect_authenticate()
-            .times(2)
+            .times(1)
             .returning(|_, _| {
                 Err(ClientError::FailedRequest(
                     StatusCode::from_u16(401).unwrap(),
                 ))
             });
 
-        let context = CageContext::new(
+        let context = EnclaveContext::new(
             "team_uuid".into(),
             "app_uuid".into(),
-            "cage_uuid".into(),
-            "cage_name".into(),
+            "enclave_uuid".into(),
+            "enclave_name".into(),
         );
 
         let result = auth_request(&api_key, &context, Arc::new(e3_test_client)).await;
@@ -271,11 +234,11 @@ mod test {
                 ))
             });
 
-        let context = CageContext::new(
+        let context = EnclaveContext::new(
             "team_uuid".into(),
             "app_uuid".into(),
-            "cage_uuid".into(),
-            "cage_name".into(),
+            "enclave_uuid".into(),
+            "enclave_name".into(),
         );
 
         let result = auth_request(&api_key, &context, Arc::new(e3_test_client)).await;

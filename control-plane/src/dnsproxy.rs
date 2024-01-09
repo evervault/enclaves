@@ -1,4 +1,6 @@
 use crate::error::{Result, ServerError};
+use shared::server::egress::check_dns_allowed_for_domain;
+use shared::server::egress::{cache_ip_for_allowlist, EgressDestinations};
 use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
 use shared::DNS_PROXY_VSOCK_PORT;
@@ -37,11 +39,14 @@ impl DnsProxy {
     pub async fn listen(self) -> Result<()> {
         let mut server = get_vsock_server(DNS_PROXY_VSOCK_PORT, Parent).await?;
 
+        let allowed_domains = shared::server::egress::get_egress_allow_list_from_env();
         loop {
+            let domains = allowed_domains.clone();
             match server.accept().await {
                 Ok(stream) => {
                     tokio::spawn(async move {
-                        if let Err(e) = Self::proxy_dns_connection(self.dns_server_ip, stream).await
+                        if let Err(e) =
+                            Self::proxy_dns_connection(self.dns_server_ip, stream, domains).await
                         {
                             log::error!("Error proxying dns connection: {e}");
                         }
@@ -64,6 +69,7 @@ impl DnsProxy {
     async fn proxy_dns_connection<T: AsyncRead + AsyncWrite + Unpin>(
         target_ip: IpAddr,
         mut stream: T,
+        allowed_domains: EgressDestinations,
     ) -> Result<()> {
         log::info!("Proxying request to remote");
         let mut request_buffer = [0; 512];
@@ -71,10 +77,12 @@ impl DnsProxy {
 
         let socket = Self::remote_dns_socket(target_ip).await?;
         let mut response_buffer = [0; 512];
+        check_dns_allowed_for_domain(&request_buffer[..packet_size], allowed_domains.clone())?;
         socket.send(&request_buffer[..packet_size]).await?;
         let (amt, _) = socket.recv_from(&mut response_buffer).await?;
-
-        stream.write_all(&response_buffer[..amt]).await?;
+        let response_bytes = &response_buffer[..amt];
+        cache_ip_for_allowlist(response_bytes)?;
+        stream.write_all(response_bytes).await?;
         stream.flush().await?;
         Ok(())
     }

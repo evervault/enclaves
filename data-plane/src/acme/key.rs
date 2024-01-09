@@ -92,7 +92,7 @@ impl AcmeKeyRetreiver {
         }
     }
 
-    pub async fn get_or_create_cage_key_pair(&self) -> Result<PKey<Private>, AcmeError> {
+    pub async fn get_or_create_enclave_key_pair(&self) -> Result<PKey<Private>, AcmeError> {
         log::info!("[ACME] Starting polling for ACME key pair");
         let mut persisted_key_pair: Option<PKey<Private>> = None;
 

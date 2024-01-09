@@ -29,15 +29,15 @@ pub mod server;
 use shared::server::config_server::requests::ProvisionerContext;
 use thiserror::Error;
 
-static CAGE_CONTEXT: OnceCell<CageContext> = OnceCell::new();
+static ENCLAVE_CONTEXT: OnceCell<EnclaveContext> = OnceCell::new();
 static FEATURE_CONTEXT: OnceCell<FeatureContext> = OnceCell::new();
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct CageContext {
+pub struct EnclaveContext {
     team_uuid: String,
     app_uuid: String,
-    cage_uuid: String,
-    cage_name: String,
+    uuid: String,
+    name: String,
 }
 
 #[derive(Error, Debug)]
@@ -50,33 +50,33 @@ pub enum ContextError {
     Uninitialized,
 }
 
-impl CageContext {
-    fn get() -> Result<CageContext, ContextError> {
-        CAGE_CONTEXT
+impl EnclaveContext {
+    fn get() -> Result<EnclaveContext, ContextError> {
+        ENCLAVE_CONTEXT
             .get()
             .map(|context| context.to_owned())
             .ok_or(ContextError::Uninitialized)
     }
 
-    fn set(ctx: CageContext) {
-        CAGE_CONTEXT.get_or_init(|| ctx);
+    fn set(ctx: EnclaveContext) {
+        ENCLAVE_CONTEXT.get_or_init(|| ctx);
     }
 
-    pub fn new(team_uuid: String, app_uuid: String, cage_uuid: String, cage_name: String) -> Self {
+    pub fn new(team_uuid: String, app_uuid: String, uuid: String, name: String) -> Self {
         Self {
-            cage_uuid,
+            uuid,
             app_uuid,
             team_uuid,
-            cage_name,
+            name,
         }
     }
 
-    pub fn cage_uuid(&self) -> &str {
-        &self.cage_uuid
+    pub fn uuid(&self) -> &str {
+        &self.uuid
     }
 
-    pub fn cage_name(&self) -> &str {
-        &self.cage_name
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     pub fn app_uuid(&self) -> &str {
@@ -93,31 +93,25 @@ impl CageContext {
 
     #[cfg(staging)]
     pub fn get_cert_name(&self) -> String {
-        format!("{}.{}.cages.evervault.dev", &self.cage_name, &self.app_uuid)
+        format!("{}.{}.cages.evervault.dev", &self.name, &self.app_uuid)
     }
 
     #[cfg(staging)]
     pub fn get_hyphenated_cert_name(&self) -> String {
         let hyphenated_app_uuid = self.app_uuid.clone().replace('_', "-");
         log::debug!("hyphenated_app_uuid: {:?}", hyphenated_app_uuid);
-        format!(
-            "{}.{}.cages.evervault.dev",
-            &self.cage_name, hyphenated_app_uuid
-        )
+        format!("{}.{}.cages.evervault.dev", &self.name, hyphenated_app_uuid)
     }
 
     #[cfg(not(staging))]
     pub fn get_cert_name(&self) -> String {
-        format!("{}.{}.cages.evervault.com", &self.cage_name, &self.app_uuid)
+        format!("{}.{}.cages.evervault.com", &self.name, &self.app_uuid)
     }
 
     #[cfg(not(staging))]
     pub fn get_hyphenated_cert_name(&self) -> String {
         let hyphenated_app_uuid = self.app_uuid.clone().replace('_', "-");
-        format!(
-            "{}.{}.cages.evervault.com",
-            &self.cage_name, hyphenated_app_uuid
-        )
+        format!("{}.{}.cages.evervault.com", &self.name, hyphenated_app_uuid)
     }
 
     pub fn get_trusted_cert_domains(&self) -> Vec<String> {
@@ -129,14 +123,7 @@ impl CageContext {
 
         base_domains
             .iter()
-            .map(|domain| {
-                format!(
-                    "{}.{}.{}",
-                    &self.cage_name,
-                    &self.hyphenated_app_uuid(),
-                    domain
-                )
-            })
+            .map(|domain| format!("{}.{}.{}", &self.name, &self.hyphenated_app_uuid(), domain))
             .collect()
     }
 
@@ -147,9 +134,9 @@ impl CageContext {
     }
 }
 
-impl From<ProvisionerContext> for CageContext {
+impl From<ProvisionerContext> for EnclaveContext {
     fn from(context: ProvisionerContext) -> Self {
-        CageContext::new(
+        EnclaveContext::new(
             context.team_uuid,
             context.app_uuid,
             context.cage_uuid,

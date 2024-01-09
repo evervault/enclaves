@@ -33,7 +33,7 @@ app.use(mutualTlsMiddleware());
 
 app.get('/cert/token', async (req, res) => {
   try {
-    console.log("Received cert token request from cage control plane")
+    console.log("Received cert token request from enclave control plane")
     var result = {
       token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeFONFh7HgQ"
     };
@@ -45,7 +45,7 @@ app.get('/cert/token', async (req, res) => {
 
 app.get('/e3/token', async (req, res) => {
   try {
-    console.log("Received E3 token request from cage control plane")
+    console.log("Received E3 token request from enclave control plane")
     var result = {
       token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeFONFh7HgQ",
       token_id: "123"
@@ -75,13 +75,13 @@ tlsApp.post('/cert', async (req, res) => {
     let ca_cert = Buffer.from(fs.readFileSync('/services/sample-intermediate-cert.pem', 'utf8')).toString('base64');
     let ca_key_pair =  Buffer.from(fs.readFileSync('/services/sample-intermediate-key.pem', 'utf8')).toString('base64');
 
-    console.log(`Mock cert provisioner - Received cert request from cage data plane ${req}`);
+    console.log(`Mock cert provisioner - Received cert request from enclave data plane ${req}`);
     
     var result = {
       intermediate_cert: ca_cert,
       key_pair: ca_key_pair,
       secrets: [{name: "ANOTHER_ENV_VAR", secret: "123"}, {name: "ENCRYPTED_ENV", secret: "ev:123"}],
-      context: {team_uuid: "team_123", cage_uuid: "cage_123", app_uuid: "app_12345678", cage_name: "test-cage"},
+      context: {team_uuid: "team_123", cage_uuid: "enclave_123", app_uuid: "app_12345678", cage_name: "test-enclave"},
     };
     res.status(200)
     res.send(result) 
@@ -92,10 +92,10 @@ tlsApp.post('/cert', async (req, res) => {
 
 tlsApp.post('/secrets', async (req, res) => {
   try {
-    console.log(`Mock cert provisioner - Received secrets request from cage data plane ${req}`);
+    console.log(`Mock cert provisioner - Received secrets request from enclave data plane ${req}`);
     
     var result = {
-      context: {team_uuid: "team_123", cage_uuid: "cage_123", app_uuid: "app_12345678", cage_name: "test-cage"},
+      context: {team_uuid: "team_123", cage_uuid: "enclave_123", app_uuid: "app_12345678", cage_name: "test-enclave"},
       secrets: [{name: "ANOTHER_ENV_VAR", secret: "123"}, {name: "ENCRYPTED_ENV", secret: "ev:123"}]
     };
     res.status(200)

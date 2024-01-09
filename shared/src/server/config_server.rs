@@ -148,6 +148,7 @@ pub mod requests {
         pub context: ProvisionerContext,
     }
 
+    // TODO: remove "cage" usages in provisioner
     #[derive(Serialize, Deserialize, Debug, Clone)]
     pub struct ProvisionerContext {
         pub cage_uuid: String,

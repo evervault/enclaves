@@ -1,4 +1,4 @@
-# Cage Data Plane
+# Enclave Data Plane
 
 The data plane is the Evervault managed process which runs within the Enclave to terminate TLS, perform decryption, and 
 proxy any network egress.
