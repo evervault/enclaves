@@ -126,14 +126,14 @@ impl EnclaveDnsDriver {
         dns_packet: Bytes,
         request_upper_bound: Duration,
         allowed_destinations: EgressDestinations,
-    ) -> Result<Bytes, DNSError> {
+    ) -> Result<Vec<u8>, DNSError> {
         // Check domain is allowed before proxying lookup
         check_dns_allowed_for_domain(&dns_packet.clone(), allowed_destinations)?;
         // Attempt DNS lookup wth a timeout, flatten timeout errors into a DNS Error
         let dns_response =
             timeout(request_upper_bound, Self::forward_dns_lookup(dns_packet)).await??;
-        cache_ip_for_allowlist(&dns_response.clone())?;
-        Ok(dns_response)
+        let response = cache_ip_for_allowlist(&dns_response.clone())?;
+        Ok(response)
     }
 
     /// Takes a DNS lookup as `Bytes` and sends forwards it over VSock to the host process to be sent to

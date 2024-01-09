@@ -1,11 +1,17 @@
-use dns_parser::RData;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde::Deserializer;
+use trust_dns_proto::serialize::binary::BinEncodable;
 use std::net::Ipv4Addr;
 use std::sync::Mutex;
 use std::time::Duration;
 use thiserror::Error;
+use trust_dns_proto::error::ProtoError;
+use trust_dns_proto::op::Message;
+use trust_dns_proto::op::MessageType;
+use trust_dns_proto::rr::RData;
+use trust_dns_proto::rr::Record;
+use trust_dns_proto::serialize::binary::{BinDecodable, BinDecoder};
 use ttl_cache::TtlCache;
 
 #[derive(Debug, Error)]
@@ -20,12 +26,12 @@ pub enum EgressError {
     ClientHelloMissing,
     #[error("TLS extension missing")]
     ExtensionMissing,
-    #[error(transparent)]
-    DNSParseError(#[from] dns_parser::Error),
-    #[error("Protocol not support, only IPv4 is supported")]
+    #[error("Protocol not supported, use IPv4 or IPv6")]
     ProtocolNotSupported,
     #[error("Could not obtain lock for IP cache")]
     CouldntObtainLock,
+    #[error(transparent)]
+    ProtoError(#[from] ProtoError),
 }
 
 pub static ALLOWED_IPS_FROM_DNS: Lazy<Mutex<TtlCache<String, String>>> =
@@ -79,33 +85,54 @@ pub fn check_dns_allowed_for_domain(
     packet: &[u8],
     destinations: EgressDestinations,
 ) -> Result<(), EgressError> {
-    let packet = dns_parser::Packet::parse(packet)?;
-    packet
-        .questions
+    let mut decoder = BinDecoder::new(packet);
+    let m = Message::read(&mut decoder)?;
+    m.queries()
         .iter()
-        .try_for_each(|q| check_domain_allow_list(q.qname.to_string(), destinations.clone()))
+        .try_for_each(|q| check_domain_allow_list(q.name().to_string(), destinations.clone()))
 }
 
-pub fn cache_ip_for_allowlist(packet: &[u8]) -> Result<(), EgressError> {
-    let packet = dns_parser::Packet::parse(packet)?;
-    packet.answers.iter().try_for_each(|ans| {
-        if let RData::A(ip) = ans.data {
-            cache_ip(ip.0.to_string(), ans)
-        } else {
-            Err(EgressError::ProtocolNotSupported)
-        }
-    })
+pub fn cache_ip_for_allowlist(packet: &[u8]) -> Result<Vec<u8>, EgressError> {
+    let mut decoder = BinDecoder::new(packet);
+    let mut m = Message::read(&mut decoder)?;
+
+    let stripped_answers: Vec<Record> = m
+        .answers()
+        .iter()
+        .filter_map(|item| {
+            println!("Item {:?}", item);
+            match item.data().unwrap() {
+                RData::A(ip) => {
+                    cache_ip(ip.to_string(), item.clone()).ok();
+                    Some(item.clone())
+                }
+                _ => None,
+            }
+        })
+        .collect();
+    println!("The final answer {:?}", stripped_answers);
+    let mut result = Message::new();
+    let final_result = result
+        .set_message_type(MessageType::Response)
+        .add_additionals(m.additionals().to_owned())
+        .add_answers(stripped_answers)
+        .add_queries(m.queries().to_owned());
+
+    final_result.
+
+    println!("NEW MESSAGE {:?}", final_result);
+    Ok(final_result.to_bytes().unwrap())
 }
 
-fn cache_ip(ip: String, answer: &dns_parser::ResourceRecord<'_>) -> Result<(), EgressError> {
+fn cache_ip(ip: String, record: Record) -> Result<(), EgressError> {
     let mut cache = match ALLOWED_IPS_FROM_DNS.lock() {
         Ok(cache) => cache,
         Err(_) => return Err(EgressError::CouldntObtainLock),
     };
     cache.insert(
         ip,
-        answer.name.to_string(),
-        Duration::from_secs(answer.ttl.into()),
+        record.name().to_string(),
+        Duration::from_secs(record.ttl().into()),
     );
     Ok(())
 }

@@ -31,7 +31,7 @@ base64 = "0.13.0"
 env_logger = "0.10.0"
 once_cell = { version = "1.19.0", optional = true }
 ttl_cache = { version ="0.5.1", optional = true }
-dns-parser = { version = "0.8.0", optional = true }
+trust-dns-proto = { version = "0.23.2", optional = true }
 
 [dev-dependencies]
 tokio-test = "0.4.2"
@@ -44,5 +44,5 @@ crate-type = ["lib"]
 
 [features]
 default = []
-network_egress = ["dep:once_cell", "dep:ttl_cache", "dep:dns-parser"]
+network_egress = ["dep:once_cell", "dep:ttl_cache", "dep:trust-dns-proto"]
 enclave = ["dep:tokio-vsock"]

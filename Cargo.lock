@@ -1428,16 +1428,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dns-parser"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4d33be9473d06f75f58220f71f7a9317aca647dc061dbd3c361b0bef505fbea"
-dependencies = [
- "byteorder",
- "quick-error",
-]
-
-[[package]]
 name = "downcast"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2947,7 +2937,6 @@ dependencies = [
  "cadence",
  "chrono",
  "derive_builder",
- "dns-parser",
  "env_logger",
  "httparse",
  "hyper",
@@ -2966,6 +2955,7 @@ dependencies = [
  "tokio-rustls",
  "tokio-test",
  "tokio-vsock",
+ "trust-dns-proto",
  "ttl_cache",
 ]
 
@@ -3382,9 +3372,9 @@ dependencies = [
 
 [[package]]
 name = "trust-dns-proto"
-version = "0.23.0"
+version = "0.23.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0dc775440033cb114085f6f2437682b194fa7546466024b1037e82a48a052a69"
+checksum = "3119112651c157f4488931a01e586aa459736e9d6046d3bd9105ffb69352d374"
 dependencies = [
  "async-trait",
  "cfg-if",

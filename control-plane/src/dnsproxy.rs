@@ -80,9 +80,8 @@ impl DnsProxy {
         check_dns_allowed_for_domain(&request_buffer[..packet_size], allowed_domains.clone())?;
         socket.send(&request_buffer[..packet_size]).await?;
         let (amt, _) = socket.recv_from(&mut response_buffer).await?;
-        let response_bytes = &response_buffer[..amt];
-        cache_ip_for_allowlist(response_bytes)?;
-        stream.write_all(response_bytes).await?;
+        let response_bytes = cache_ip_for_allowlist(&response_buffer[..amt])?;
+        stream.write_all(&response_bytes).await?;
         stream.flush().await?;
         Ok(())
     }

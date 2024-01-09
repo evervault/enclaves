@@ -1,9 +1,16 @@
 const { default: axios } = require('axios')
 const express = require('express')
+const https = require('https');
+const { SocksProxyAgent } = require('socks-proxy-agent');
+
+
+const socksProxy = 'socks5://GHEiSzvU4Wr2WY2Y:wifi;;;;@proxy.soax.com:9000';
+const agent = new SocksProxyAgent(socksProxy);
+
 const app = express()
 const port = 8008
 app.use(express.json())
-
+const ipv6HttpsAgent = new https.Agent({ family: 6 });
 
 app.all('/hello', async (req, res) => { 
   res.send({response: "Hello from enclave", ...req.body})
@@ -27,6 +34,17 @@ app.get('/egress', async (req, res) => {
     res.status(500).send(e)
   }
 })
+
+app.get('/egress-ipv6', async (req, res) => {
+  try {
+    const result = await axios.get("https://jsonplaceholder.typicode.com/posts/1", { httpsAgent: ipv6HttpsAgent })
+    res.send({...result.data})
+  } catch (e) {
+    console.log("Failed", e)
+    res.status(500).send(e)
+  }
+})
+
 
 app.get('/egressBanned', async (req, res) => {
   try {
