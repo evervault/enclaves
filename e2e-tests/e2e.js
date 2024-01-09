@@ -63,7 +63,7 @@ describe("POST data to enclave", () => {
       })
       .catch((err) => {
         expect(err.response.data.message).to.deep.equal(
-          "Client network socket disconnected before secure TLS connection was established"
+          "getaddrinfo EAI_AGAIN evervault.com"
         );
       });
   });

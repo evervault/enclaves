@@ -112,8 +112,8 @@ async fn start(data_plane_port: u16) {
     };
 
     let (_, dns_result, e3_api_result, egress_result, stats_result) = tokio::join!(
-        start_data_plane(data_plane_port, context),
-        EnclaveDnsProxy::bind_server(),
+        start_data_plane(data_plane_port, context.clone()),
+        EnclaveDnsProxy::bind_server(context.egress.allow_list),
         CryptoApi::listen(),
         EgressProxy::listen(),
         StatsProxy::listen()

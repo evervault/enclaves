@@ -1,5 +1,7 @@
 use super::error::DNSError;
 use bytes::Bytes;
+use shared::server::egress::check_dns_allowed_for_domain;
+use shared::server::egress::{cache_ip_for_allowlist, EgressDestinations};
 use shared::server::get_vsock_client;
 use shared::server::CID::Parent;
 use shared::DNS_PROXY_VSOCK_PORT;
@@ -15,7 +17,7 @@ use tokio::time::timeout;
 pub struct EnclaveDnsProxy;
 
 impl EnclaveDnsProxy {
-    pub async fn bind_server() -> Result<(), DNSError> {
+    pub async fn bind_server(allowed_destinations: EgressDestinations) -> Result<(), DNSError> {
         log::info!("Starting DNS proxy");
         let socket = UdpSocket::bind("127.0.0.1:53").await?;
         let shared_socket = std::sync::Arc::new(socket);
@@ -34,6 +36,7 @@ impl EnclaveDnsProxy {
             dns_lookup_receiver,
             dns_request_upper_bound,
             max_concurrent_requests,
+            allowed_destinations,
         );
         tokio::spawn(async move {
             log::info!("Starting DNS request driver");
@@ -62,6 +65,7 @@ struct EnclaveDnsDriver {
     dns_lookup_receiver: Receiver<(Bytes, SocketAddr)>,
     dns_request_upper_bound: Duration,
     concurrency_gate: Arc<Semaphore>,
+    allowed_destinations: EgressDestinations,
 }
 
 impl EnclaveDnsDriver {
@@ -70,6 +74,7 @@ impl EnclaveDnsDriver {
         dns_lookup_receiver: Receiver<(Bytes, SocketAddr)>,
         dns_request_upper_bound: Duration,
         concurrency_limit: usize,
+        allowed_destinations: EgressDestinations,
     ) -> Self {
         let concurrency_gate = Arc::new(Semaphore::new(concurrency_limit));
         Self {
@@ -77,6 +82,7 @@ impl EnclaveDnsDriver {
             dns_lookup_receiver,
             dns_request_upper_bound,
             concurrency_gate,
+            allowed_destinations,
         }
     }
 
@@ -92,13 +98,15 @@ impl EnclaveDnsDriver {
                     continue;
                 }
             };
-
+            let destinations = self.allowed_destinations.clone();
             // Create task per DNS lookup
             tokio::spawn(async move {
                 // move permit into task to drop when lookup is complete
                 let _lookup_permit = permit;
                 let dns_response =
-                    match Self::perform_dns_lookup(dns_packet, request_upper_bound).await {
+                    match Self::perform_dns_lookup(dns_packet, request_upper_bound, destinations)
+                        .await
+                    {
                         Ok(dns_response) => dns_response,
                         Err(e) => {
                             log::error!("Failed to perform DNS Lookup: {e}");
@@ -117,10 +125,14 @@ impl EnclaveDnsDriver {
     async fn perform_dns_lookup(
         dns_packet: Bytes,
         request_upper_bound: Duration,
+        allowed_destinations: EgressDestinations,
     ) -> Result<Bytes, DNSError> {
+        // Check domain is allowed before proxying lookup
+        check_dns_allowed_for_domain(&dns_packet.clone(), allowed_destinations)?;
         // Attempt DNS lookup wth a timeout, flatten timeout errors into a DNS Error
         let dns_response =
             timeout(request_upper_bound, Self::forward_dns_lookup(dns_packet)).await??;
+        cache_ip_for_allowlist(&dns_response.clone())?;
         Ok(dns_response)
     }
 
