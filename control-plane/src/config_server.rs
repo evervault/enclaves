@@ -799,7 +799,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_acme_signing_request_bad_request_new_order_le() {
-        let cage_context = get_cage_context();
+        let enclave_context = get_enclave_context();
         let acme_account_details = AcmeAccountDetails {
             account_ec_key: helpers::gen_ec_private_key().unwrap(),
             eab_config: None,
@@ -830,7 +830,7 @@ mod tests {
                 .body(req_body)
                 .unwrap(),
             acme_account_details,
-            cage_context,
+            enclave_context,
         )
         .await;
 

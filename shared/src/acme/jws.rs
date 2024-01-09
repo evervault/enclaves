@@ -245,7 +245,7 @@ mod tests {
     fn test_valid_signed_jws() {
         let ec = helpers::gen_ec_private_key().unwrap();
 
-        let jws = jws("https://example.com/acme/new-order", None, "{}", &ec, None);
+        let jws = jws("https://example.com/acme/new-order", None, "{}", Some(ec.clone()), None);
 
         assert!(jws.is_ok());
 
@@ -263,7 +263,7 @@ mod tests {
     fn test_invalid_signed_jws() {
         let ec = helpers::gen_ec_private_key().unwrap();
 
-        let jws = jws("https://example.com/acme/new-order", None, "{}", &ec, None);
+        let jws = jws("https://example.com/acme/new-order", None, "{}", Some(ec.clone()), None);
 
         let jws = jws.unwrap();
         let signature_bytes = b64_decode(&jws.signature).unwrap();
