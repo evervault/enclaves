@@ -81,12 +81,12 @@ impl TlsProxy {
                     let mut buf = vec![0u8; 4096];
                     let n = conn.read(&mut buf).await?;
                     let initial_slice = &buf[..n];
-                    let hostname = get_hostname(initial_slice.to_vec()).ok();  // Clone the slice into a new Vec
-            
+                    let hostname = get_hostname(initial_slice.to_vec()).ok(); // Clone the slice into a new Vec
+
                     match hostname {
                         Some(host) if self.valid_targets().contains(&host.as_str()) => {
                             log::info!("SNI header found for {}. Valid host, forwarding traffic from data plane.", host);
-                            let initial_bytes = initial_slice.to_vec();  // Clone the slice into a new Vec
+                            let initial_bytes = initial_slice.to_vec(); // Clone the slice into a new Vec
                             (conn, host, initial_bytes)
                         }
                         Some(host) => {
@@ -136,10 +136,7 @@ impl TlsProxy {
                 };
 
                 if let Err(e) = target_stream.write_all(&initial_bytes).await {
-                    log::error!(
-                        "Failed to send initial data to {} — {e:?}",
-                        target_clone
-                    );
+                    log::error!("Failed to send initial data to {} — {e:?}", target_clone);
                     Self::shutdown_conn(connection).await;
                     return;
                 }
