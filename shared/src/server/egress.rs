@@ -22,8 +22,6 @@ pub enum EgressError {
     ExtensionMissing,
     #[error(transparent)]
     DNSParseError(#[from] dns_parser::Error),
-    #[error("Protocol not support, only IPv4 is supported")]
-    ProtocolNotSupported,
     #[error("Could not obtain lock for IP cache")]
     CouldntObtainLock,
 }
@@ -92,7 +90,7 @@ pub fn cache_ip_for_allowlist(packet: &[u8]) -> Result<(), EgressError> {
         if let RData::A(ip) = ans.data {
             cache_ip(ip.0.to_string(), ans)
         } else {
-            Err(EgressError::ProtocolNotSupported)
+            Ok(())
         }
     })
 }
