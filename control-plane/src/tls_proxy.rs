@@ -6,8 +6,6 @@ use shared::server::{get_vsock_server, Listener};
 
 use std::net::SocketAddr;
 #[cfg(not(feature = "enclave"))]
-use tokio::io::AsyncReadExt;
-#[cfg(not(feature = "enclave"))]
 use tokio::io::AsyncWriteExt;
 use trust_dns_resolver::TokioAsyncResolver;
 

@@ -169,11 +169,9 @@ pub fn jws(
 
     if let Some(kid) = account_id {
         header.kid = kid.into();
-    } else {
-        if let Some(pkey) = &pkey {
-            let jwk = Jwk::new(&pkey)?;
-            header.jwk = Some(jwk);
-        }
+    } else if let Some(pkey) = &pkey {
+        let jwk = Jwk::new(pkey)?;
+        header.jwk = Some(jwk);
     }
 
     let protected_b64 = b64(&serde_json::to_string(&header)?.into_bytes());
