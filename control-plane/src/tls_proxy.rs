@@ -5,8 +5,7 @@ use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
 
 use std::net::SocketAddr;
-#[cfg(not(feature = "enclave"))]
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use trust_dns_resolver::TokioAsyncResolver;
 
 #[derive(Debug, Clone)]
@@ -76,18 +75,19 @@ impl TlsProxy {
             &self.vsock_port
         );
         loop {
-            let (connection, target) = match enclave_conn.accept().await {
-                Ok(conn) => {
-                    //extract sni header and check it's for the tls server's valid hostnames
+            let (connection, target, initial_bytes) = match enclave_conn.accept().await {
+                Ok(mut conn) => {
+                    // Extract SNI header and check it's for the TLS server's valid hostnames
                     let mut buf = vec![0u8; 4096];
-                    let n = conn.peek(&mut buf).await?;
-                    let customer_data = &mut buf[..n];
-                    let hostname = get_hostname(customer_data.to_vec()).ok();
-
+                    let n = conn.read(&mut buf).await?;
+                    let initial_slice = &buf[..n];
+                    let hostname = get_hostname(initial_slice.to_vec()).ok();  // Clone the slice into a new Vec
+            
                     match hostname {
                         Some(host) if self.valid_targets().contains(&host.as_str()) => {
                             log::info!("SNI header found for {}. Valid host, forwarding traffic from data plane.", host);
-                            (conn, host)
+                            let initial_bytes = initial_slice.to_vec();  // Clone the slice into a new Vec
+                            (conn, host, initial_bytes)
                         }
                         Some(host) => {
                             log::error!(
@@ -126,7 +126,7 @@ impl TlsProxy {
             };
 
             tokio::spawn(async move {
-                let target_stream = match tokio::net::TcpStream::connect(target_ip).await {
+                let mut target_stream = match tokio::net::TcpStream::connect(target_ip).await {
                     Ok(stream) => stream,
                     Err(e) => {
                         log::error!("Failed to connect to {} — {e:?}", target_clone);
@@ -134,6 +134,15 @@ impl TlsProxy {
                         return;
                     }
                 };
+
+                if let Err(e) = target_stream.write_all(&initial_bytes).await {
+                    log::error!(
+                        "Failed to send initial data to {} — {e:?}",
+                        target_clone
+                    );
+                    Self::shutdown_conn(connection).await;
+                    return;
+                }
 
                 if let Err(e) = shared::utils::pipe_streams(connection, target_stream).await {
                     log::error!(
