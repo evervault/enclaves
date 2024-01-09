@@ -363,7 +363,7 @@ async fn sign_acme_payload(
                 ),
             };
 
-            if jws_request.url.contains("/newOrder") {
+            if jws_request.url.contains("/newOrder") || jws_request.url.contains("/new-order") {
                 let order_payload: NewOrderPayload = serde_json::from_str(&jws_request.payload)?;
 
                 if !valid_order_identifiers(order_payload, cage_context) {
@@ -376,7 +376,7 @@ async fn sign_acme_payload(
                 &jws_request.url,
                 jws_request.nonce,
                 &jws_request.payload,
-                &key.unwrap(),
+                key,
                 key_id,
             );
 
@@ -766,6 +766,46 @@ mod tests {
         let req_body = JwsRequest::new(
             SignatureType::ECDSA,
             "https://acme-staging-v02.api.letsencrypt.org/acme/newOrder".to_string(),
+            Some("some_nonce".to_string()),
+            new_order_payload_string,
+            None,
+        )
+        .into_body()
+        .unwrap();
+
+        let result = handle_acme_signing_request(
+            hyper::Request::builder()
+                .method(Method::POST)
+                .body(req_body)
+                .unwrap(),
+            acme_account_details,
+            cage_context,
+        )
+        .await;
+
+        assert!(result.status().is_client_error());
+    }
+
+    #[tokio::test]
+    async fn test_handle_acme_signing_request_bad_request_new_order_le() {
+        let cage_context = get_cage_context();
+        let acme_account_details = AcmeAccountDetails {
+            account_ec_key: helpers::gen_ec_private_key().unwrap(),
+            eab_config: None,
+        };
+
+        let new_order_payload = NewOrderPayload {
+            identifiers: vec![Identifier {
+                r#type: "dns".to_string(),
+                value: "some_other_domain.com".to_string(),
+            }],
+        };
+
+        let new_order_payload_string = serde_json::to_string(&new_order_payload).unwrap();
+
+        let req_body = JwsRequest::new(
+            SignatureType::ECDSA,
+            "https://acme-staging-v02.api.letsencrypt.org/acme/new-order".to_string(),
             Some("some_nonce".to_string()),
             new_order_payload_string,
             None,

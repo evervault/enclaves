@@ -14,25 +14,32 @@ pub struct StorageLock {
     pub uuid: String,
     #[serde(with = "ts_seconds")]
     expiry_time: DateTime<Utc>,
+    attempts: Option<u32>,
 }
 
 impl StorageLock {
-    pub fn new(name: String) -> Self {
+    pub fn new(name: String, attempts: u32) -> Self {
         let uuid = Uuid::new_v4().to_string();
         Self {
             config_client: ConfigClient::new(),
             name,
             uuid,
             expiry_time: Utc::now() + Duration::seconds(30),
+            attempts: Some(attempts),
         }
     }
-    pub fn new_with_config_client(name: String, config_client: ConfigClient) -> Self {
+    pub fn new_with_config_client(
+        name: String,
+        attempts: u32,
+        config_client: ConfigClient,
+    ) -> Self {
         let uuid = Uuid::new_v4().to_string();
         Self {
             config_client,
             name,
             uuid,
             expiry_time: Utc::now() + Duration::seconds(30),
+            attempts: Some(attempts),
         }
     }
 
@@ -55,6 +62,10 @@ impl StorageLock {
 
     pub fn is_expired(&self) -> bool {
         Utc::now() > self.expiry_time
+    }
+
+    pub fn number_of_attempts(&self) -> Option<u32> {
+        self.attempts
     }
 
     pub fn has_uuid(&self, uuid: String) -> bool {

@@ -4,6 +4,7 @@ pub mod egress;
 pub mod error;
 pub mod health;
 pub mod proxy_protocol;
+pub mod sni;
 pub mod tcp;
 pub use tcp::{TcpServer, TcpServerWithProxyProtocol};
 

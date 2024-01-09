@@ -33,14 +33,14 @@ async fn main() -> Result<()> {
     let e3_proxy = e3proxy::E3Proxy::new();
 
     let provisioner_proxy = tls_proxy::TlsProxy::new(
-        configuration::get_cert_provisoner_host(),
+        vec![configuration::get_cert_provisoner_host()],
         3000,
         shared::ENCLAVE_CERT_PORT,
         InternalAsyncDnsResolver::new_resolver(),
     );
 
     let acme_proxy = tls_proxy::TlsProxy::new(
-        configuration::get_acme_host(),
+        configuration::get_acme_hosts(),
         443,
         shared::ENCLAVE_ACME_PORT,
         ExternalAsyncDnsResolver::new_resolver(),
