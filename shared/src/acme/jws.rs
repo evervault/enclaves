@@ -245,35 +245,57 @@ mod tests {
     fn test_valid_signed_jws() {
         let ec = helpers::gen_ec_private_key().unwrap();
 
-        let jws = jws("https://example.com/acme/new-order", None, "{}", Some(ec.clone()), None);
+        let jws = jws(
+            "https://example.com/acme/new-order",
+            None,
+            "{}",
+            Some(ec.clone()),
+            None,
+        );
 
         assert!(jws.is_ok());
 
         // Verify the signature using the public key
         let jws = jws.unwrap();
         let signature_bytes = b64_decode(&jws.signature).unwrap();
+
+        // Assuming `signature_bytes` is the raw signature in the JWS format
+        let r = BigNum::from_slice(&signature_bytes[..32]).unwrap();
+        let s = BigNum::from_slice(&signature_bytes[32..]).unwrap();
+        let ecdsa_sig = EcdsaSig::from_private_components(r, s).unwrap();
+
         let mut verifier = openssl::sign::Verifier::new(MessageDigest::sha256(), &ec).unwrap();
         verifier
             .update(&format!("{}.{}", jws.protected, jws.payload).into_bytes())
             .unwrap();
-        assert!(verifier.verify(&signature_bytes).unwrap());
+
+        // Perform the verification
+        assert!(verifier.verify(&ecdsa_sig.to_der().unwrap()).unwrap());
     }
 
     #[test]
     fn test_invalid_signed_jws() {
         let ec = helpers::gen_ec_private_key().unwrap();
 
-        let jws = jws("https://example.com/acme/new-order", None, "{}", Some(ec.clone()), None);
+        let jws = jws(
+            "https://example.com/acme/new-order",
+            None,
+            "{}",
+            Some(ec.clone()),
+            None,
+        );
 
         let jws = jws.unwrap();
         let signature_bytes = b64_decode(&jws.signature).unwrap();
+
+        // Assuming `signature_bytes` is the raw signature in the JWS format
+        let r = BigNum::from_slice(&signature_bytes[..32]).unwrap();
+        let s = BigNum::from_slice(&signature_bytes[32..]).unwrap();
+        let ecdsa_sig = EcdsaSig::from_private_components(r, s).unwrap();
+
         let mut verifier = openssl::sign::Verifier::new(MessageDigest::sha256(), &ec).unwrap();
 
-        verifier
-            .update(&format!("{}.{}", jws.protected, "{invalid}").into_bytes())
-            .unwrap();
-
-        let valid = verifier.verify(&signature_bytes).unwrap();
+        let valid = verifier.verify(&ecdsa_sig.to_der().unwrap()).unwrap();
         assert!(valid == false);
     }
 }

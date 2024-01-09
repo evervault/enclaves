@@ -370,7 +370,10 @@ mod tests {
 
         let test_directory = get_test_directory(mock_client, test_config_client, None);
 
-        let nonce = test_directory.get_nonce(Provider::LetsEncrypt).await.unwrap();
+        let nonce = test_directory
+            .get_nonce(Provider::LetsEncrypt)
+            .await
+            .unwrap();
 
         assert_eq!(nonce, "1234567890");
     }
@@ -388,7 +391,10 @@ mod tests {
             Some(String::from("987654321")),
         );
 
-        let nonce = test_directory.get_nonce(Provider::LetsEncrypt).await.unwrap();
+        let nonce = test_directory
+            .get_nonce(Provider::LetsEncrypt)
+            .await
+            .unwrap();
 
         assert_eq!(nonce, "987654321");
     }
