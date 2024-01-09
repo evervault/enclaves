@@ -121,8 +121,11 @@ pub fn get_cert_provisoner_host() -> String {
     }
 }
 
-pub fn get_acme_host() -> String {
-    "acme.zerossl.com".to_string()
+pub fn get_acme_hosts() -> Vec<String> {
+    vec![
+        "acme-v02.api.letsencrypt.org".to_string(),
+        "acme.zerossl.com".to_string(),
+    ]
 }
 
 pub fn get_cert_provisioner_mtls_cert_env() -> Result<String, std::env::VarError> {

@@ -1,4 +1,5 @@
 use crate::acme::error::*;
+use crate::acme::provider::Provider;
 use crate::config_client::ConfigClient;
 use crate::configuration;
 use hyper::Body;
@@ -63,12 +64,14 @@ fn extract_nonce_from_response(
 
 impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
     pub async fn fetch_directory(
-        path: String,
         acme_http_client: T,
         config_client: ConfigClient,
+        provider: Provider,
     ) -> Result<Arc<Directory<T>>, AcmeError> {
-        let host = configuration::get_acme_host();
-        let url = format!("https://{}{}", host.clone(), path);
+        let host = provider.hostname();
+        let path = provider.directory_path();
+        let url = format!("https://{}{}", host, path);
+
         let request = hyper::Request::builder()
             .method("GET")
             .uri(url)
@@ -90,7 +93,7 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
         Ok(Arc::new(directory))
     }
 
-    pub async fn get_nonce(&self) -> Result<String, AcmeError> {
+    pub async fn get_nonce(&self, provider: Provider) -> Result<String, AcmeError> {
         let maybe_nonce = {
             let mut guard = self
                 .nonce
@@ -106,7 +109,7 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
         let new_nonce_request = hyper::Request::builder()
             .method("GET")
             .header(hyper::header::CONTENT_TYPE, "application/json")
-            .header(hyper::header::HOST, configuration::get_acme_host())
+            .header(hyper::header::HOST, provider.hostname())
             .uri(&self.new_nonce_url)
             .body(Body::empty())?;
 
@@ -123,14 +126,15 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
         url: &str,
         payload: &str,
         account_id: &Option<String>,
+        provider: Provider,
     ) -> Result<hyper::Response<Body>, AcmeError> {
-        let nonce = self.get_nonce().await?;
+        let nonce = self.get_nonce(provider).await?;
         let result = &self
             .config_client
             .jws(
                 shared::server::config_server::requests::SignatureType::ECDSA,
                 url.into(),
-                Some(nonce),
+                Some(nonce.clone()),
                 payload.into(),
                 account_id.clone(),
             )
@@ -147,17 +151,30 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
             .header(hyper::header::CONTENT_TYPE, "application/jose+json")
             .body(Body::from(body))?;
 
-        let resp = self.client.send(request).await?;
+        let resp1 = self.client.send(request).await;
 
-        if let Some(nonce) = extract_nonce_from_response(&resp)? {
-            let mut guard = self
-                .nonce
-                .lock()
-                .map_err(|err| AcmeError::PoisonError(err.to_string()))?;
-            *guard = Some(nonce);
+        let resp = resp1?;
+
+        if !resp.status().is_success() {
+            let resp_body = hyper::body::to_bytes(resp.into_body()).await?;
+            let body_str = from_utf8(&resp_body)?;
+            log::error!(
+                "Error response from authenticated request to {}: {}",
+                url,
+                body_str
+            );
+            Err(AcmeError::ClientError(body_str.to_string()))
+        } else {
+            if let Some(nonce) = extract_nonce_from_response(&resp)? {
+                let mut guard = self
+                    .nonce
+                    .lock()
+                    .map_err(|err| AcmeError::PoisonError(err.to_string()))?;
+                *guard = Some(nonce);
+            }
+
+            Ok(resp)
         }
-
-        Ok(resp)
     }
 
     pub async fn authenticated_request(
@@ -166,6 +183,7 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
         method: &str,
         payload: Option<Value>,
         account_id: &Option<String>,
+        provider: Provider,
     ) -> Result<hyper::Response<Body>, AcmeError> {
         //Handle empty body
         let payload_parsed = match payload {
@@ -176,7 +194,7 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
         log::info!("[ACME] Sending authenticated request to {}", url);
 
         let resp_result = self
-            .authenticated_request_raw(method, url, &payload_parsed, account_id)
+            .authenticated_request_raw(method, url, &payload_parsed, account_id, provider)
             .await;
 
         if let Err(err) = &resp_result {
@@ -205,7 +223,10 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
 mod tests {
 
     use super::*;
-    use crate::{acme::mocks::client_mock::MockAcmeClientInterface, config_client};
+    use crate::{
+        acme::{mocks::client_mock::MockAcmeClientInterface, provider},
+        config_client,
+    };
 
     pub struct TestDirectoryPaths {
         pub new_nonce_url: String,
@@ -296,13 +317,10 @@ mod tests {
             Ok(resp)
         });
 
-        let directory = Directory::fetch_directory(
-            String::from("/acme/directory"),
-            mock_client,
-            test_config_client,
-        )
-        .await
-        .unwrap();
+        let directory =
+            Directory::fetch_directory(mock_client, test_config_client, Provider::LetsEncrypt)
+                .await
+                .unwrap();
 
         assert_eq!(directory.new_nonce_url, test_directory_paths.new_nonce_url);
         assert_eq!(
@@ -352,7 +370,10 @@ mod tests {
 
         let test_directory = get_test_directory(mock_client, test_config_client, None);
 
-        let nonce = test_directory.get_nonce().await.unwrap();
+        let nonce = test_directory
+            .get_nonce(Provider::LetsEncrypt)
+            .await
+            .unwrap();
 
         assert_eq!(nonce, "1234567890");
     }
@@ -370,7 +391,10 @@ mod tests {
             Some(String::from("987654321")),
         );
 
-        let nonce = test_directory.get_nonce().await.unwrap();
+        let nonce = test_directory
+            .get_nonce(Provider::LetsEncrypt)
+            .await
+            .unwrap();
 
         assert_eq!(nonce, "987654321");
     }

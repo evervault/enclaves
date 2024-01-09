@@ -9,11 +9,11 @@ pub fn get_cert_provisioner_host() -> String {
 }
 
 pub fn get_acme_host() -> String {
-    "acme.zerossl.com".to_string()
+    "acme-v02.api.letsencrypt.org".to_string()
 }
 
 pub fn get_acme_base_path() -> String {
-    "/v2/DV90".to_string()
+    "/directory".to_string()
 }
 
 #[cfg(feature = "enclave")]

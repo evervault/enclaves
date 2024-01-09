@@ -15,6 +15,7 @@ use std::time::Duration;
 
 use super::client::AcmeClientInterface;
 use super::directory::Directory;
+use super::provider::Provider;
 use shared::acme::jws::JwkThumb;
 
 #[derive(Deserialize, Debug, Eq, PartialEq)]
@@ -136,7 +137,13 @@ impl<T: AcmeClientInterface> Order<T> {
 
         for authorization_url in self.authorization_urls.clone() {
             let response = directory
-                .authenticated_request(&authorization_url, "POST", None, &Some(account.id.clone()))
+                .authenticated_request(
+                    &authorization_url,
+                    "POST",
+                    None,
+                    &Some(account.id.clone()),
+                    account.provider.clone().unwrap_or(Provider::LetsEncrypt),
+                )
                 .await?;
 
             let resp_bytes = hyper::body::to_bytes(response.into_body()).await?;
@@ -182,7 +189,13 @@ impl<T: AcmeClientInterface> Authorization<T> {
         let (account, directory) = self.get_account_and_directory()?;
 
         let response = directory
-            .authenticated_request(&self.url, "POST", None, &Some(account.id.clone()))
+            .authenticated_request(
+                &self.url,
+                "POST",
+                None,
+                &Some(account.id.clone()),
+                account.provider.clone().unwrap_or(Provider::LetsEncrypt),
+            )
             .await?;
 
         let resp_bytes = hyper::body::to_bytes(response.into_body()).await?;
@@ -266,6 +279,7 @@ impl<T: AcmeClientInterface> Challenge<T> {
                 "POST",
                 Some(json!({})),
                 &Some(account.id.clone()),
+                account.provider.clone().unwrap_or(Provider::LetsEncrypt),
             )
             .await?;
 
@@ -282,7 +296,13 @@ impl<T: AcmeClientInterface> Challenge<T> {
         let (account, directory) = self.get_account_and_directory()?;
 
         let response = directory
-            .authenticated_request(&self.url, "POST", None, &Some(account.id.clone()))
+            .authenticated_request(
+                &self.url,
+                "POST",
+                None,
+                &Some(account.id.clone()),
+                account.provider.clone().unwrap_or(Provider::LetsEncrypt),
+            )
             .await?;
 
         let resp_bytes = hyper::body::to_bytes(response.into_body()).await?;

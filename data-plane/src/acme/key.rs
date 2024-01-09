@@ -164,6 +164,7 @@ impl AcmeKeyRetreiver {
     ) -> Result<Option<PKey<Private>>, AcmeError> {
         let key_pair_lock = StorageLock::new_with_config_client(
             KEY_PAIR_LOCK_NAME.into(),
+            0,
             self.config_client.clone(),
         );
         if key_pair_lock.write_and_check_persisted().await? {

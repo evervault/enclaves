@@ -17,6 +17,7 @@ use std::time::Duration;
 
 use super::client::AcmeClientInterface;
 use super::directory::Directory;
+use super::provider::Provider;
 
 #[derive(Deserialize, Debug, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -101,7 +102,7 @@ impl<T: AcmeClientInterface> OrderBuilder<T> {
         self
     }
 
-    pub async fn build(&mut self) -> Result<Order<T>, AcmeError> {
+    pub async fn build(&mut self, provider: Provider) -> Result<Order<T>, AcmeError> {
         let directory = self.get_directory()?;
 
         let response = directory
@@ -112,6 +113,7 @@ impl<T: AcmeClientInterface> OrderBuilder<T> {
                 "identifiers": self.identifiers,
                 })),
                 &Some(self.account.id.clone()),
+                provider,
             )
             .await?;
 
@@ -181,7 +183,6 @@ impl<T: AcmeClientInterface> Order<T> {
         )?;
 
         let csr_b64 = b64(&csr.to_der()?);
-
         let (account, directory) = self.get_account_and_directory()?;
 
         let response = directory
@@ -190,6 +191,7 @@ impl<T: AcmeClientInterface> Order<T> {
                 "POST",
                 Some(json!({ "csr": csr_b64 })),
                 &Some(account.id.clone()),
+                account.provider.clone().unwrap_or(Provider::LetsEncrypt),
             )
             .await?;
 
@@ -211,7 +213,13 @@ impl<T: AcmeClientInterface> Order<T> {
         let (account, directory) = self.get_account_and_directory()?;
 
         let response = directory
-            .authenticated_request(&certificate_url, "POST", None, &Some(account.id.clone()))
+            .authenticated_request(
+                &certificate_url,
+                "POST",
+                None,
+                &Some(account.id.clone()),
+                account.provider.clone().unwrap_or(Provider::LetsEncrypt),
+            )
             .await?;
 
         let body_bytes = hyper::body::to_bytes(response.into_body()).await?;
@@ -223,7 +231,13 @@ impl<T: AcmeClientInterface> Order<T> {
         let (account, directory) = self.get_account_and_directory()?;
 
         let response = directory
-            .authenticated_request(&self.url, "POST", None, &Some(account.id.clone()))
+            .authenticated_request(
+                &self.url,
+                "POST",
+                None,
+                &Some(account.id.clone()),
+                account.provider.clone().unwrap_or(Provider::LetsEncrypt),
+            )
             .await?;
 
         let resp_bytes = hyper::body::to_bytes(response.into_body()).await?;

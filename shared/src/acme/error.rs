@@ -33,6 +33,8 @@ pub enum AcmeError {
     CsrError(String),
     #[error("{0:?} Field Not Found")]
     FieldNotFound(String),
+    #[error("Private Key Not Set For Acme Account")]
+    PrivateKeyNotSet,
     #[error("ACME Error {0:?}")]
     General(String),
 }

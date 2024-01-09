@@ -10,6 +10,7 @@ use std::str::from_utf8;
 use std::sync::Arc;
 
 use super::client::AcmeClientInterface;
+use super::provider::Provider;
 
 #[derive(Deserialize, Eq, PartialEq, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -31,6 +32,8 @@ pub struct Account<T: AcmeClientInterface> {
     pub status: AccountStatus,
     pub contact: Option<Vec<String>>,
     pub terms_of_service_agreed: Option<bool>,
+    #[serde(skip)]
+    pub provider: Option<Provider>,
 }
 
 #[derive(Debug)]
@@ -41,16 +44,18 @@ pub struct AccountBuilder<T: AcmeClientInterface> {
     contact: Option<Vec<String>>,
     terms_of_service_agreed: Option<bool>,
     only_return_existing: Option<bool>,
+    provider: Provider,
 }
 
 impl<T: AcmeClientInterface> AccountBuilder<T> {
-    pub fn new(directory: Arc<Directory<T>>) -> Self {
+    pub fn new(directory: Arc<Directory<T>>, eab_required: bool, provider: Provider) -> Self {
         AccountBuilder {
             directory,
-            eab_required: true,
+            eab_required,
             contact: None,
             terms_of_service_agreed: None,
             only_return_existing: None,
+            provider,
         }
     }
 
@@ -104,6 +109,7 @@ impl<T: AcmeClientInterface> AccountBuilder<T> {
                   "externalAccountBinding": external_account_binding,
                 })),
                 &None,
+                self.provider.clone(),
             )
             .await?;
 
@@ -122,6 +128,7 @@ impl<T: AcmeClientInterface> AccountBuilder<T> {
 
         account.directory = Some(self.directory.clone());
         account.id = account_id;
+        account.provider = Some(self.provider.clone());
         Ok(Arc::new(account))
     }
 }

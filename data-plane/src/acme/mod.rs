@@ -14,6 +14,7 @@ pub mod error;
 pub mod key;
 pub mod lock;
 pub mod order;
+pub mod provider;
 
 #[cfg(test)]
 pub mod mocks;
