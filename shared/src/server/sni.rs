@@ -47,4 +47,3 @@ pub fn get_hostname(data: Vec<u8>) -> Result<String, SNIError> {
     }
     Ok(destination)
 }
-

@@ -2962,6 +2962,7 @@ dependencies = [
  "serde_json",
  "sys-info",
  "thiserror",
+ "tls-parser",
  "tokio",
  "tokio-rustls",
  "tokio-test",
