@@ -69,7 +69,7 @@ impl TokenClient {
     fn get_attestation_doc_token(nonce: Vec<u8>) -> Result<String, TokenError> {
         use crate::crypto::attest;
         let attestation_doc = attest::get_attestation_doc(None, Some(nonce))?;
-        Ok(base64::encode(&attestation_doc))
+        Ok(base64::encode(attestation_doc))
     }
 
     #[cfg(not(feature = "enclave"))]
