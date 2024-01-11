@@ -73,7 +73,7 @@ echo "************************"
 tar -xvf libmnl-1.0.4.tar.bz2
 
 export CFLAGS='-static'
-export LDFLAGS='-static -dl'
+export LDFLAGS='-static'
 
 echo "************************"
 echo "* building libmnl *"
@@ -107,12 +107,11 @@ echo "************************"
 echo "* building iptables *"
 echo "************************"
 cd iptables-1.8.10 
-./configure --disable-shared --enable-static
 export CFLAGS='-static'
-export LDFLAGS='-static -dl'
+export LDFLAGS='--static'
+./configure --disable-shared --enable-static
 make 
 make install
-
 
 # Copy iptables binary to output directory
 echo "*******************************"
