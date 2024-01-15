@@ -1,4 +1,4 @@
-FROM --platform=amd64 ubuntu 
+FROM --platform=amd64 alpine 
 
 RUN mkdir -p /opt/evervault
 COPY output/runtime-dependencies.tar.gz /opt/evervault

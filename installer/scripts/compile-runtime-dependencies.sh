@@ -120,16 +120,34 @@ echo "*******************************"
 mkdir -p "$OUTPUT_PATH/iptables-1.8.10"
 cp -r ./iptables "$OUTPUT_PATH/iptables-1.8.10"
 
+cd $PACKAGES_PATH
+echo "************************"
+echo "* extracting iproute2 *"
+echo "************************"
+tar -xvf iproute2-6.7.0.tar.gz
+mkdir -p "$OUTPUT_PATH/iproute2-6.7.0"
+
+echo "************************"
+echo "* building iproute2 *"
+echo "************************"
+cd iproute2-6.7.0
+unset CFLAGS
+unset LDFLAGS
+./configure
+make CCOPTS="-O2 -pipe -static" LDFLAGS="--static" SUBDIRS="lib ip" V=1 # Statically compile ip with verbose logging enabled
+cp ip/ip "$OUTPUT_PATH/iproute2-6.7.0"
+
+
 # Create archive of static binaries and installer
 echo "******************************"
 echo "* creating installer archive *"
 echo "******************************"
 cp "$PACKAGES_PATH/installer.sh" "$OUTPUT_PATH/installer.sh"
 cd $OUTPUT_PATH
-tar -czf runtime-dependencies.tar.gz net-tools-2.10 runit-2.1.2 installer.sh iptables-1.8.10
+tar -czf runtime-dependencies.tar.gz net-tools-2.10 runit-2.1.2 installer.sh iptables-1.8.10 iproute2-6.7.0
 
 # Remove binaries outside of the archive 
 echo "*****************************"
 echo "* removing unused artifacts *"
 echo "*****************************"
-rm -rf net-tools-2.10 runit-2.1.2 installer.sh iptables-1.8.10
+rm -rf net-tools-2.10 runit-2.1.2 installer.sh iptables-1.8.10 iproute2-6.7.0
