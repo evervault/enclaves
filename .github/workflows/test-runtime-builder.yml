@@ -36,3 +36,4 @@ jobs:
         run: |
           cd ./installer
           docker build --platform linux/amd64 -t runtime-dependencies-test -f ${{matrix.dockerfile}} .
+          docker run --platform linux/amd64 -t runtime-dependencies-test
