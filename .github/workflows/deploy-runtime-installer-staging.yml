@@ -1,12 +1,14 @@
 name: Deploy installer to staging
 
-on:
-  push:
-    paths:
-      - "*"
-    branches:
-      - "*"
-    
+# on:
+#   push:
+#     paths:
+#       - ".github/workflows/**"
+#     # branches:
+#     #   - "*"
+#     #   - .github/workflows/lint.yml
+on: [push]
+
 jobs:
   get-version:
     runs-on: ubuntu-latest
@@ -27,6 +29,4 @@ jobs:
     secrets:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_STAGING }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}
-        aws-cloudfront-distribution-id: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID_STAGING }}
-        evervault-rust-lib-index: ${{ secrets.RUST_CRYPTO_REGISTRY }}
-        evervault-rust-lib-token: ${{ secrets.CARGO_REGISTRIES_EVERVAULT_RUST_LIBRARIES_TOKEN }}            
+        aws-cloudfront-distribution-id: ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_STAGING }}           

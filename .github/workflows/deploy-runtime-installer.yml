@@ -16,10 +16,6 @@ on:
         required: true
       aws-secret-access-key: 
         required: true
-      evervault-rust-lib-index:
-        required: true
-      evervault-rust-lib-token: 
-        required: true
 
 jobs:
   build-runtime-bundle:
@@ -62,7 +58,7 @@ jobs:
 
   release-runtime-bundle:
     runs-on: ubuntu-latest
-    needs: [build-runtime-bundle, upload-runtime-bundle, get-version]
+    needs: [build-runtime-bundle, upload-runtime-bundle]
     steps:
       - uses: actions/checkout@v4
       - name: Configure Production AWS Credentials
