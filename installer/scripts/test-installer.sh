@@ -1,15 +1,19 @@
 #!/bin/sh
 
+set -e
+
 # Rudimentary test script to ensure all binaries are available on multiple distros
 
+# Cannot use runit directly
 command -v runit
-runit --help
 
 command -v ifconfig
-ifconfig --help
+# Run base command (list interfaces)
+ifconfig
 
 command -v iptables
-iptables --help
+iptables -h
 
 command -v ip
-ip --help
+# List available addresses
+ip addr
