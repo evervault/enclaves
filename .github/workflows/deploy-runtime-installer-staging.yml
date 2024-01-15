@@ -1,11 +1,6 @@
 name: Deploy installer to staging
 
-on:
-  push:
-    paths:
-      - "installer/**"
-    branches:
-      - "main"
+on: [push]
 
 jobs:
   build-and-deploy:
