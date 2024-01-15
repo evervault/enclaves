@@ -6,3 +6,7 @@ RUN cd /opt/evervault ; \
  gunzip runtime-dependencies.tar.gz ; \
  tar -xf runtime-dependencies.tar ; \
  sh installer.sh
+
+COPY scripts/test-installer.sh /test-installer.sh
+
+ENTRYPOINT [ "sh", "/test-installer.sh" ]

@@ -19,3 +19,19 @@ jobs:
         with:
           name: runtime-dependencies-${{github.sha}}.zip
           path: ./output/runtime-dependencies.tar.gz
+  test-installer-on-multiple-runtimes:
+    needs: run-build-on-runtime-installer
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dockerfile: [test-abyss.Dockerfile, test-alpine.Dockerfile, test.Dockerfile]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Download bundle artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: runtime-dependencies-${{github.sha}}.zip
+          path: ./output
+      - name: Build image
+        run: |
+          docker build --platform linux/amd64 -t runtime-dependencies-test -f ${{matrix.dockerfile}} .
