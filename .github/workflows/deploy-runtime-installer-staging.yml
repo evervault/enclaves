@@ -1,0 +1,19 @@
+name: Deploy installer to staging
+
+on:
+  push:
+    paths:
+      - "installer/**"
+    branches:
+      - "main"
+
+jobs:
+  build-and-deploy:
+    uses: ./.github/workflows/deploy-runtime-installer.yml
+    with:
+        stage: 'staging'
+        version: 1
+    secrets:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_STAGING }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}
+        aws-cloudfront-distribution-id: ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_STAGING }}           

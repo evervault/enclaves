@@ -42,7 +42,7 @@ fn parse_client_certs(mut client_cert_raw: &[u8]) -> Result<Vec<Certificate>> {
         .map(|certs| certs.into_iter().map(Certificate).collect())
         .map_err(|err| {
             ServerError::CertProvisionerMtls(format!(
-                "Couldn't parse cert-provisioner client cert. Error: {err}"
+                "Couldn't parse cert-provisioner client cert. Error:   {err}"
             ))
         })?;
 

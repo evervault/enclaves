@@ -1,0 +1,28 @@
+name: Deploy installer to production
+
+on:
+  push:
+    tags:
+      - "installer/v*.*.*"      
+    
+jobs:
+  get-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+    steps:
+      - id: get-version
+        run: |
+          echo "using version tag ${GITHUB_REF:21}"
+          echo ::set-output name=version::${GITHUB_REF:21}
+
+  build-and-deploy:
+    needs: [get-version]
+    uses: ./.github/workflows/deploy-runtime-installer.yml
+    with:
+        stage: 'production'
+        version: ${{ needs.get-version.outputs.version }}
+    secrets:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_STAGING }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}
+        aws-cloudfront-distribution-id: ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION }} 

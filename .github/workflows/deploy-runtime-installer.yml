@@ -1,20 +1,23 @@
+name: "Build and deploy runtime installer bundle"
 on:
-  push:
-    tags:
-      - "installer/v*.*.*"
+  workflow_call:
+    inputs:
+      stage:
+        required: true
+        default: 'staging'
+        type: string
+      version:
+        required: true
+        type: string 
+    secrets:    
+      aws-cloudfront-distribution-id:
+        required: true
+      aws-access-key-id:
+        required: true
+      aws-secret-access-key: 
+        required: true
 
-name: Build and deploy runtime installer bundle
 jobs:
-  get-version:
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.get-version.outputs.version }}
-    steps:
-      - id: get-version
-        run: |
-          echo "using version tag ${GITHUB_REF:21}"
-          echo ::set-output name=version::${GITHUB_REF:21}
-
   build-runtime-bundle:
     runs-on: ubuntu-latest
     outputs:
@@ -34,38 +37,7 @@ jobs:
           CHECKSUM=$(shasum -a 256 ./output/runtime-dependencies.tar.gz | cut -d" " -f1)
           echo "checksum=$CHECKSUM" >> "$GITHUB_OUTPUT"
 
-  upload-runtime-bundle-staging:
-    runs-on: ubuntu-latest
-    needs: [build-runtime-bundle, get-version]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v3
-        with:
-          name: runtime-dependencies-${{github.sha}}.zip
-      - name: Configure Staging AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_STAGING }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}
-          aws-region: us-east-1
-      - name: Upload installer bundle to S3
-        env:
-          STAGE: staging
-          CHECKSUM: ${{ needs.build-runtime-bundle.outputs.checksum }}
-        run: |
-          aws s3 cp ./runtime-dependencies.tar.gz s3://cage-build-assets-${{ env.STAGE }}/installer/${{ env.CHECKSUM }}.tar.gz
-      - name: Update latest record for installer in staging
-        env:
-          STAGE: staging
-          CHECKSUM: ${{ needs.build-runtime-bundle.outputs.checksum }}
-          VERSION_TAG: ${{ needs.get-version.outputs.version }}
-        run: |
-          echo "${{ env.CHECKSUM }}" > latest.txt
-          aws s3 cp ./latest.txt s3://cage-build-assets-${{ env.STAGE }}/installer/latest
-          sh ./scripts/update-installer-version.sh ${{ env.VERSION_TAG  }} ${{ env.CHECKSUM }}
-          aws s3 cp scripts/versions s3://cage-build-assets-${{ env.STAGE }}/runtime/versions
-
-  upload-runtime-bundle-production:
+  upload-runtime-bundle:
     runs-on: ubuntu-latest
     needs: [build-runtime-bundle]
     steps:
@@ -75,40 +47,35 @@ jobs:
       - name: Configure Production AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-access-key-id: ${{ secrets.aws-access-key-id }}
+          aws-secret-access-key: ${{ secrets.aws-secret-access-key }}
           aws-region: us-east-1
       - name: Upload installer bundle to S3
         env:
-          STAGE: production
           CHECKSUM: ${{ needs.build-runtime-bundle.outputs.checksum }}
         run: |
-          aws s3 cp ./runtime-dependencies.tar.gz s3://cage-build-assets-${{ env.STAGE }}/installer/${{ env.CHECKSUM }}.tar.gz
+          aws s3 cp ./runtime-dependencies.tar.gz s3://cage-build-assets-${{ inputs.stage }}/installer/${{ env.CHECKSUM }}.tar.gz
 
-  release-runtime-bundle-production:
+  release-runtime-bundle:
     runs-on: ubuntu-latest
-    needs: [build-runtime-bundle, upload-runtime-bundle-production, get-version]
-    environment:
-      name: production
+    needs: [build-runtime-bundle, upload-runtime-bundle]
     steps:
       - uses: actions/checkout@v4
       - name: Configure Production AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-access-key-id: ${{ secrets.aws-access-key-id }}
+          aws-secret-access-key: ${{ secrets.aws-secret-access-key }}
           aws-region: us-east-1
-      - name: Update latest record for installer in production
+      - name: Update latest record for installer
         env:
-          STAGE: production
           CHECKSUM: ${{ needs.build-runtime-bundle.outputs.checksum }}
-          VERSION_TAG: ${{ needs.get-version.outputs.version }}
         run: |
           echo "${{ env.CHECKSUM }}" > latest.txt
-          aws s3 cp ./latest.txt s3://cage-build-assets-${{ env.STAGE }}/installer/latest
-          sh ./scripts/update-installer-version.sh ${{ env.VERSION_TAG  }} ${{ env.CHECKSUM }}
-          aws s3 cp scripts/versions s3://cage-build-assets-${{ env.STAGE }}/runtime/versions
+          aws s3 cp ./latest.txt s3://cage-build-assets-${{ inputs.stage }}/installer/latest
+          sh ./scripts/update-installer-version.sh ${{ inputs.version  }} ${{ env.CHECKSUM }}
+          aws s3 cp scripts/versions s3://cage-build-assets-${{ inputs.stage }}/runtime/versions
        
       - name: Cloudfront Cache Invalidation
         run: |
-          aws cloudfront create-invalidation --distribution-id ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION }} --paths "/runtime/versions"    
+          aws cloudfront create-invalidation --distribution-id ${{ secrets.aws-cloudfront-distribution-id }} --paths "/runtime/versions"    
