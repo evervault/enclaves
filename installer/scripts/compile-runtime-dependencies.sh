@@ -125,6 +125,7 @@ echo "************************"
 echo "* extracting iproute2 *"
 echo "************************"
 tar -xvf iproute2-5.19.0.tar.gz
+mkdir -p "$OUTPUT_PATH/iproute2-5.19.0"
 
 echo "************************"
 echo "* building iproute2 *"
@@ -133,7 +134,8 @@ cd iproute2-5.19.0
 unset CFLAGS
 unset LDFLAGS
 ./configure
-make CCOPTS="-O2 -pipe -static" LDFLAGS="--static" V=1 # Statically compile ip with verbose logging enabled
+make CCOPTS="-O2 -pipe -static" LDFLAGS="--static" SUBDIRS="lib ip" V=1 # Statically compile ip with verbose logging enabled
+cp ip/ip "$OUTPUT_PATH/iproute2-5.19.0"
 
 
 # Create archive of static binaries and installer
@@ -148,4 +150,4 @@ tar -czf runtime-dependencies.tar.gz net-tools-2.10 runit-2.1.2 installer.sh ipt
 echo "*****************************"
 echo "* removing unused artifacts *"
 echo "*****************************"
-rm -rf net-tools-2.10 runit-2.1.2 installer.sh iptables-1.8.10
+rm -rf net-tools-2.10 runit-2.1.2 installer.sh iptables-1.8.10 iproute2-5.19.0

@@ -1,7 +1,7 @@
 FROM --platform=linux/amd64 debian:bookworm
 
 RUN mkdir -p /packages
-RUN apt-get update ; apt-get install -y pkg-config make gcc bash curl bison flex
+RUN apt-get update ; apt-get install -y pkg-config make gcc bash curl bison flex xz-utils bzip2
 
 ADD http://smarden.org/runit/runit-2.1.2.tar.gz /packages/runit-2.1.2.tar.gz
 ADD https://downloads.sourceforge.net/project/net-tools/net-tools-2.10.tar.xz /packages/net-tools-2.10.tar.xz
