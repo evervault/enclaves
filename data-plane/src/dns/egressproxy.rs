@@ -10,8 +10,6 @@ use shared::server::{get_vsock_client, Listener};
 use shared::utils::pipe_streams;
 use shared::EGRESS_PROXY_PORT;
 use shared::EGRESS_PROXY_VSOCK_PORT;
-#[cfg(not(feature = "enclave"))]
-use shared::TEST_EGRESS_IP;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::os::fd::AsRawFd;
 use std::os::fd::RawFd;
@@ -81,7 +79,8 @@ impl EgressProxy {
     #[cfg(not(feature = "enclave"))]
     fn get_destination(_: RawFd) -> Result<(Ipv4Addr, u16), DNSError> {
         // Hardcode egress IP for docker setup as SO_ORIGINAL_DST is not supported
-        let addr = TEST_EGRESS_IP
+        let addr = std::env::var("TEST_EGRESS_IP")
+            .expect("TEST_EGRESS_IP not found in env")
             .parse::<Ipv4Addr>()
             .expect("Invalid IP address");
         Ok((addr, 443))

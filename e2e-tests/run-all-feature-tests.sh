@@ -30,6 +30,8 @@ fi
 # install the node modules for customer process and test script
 cd e2e-tests && npm install && cd ..
 
+export TEST_EGRESS_IP=$(dig +short jsonplaceholder.typicode.com | head -n 1)
+
 # Compile mock crypto api
 if [[ -z "${CI}" ]];
 then
