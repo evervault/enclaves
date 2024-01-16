@@ -21,9 +21,6 @@ pub const ENCLAVE_IP: &str = "172.20.0.7";
 #[cfg(not(feature = "enclave"))]
 pub const PARENT_IP: &str = "172.20.0.8";
 
-#[cfg(not(feature = "enclave"))]
-pub const TEST_EGRESS_IP: &str = "172.64.101.22";
-
 pub mod acme;
 pub mod logging;
 pub mod rpc;
