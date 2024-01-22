@@ -19,6 +19,7 @@ use tokio_rustls::TlsAcceptor;
 
 use super::inter_ca_retreiver;
 
+use crate::acme;
 #[cfg(feature = "enclave")]
 use crate::acme;
 
@@ -132,11 +133,17 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
 
 #[cfg(feature = "enclave")]
 async fn enclave_trusted_cert() -> Option<CertifiedKey> {
-    let (pub_key, trusted_cert) = acme::get_trusted_cert()
-        .await
-        .expect("Failed to get trusted cert");
-    let _ = TRUSTED_PUB_CERT.set(pub_key);
-    Some(trusted_cert)
+    match acme::get_trusted_cert().await {
+        Ok((pub_key, trusted_cert)) => {
+            let _ = TRUSTED_PUB_CERT.set(pub_key);
+            Some(trusted_cert)
+        }
+        Err(e) => {
+            //Shutdown if we can't get a trusted cert as it's required.
+            log::error!("Failed to get trusted cert for enclave. Shutting down. Cause of error: {e}");
+            std::process::exit(1);
+        }
+    }
 }
 
 #[async_trait]
