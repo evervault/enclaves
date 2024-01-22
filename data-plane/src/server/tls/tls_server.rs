@@ -140,7 +140,9 @@ async fn enclave_trusted_cert() -> Option<CertifiedKey> {
         }
         Err(e) => {
             //Shutdown if we can't get a trusted cert as it's required.
-            log::error!("Failed to get trusted cert for enclave. Shutting down. Cause of error: {e}");
+            log::error!(
+                "Failed to get trusted cert for enclave. Shutting down. Cause of error: {e}"
+            );
             std::process::exit(1);
         }
     }

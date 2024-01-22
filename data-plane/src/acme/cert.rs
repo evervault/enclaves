@@ -15,7 +15,8 @@ use tokio_rustls::rustls::{
 use crate::{
     config_client::{ConfigClient, StorageConfigClientInterface},
     e3client::{CryptoRequest, CryptoResponse, E3Api, E3Client},
-    EnclaveContext, stats_client::StatsClient,
+    stats_client::StatsClient,
+    EnclaveContext,
 };
 
 use super::{
@@ -336,7 +337,11 @@ impl AcmeCertificateRetreiver {
 
             if let Err(e) = raw_acme_certificate {
                 StatsClient::record_cert_order(provider, false);
-                log::error!("[ACME] Error ordering certificate: {:?}. Provider: {:?}", e, provider);
+                log::error!(
+                    "[ACME] Error ordering certificate: {:?}. Provider: {:?}",
+                    e,
+                    provider
+                );
                 certificate_lock.delete().await?;
                 return Err(e);
             } else {
