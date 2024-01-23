@@ -89,14 +89,10 @@ impl EgressProxy {
     #[cfg(feature = "enclave")]
     fn get_destination(fd: RawFd) -> Result<(Ipv4Addr, u16), DNSError> {
         use libc::sockaddr_in;
-        use libc::sockaddr_in6;
         use libc::socklen_t;
         use std::io::Error;
 
-        println!("GETTING DESTIONATION!!!");
-
         let mut addr: sockaddr_in = unsafe { std::mem::zeroed() };
-        let mut addr_6: sockaddr_in6 = unsafe { std::mem::zeroed() };
         let mut len: socklen_t = std::mem::size_of::<sockaddr_in>() as socklen_t;
 
         let response_code = unsafe {
@@ -108,22 +104,11 @@ impl EgressProxy {
                 &mut len as *mut _,
             )
         };
-
         if response_code == -1 {
-            let response_code = unsafe {
-                libc::getsockopt(
-                    fd,
-                    libc::SOL_IPV6,
-                    libc::SO_ORIGINAL_DST,
-                    &mut addr as *mut _ as *mut _,
-                    &mut len as *mut _,
-                )
-            };
             let e = Error::last_os_error();
             Err(e.into())
         } else {
             let ip = Ipv4Addr::from(u32::from_be(addr.sin_addr.s_addr));
-            println!("GOT IP!!! {}", ip.to_string());
             let port = u16::from_be(addr.sin_port);
             Ok((ip, port))
         }

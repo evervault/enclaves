@@ -14,7 +14,7 @@ pub mod routes {
         Storage,
         AcmeSign,
         AcmeJWK,
-        Time
+        Time,
     }
 
     impl FromStr for ConfigServerPath {
@@ -43,7 +43,7 @@ pub mod routes {
                 Self::Storage => write!(f, "/storage"),
                 Self::AcmeSign => write!(f, "/acme/sign"),
                 Self::AcmeJWK => write!(f, "/acme/jwk"),
-                Self::Time => write!(f, "/time")
+                Self::Time => write!(f, "/time"),
             }
         }
     }
@@ -144,9 +144,15 @@ pub mod requests {
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
-    pub struct Time {
-        pub seconds: String,
-        pub milliseconds: String,
+    pub struct GetClockSyncResponse {
+        pub seconds: i64,
+        pub milliseconds: i64,
+    }
+
+    impl GetClockSyncResponse {
+        pub fn into_body(self) -> ServerResult<hyper::Body> {
+            Ok(hyper::Body::from(serde_json::to_vec(&self)?))
+        }
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]

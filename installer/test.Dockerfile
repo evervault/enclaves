@@ -1,4 +1,4 @@
-FROM --platform=amd64 debian 
+FROM --platform=amd64 ubuntu 
 
 RUN mkdir -p /opt/evervault
 COPY output/runtime-dependencies.tar.gz /opt/evervault
@@ -9,4 +9,4 @@ RUN cd /opt/evervault ; \
 
 COPY scripts/test-installer.sh /test-installer.sh
 
-# ENTRYPOINT [ "sh", "/test-installer.sh" ]
+ENTRYPOINT [ "sh", "/test-installer.sh" ]
