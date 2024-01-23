@@ -148,27 +148,30 @@ async fn read_incoming_body_from_stream<T: AsyncRead + Unpin>(
 
 #[cfg(test)]
 mod test {
-  use super::read_incoming_body_from_stream;
-  use hyper;
-  
-  // Test to simulate repeated reads from the accepted connection
-  // Asserts that all bytes are read into the buffer correctly before being passed along as a body
-  #[tokio::test]
-  async fn simulate_large_payload_from_socket() {
-    let content_length = 5;
-    let mut io_mock = tokio_test::io::Builder::new()
-      .read(&[1,2])
-      .read(&[3])
-      .read(&[4,5])
-      .read(&[])
-      .build();
+    use super::read_incoming_body_from_stream;
+    use hyper;
 
-    let test_buf = Vec::with_capacity(5);
+    // Test to simulate repeated reads from the accepted connection
+    // Asserts that all bytes are read into the buffer correctly before being passed along as a body
+    #[tokio::test]
+    async fn simulate_large_payload_from_socket() {
+        let content_length = 5;
+        let mut io_mock = tokio_test::io::Builder::new()
+            .read(&[1, 2])
+            .read(&[3])
+            .read(&[4, 5])
+            .read(&[])
+            .build();
 
-    let result = read_incoming_body_from_stream(content_length, &mut io_mock, test_buf).await;
-    assert!(result.is_ok());
-    let payload = hyper::body::to_bytes(result.unwrap()).await.unwrap().to_vec();
-    assert_eq!(payload.len(), content_length);
-    assert_eq!(&payload, &[1u8,2u8,3u8,4u8,5u8]);
-  }
+        let test_buf = Vec::with_capacity(5);
+
+        let result = read_incoming_body_from_stream(content_length, &mut io_mock, test_buf).await;
+        assert!(result.is_ok());
+        let payload = hyper::body::to_bytes(result.unwrap())
+            .await
+            .unwrap()
+            .to_vec();
+        assert_eq!(payload.len(), content_length);
+        assert_eq!(&payload, &[1u8, 2u8, 3u8, 4u8, 5u8]);
+    }
 }
