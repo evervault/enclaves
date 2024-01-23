@@ -21,6 +21,7 @@ services:
     dns: 127.0.0.1
     cap_add:
       - NET_ADMIN
+    privileged: true      
     ports:
       - "7777:7777"
       - "7779:7779"

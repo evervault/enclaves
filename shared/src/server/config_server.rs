@@ -14,6 +14,7 @@ pub mod routes {
         Storage,
         AcmeSign,
         AcmeJWK,
+        Time
     }
 
     impl FromStr for ConfigServerPath {
@@ -27,6 +28,7 @@ pub mod routes {
                 "/storage" => Ok(Self::Storage),
                 "/acme/sign" => Ok(Self::AcmeSign),
                 "/acme/jwk" => Ok(Self::AcmeJWK),
+                "/time" => Ok(Self::Time),
                 _ => Err(ServerError::InvalidPath(input.to_string())),
             }
         }
@@ -41,6 +43,7 @@ pub mod routes {
                 Self::Storage => write!(f, "/storage"),
                 Self::AcmeSign => write!(f, "/acme/sign"),
                 Self::AcmeJWK => write!(f, "/acme/jwk"),
+                Self::Time => write!(f, "/time")
             }
         }
     }
@@ -138,6 +141,12 @@ pub mod requests {
     pub struct Secret {
         pub name: String,
         pub secret: String,
+    }
+
+    #[derive(Serialize, Deserialize, Debug, Clone)]
+    pub struct Time {
+        pub seconds: String,
+        pub milliseconds: String,
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]
