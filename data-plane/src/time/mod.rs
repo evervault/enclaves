@@ -26,20 +26,25 @@ impl ClockSync {
         let config_client = ConfigClient::new();
         loop {
             interval.tick().await;
-            match Self::sync_time_from_host(&config_client).await {
-                Ok((s, ms, elapsed)) => log::info!("Enclave time synced with host succesfully - {s}.{ms}s. Request round trip took {elapsed}ms"),
-                Err(e) => log::error!("{e:?}")
-            };
+            if let Err(e) = Self::sync_time_from_host(&config_client).await {
+                log::error!("{e:?}")
+            }
         }
     }
 
-    async fn sync_time_from_host(
-        config_client: &ConfigClient,
-    ) -> Result<(i64, i64, u128), ClockSyncError> {
+    async fn sync_time_from_host(config_client: &ConfigClient) -> Result<(), ClockSyncError> {
         let request_timer = std::time::SystemTime::now();
         let time = config_client.get_time_from_host().await?;
-        let elapsed = request_timer.elapsed()?.as_millis();
+        let elapsed = request_timer.elapsed()?;
 
+        // On startup the request can take a while so skip the sync till the proxies have stabilized
+        if elapsed.as_millis() > 500 {
+            log::info!(
+                "Skipping clock sync because request took {}ms",
+                elapsed.as_millis()
+            );
+            return Ok(());
+        }
         let ts = timespec {
             tv_sec: time.seconds,
             tv_nsec: time.milliseconds,
@@ -47,7 +52,13 @@ impl ClockSync {
 
         let result = unsafe { clock_settime(CLOCK_REALTIME, &ts as *const timespec) };
         if result == 0 {
-            Ok((time.seconds, time.milliseconds, elapsed))
+            log::info!(
+                "Enclave time synced with host successfully - {}.{}s. Request round trip took {}ns",
+                time.seconds,
+                time.milliseconds,
+                elapsed.as_nanos()
+            );
+            Ok(())
         } else {
             Err(ClockSyncError::SyncError(format!(
                 "Could not sync enclave time with host {:?}",
