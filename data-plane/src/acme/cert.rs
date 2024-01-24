@@ -15,6 +15,7 @@ use tokio_rustls::rustls::{
 use crate::{
     config_client::{ConfigClient, StorageConfigClientInterface},
     e3client::{CryptoRequest, CryptoResponse, E3Api, E3Client},
+    stats_client::StatsClient,
     EnclaveContext,
 };
 
@@ -331,11 +332,26 @@ impl AcmeCertificateRetreiver {
             };
 
             let raw_acme_certificate = self
-                .order_certificate(cert_domains, key.clone(), provider)
-                .await?;
+                .order_certificate(cert_domains, key.clone(), provider.clone())
+                .await;
+
+            if let Err(e) = raw_acme_certificate {
+                StatsClient::record_cert_order(provider.get_stats_key(), false);
+                log::error!(
+                    "[ACME] Error ordering certificate: {:?}. Provider: {:?}",
+                    e,
+                    provider
+                );
+                certificate_lock.delete().await?;
+                return Err(e);
+            } else {
+                StatsClient::record_cert_order(provider.get_stats_key(), true);
+            }
+
+            let acme_certificate = raw_acme_certificate?;
 
             let encrypted_raw_certificate =
-                Self::encrypt_certificate(&self.e3_client, &raw_acme_certificate).await?;
+                Self::encrypt_certificate(&self.e3_client, &acme_certificate).await?;
 
             encrypted_raw_certificate
                 .persist(&self.config_client)
@@ -343,9 +359,9 @@ impl AcmeCertificateRetreiver {
 
             certificate_lock.delete().await?;
 
-            let x509s = raw_acme_certificate.to_x509s()?;
+            let x509s = acme_certificate.to_x509s()?;
 
-            Ok(Some(raw_acme_certificate.to_certified_key(x509s, key)?))
+            Ok(Some(acme_certificate.to_certified_key(x509s, key)?))
         } else {
             Ok(None)
         }

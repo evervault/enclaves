@@ -2,7 +2,7 @@ use cadence::StatsdClient;
 use cadence::{BufferedUdpMetricSink, QueuingMetricSink};
 use cadence_macros::{set_global_default, statsd_count, statsd_gauge};
 use shared::stats::StatsError;
-use shared::{publish_count, publish_gauge, ENCLAVE_STATSD_PORT};
+use shared::{publish_count, publish_count_dynamic_label, publish_gauge, ENCLAVE_STATSD_PORT};
 use std::net::UdpSocket;
 
 use crate::EnclaveContext;
@@ -34,6 +34,14 @@ impl StatsClient {
     pub fn record_encrypt() {
         if let Ok(context) = EnclaveContext::get() {
             publish_count!("encrypt.count", 1, context);
+        }
+    }
+
+    pub fn record_cert_order(provider: &str, success: bool) {
+        if let Ok(context) = EnclaveContext::get() {
+            let success_key = if success { "success" } else { "failure" };
+            let key = format!("{}.{}.count", provider, success_key);
+            publish_count_dynamic_label!(key.as_str(), 1, context);
         }
     }
 

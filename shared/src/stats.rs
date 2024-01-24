@@ -36,3 +36,15 @@ macro_rules! publish_count {
         );
     };
 }
+
+#[macro_export]
+macro_rules! publish_count_dynamic_label {
+    ($label:expr, $val:expr, $context:expr) => {
+        statsd_count!(
+          $label,
+          $val,
+          "cage_uuid" => &$context.uuid,
+          "app_uuid" => &$context.app_uuid
+        );
+    };
+}

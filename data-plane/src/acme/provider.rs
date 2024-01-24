@@ -25,4 +25,11 @@ impl Provider {
             Provider::ZeroSSL => true,
         }
     }
+
+    pub fn get_stats_key(&self) -> &str {
+        match &self {
+            Self::LetsEncrypt => "acme.letsencrypt",
+            Self::ZeroSSL => "acme.zerossl",
+        }
+    }
 }
