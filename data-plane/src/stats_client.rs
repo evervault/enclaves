@@ -1,28 +1,13 @@
 use cadence::StatsdClient;
 use cadence::{BufferedUdpMetricSink, QueuingMetricSink};
 use cadence_macros::{set_global_default, statsd_count, statsd_gauge};
-use openssl::provider;
 use shared::stats::StatsError;
-use shared::{publish_count, publish_gauge, ENCLAVE_STATSD_PORT};
+use shared::{publish_count, publish_count_dynamic_label, publish_gauge, ENCLAVE_STATSD_PORT};
 use std::net::UdpSocket;
 
 use crate::EnclaveContext;
 
 pub struct StatsClient;
-
-pub enum AcmeProvider {
-    LetsEncrypt,
-    ZeroSsl,
-}
-
-impl AcmeProvider {
-    pub fn get_key(&self) -> &str {
-        match &self {
-            Self::LetsEncrypt => "acme.letsencrypt",
-            Self::ZeroSsl => "acme.zerossl",
-        }
-    }
-}
 
 impl StatsClient {
     pub fn init() {
@@ -52,11 +37,11 @@ impl StatsClient {
         }
     }
 
-    pub fn record_cert_order(provider: AcmeProvider, success: bool) {
+    pub fn record_cert_order(provider: &str, success: bool) {
         if let Ok(context) = EnclaveContext::get() {
             let success_key = if success { "success" } else { "failure" };
-            let key = format!("{}.{}.count", provider.get_key(), success_key);
-            publish_count!(key, 1, context);
+            let key = format!("{}.{}.count", provider, success_key);
+            publish_count_dynamic_label!(key.as_str(), 1, context);
         }
     }
 
