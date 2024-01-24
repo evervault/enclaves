@@ -53,7 +53,7 @@ impl ClockSync {
         let result = unsafe { clock_settime(CLOCK_REALTIME, &ts as *const timespec) };
         if result == 0 {
             log::info!(
-                "Enclave time synced with host succesfully - {}.{}s. Request round trip took {}ns",
+                "Enclave time synced with host successfully - {}.{}s. Request round trip took {}ns",
                 time.seconds,
                 time.milliseconds,
                 elapsed.as_nanos()
