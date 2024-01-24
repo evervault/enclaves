@@ -14,6 +14,7 @@ pub mod routes {
         Storage,
         AcmeSign,
         AcmeJWK,
+        Time,
     }
 
     impl FromStr for ConfigServerPath {
@@ -27,6 +28,7 @@ pub mod routes {
                 "/storage" => Ok(Self::Storage),
                 "/acme/sign" => Ok(Self::AcmeSign),
                 "/acme/jwk" => Ok(Self::AcmeJWK),
+                "/time" => Ok(Self::Time),
                 _ => Err(ServerError::InvalidPath(input.to_string())),
             }
         }
@@ -41,6 +43,7 @@ pub mod routes {
                 Self::Storage => write!(f, "/storage"),
                 Self::AcmeSign => write!(f, "/acme/sign"),
                 Self::AcmeJWK => write!(f, "/acme/jwk"),
+                Self::Time => write!(f, "/time"),
             }
         }
     }
@@ -138,6 +141,18 @@ pub mod requests {
     pub struct Secret {
         pub name: String,
         pub secret: String,
+    }
+
+    #[derive(Serialize, Deserialize, Debug, Clone)]
+    pub struct GetClockSyncResponse {
+        pub seconds: i64,
+        pub milliseconds: i64,
+    }
+
+    impl GetClockSyncResponse {
+        pub fn into_body(self) -> ServerResult<hyper::Body> {
+            Ok(hyper::Body::from(serde_json::to_vec(&self)?))
+        }
     }
 
     #[derive(Serialize, Deserialize, Debug, Clone)]

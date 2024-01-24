@@ -14,6 +14,7 @@ use serde::de::DeserializeOwned;
 
 use shared::acme::jws::{jws, Jwk, NewOrderPayload};
 use shared::logging::TrxContext;
+use shared::server::config_server::requests::GetClockSyncResponse;
 use shared::server::config_server::requests::{
     ConfigServerPayload, DeleteObjectRequest, GetCertTokenResponseDataPlane,
     GetE3TokenResponseDataPlane, GetObjectRequest, GetObjectResponse, JwsRequest,
@@ -24,6 +25,8 @@ use shared::server::config_server::routes::ConfigServerPath;
 use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
 use std::str::FromStr;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 
 #[derive(Clone)]
 pub struct ConfigServer<T: StorageClientInterface> {
@@ -152,6 +155,7 @@ async fn handle_incoming_request<T: StorageClientInterface>(
             }
             _ => Ok(build_bad_request_response()),
         },
+        Ok(ConfigServerPath::Time) => handle_time_sync_request().await,
         _ => Ok(build_bad_request_response()),
     }
 }
@@ -168,6 +172,26 @@ async fn handle_token_request(
                 "Failed to get token for token {token_type:?} err: {e}"
             ))
         }
+    }
+}
+
+async fn handle_time_sync_request() -> ServerResult<Response<Body>> {
+    match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(duration) => {
+            let time = GetClockSyncResponse {
+                seconds: duration.as_secs() as i64,
+                milliseconds: duration.subsec_millis() as i64,
+            };
+            log::info!(
+                "Sending host time to enclave: {}.{}s",
+                duration.as_secs(),
+                duration.subsec_millis()
+            );
+            Ok(build_success_response(Some(time.into_body()?)))
+        }
+        Err(e) => Ok(build_error_response(format!(
+            "Failed to get time, err: {e}"
+        ))),
     }
 }
 
@@ -221,7 +245,7 @@ async fn handle_post_trx_logs_request(
                     trx.record_trx();
                 }
             });
-            build_success_response()
+            build_success_response(None)
         }
         Err(e) => {
             log::error!("Failed to parse log body from data plane - {e:?}");
@@ -292,7 +316,7 @@ async fn handle_acme_storage_put_request<T: StorageClientInterface>(
                 .put_object(namespaced_key, request_body.object())
                 .await
             {
-                Ok(_) => Ok(build_success_response()),
+                Ok(_) => Ok(build_success_response(None)),
                 Err(err) => {
                     log::error!("Failed to put object in storage client: {}", err);
                     Ok(build_error_response(
@@ -321,7 +345,7 @@ async fn handle_acme_storage_delete_request<T: StorageClientInterface>(
                 namespaced_key
             );
             match storage_client.delete_object(namespaced_key).await {
-                Ok(_) => Ok(build_success_response()),
+                Ok(_) => Ok(build_success_response(None)),
                 Err(err) => {
                     log::error!("Failed to delete object in storage client: {}", err);
                     Ok(build_error_response(
@@ -455,11 +479,15 @@ fn valid_order_identifiers(
         .all(|identifier| valid_domains.contains(&identifier.value))
 }
 
-fn build_success_response() -> Response<Body> {
+fn build_success_response(body: Option<Body>) -> Response<Body> {
+    let response_body = match body {
+        Some(body) => body,
+        None => Body::empty(),
+    };
     Response::builder()
         .status(200)
         .header("Content-Type", "application/json")
-        .body(Body::empty())
+        .body(response_body)
         .expect("Infallible")
 }
 

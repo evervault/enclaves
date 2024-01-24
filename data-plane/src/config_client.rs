@@ -7,7 +7,7 @@ use hyper::{Body, Response};
 use serde::de::DeserializeOwned;
 use shared::logging::TrxContext;
 use shared::server::config_server::requests::{
-    ConfigServerPayload, DeleteObjectRequest, GetCertTokenResponseDataPlane,
+    ConfigServerPayload, DeleteObjectRequest, GetCertTokenResponseDataPlane, GetClockSyncResponse,
     GetE3TokenResponseDataPlane, GetObjectRequest, GetObjectResponse, GetTokenRequestDataPlane,
     JwkResponse, JwsRequest, JwsResponse, PostTrxLogsRequest, PutObjectRequest, SignatureType,
 };
@@ -25,6 +25,7 @@ pub trait StorageConfigClientInterface {
     async fn get_object(&self, key: String) -> Result<Option<GetObjectResponse>>;
     async fn put_object(&self, key: String, object: String) -> Result<()>;
     async fn delete_object(&self, key: String) -> Result<()>;
+    async fn get_time_from_host(&self) -> Result<GetClockSyncResponse>;
 }
 
 #[derive(Clone, Debug)]
@@ -279,6 +280,26 @@ impl ConfigClient {
             ))
         }
     }
+
+    async fn base_get_time_from_host(&self) -> Result<GetClockSyncResponse> {
+        let response = self
+            .send(ConfigServerPath::Time, "GET", Body::empty())
+            .await?;
+
+        if response.status() == StatusCode::OK {
+            let result: GetClockSyncResponse = self.parse_response(response).await?;
+            Ok(result)
+        } else {
+            log::error!(
+                "Error sending time sync request to control plane. Response Code{}",
+                response.status()
+            );
+            Err(Error::ConfigServer(
+                "Invalid Response code returned when sending time request to control plane"
+                    .to_string(),
+            ))
+        }
+    }
 }
 
 #[async_trait]
@@ -306,6 +327,15 @@ impl StorageConfigClientInterface for ConfigClient {
 
         Retry::spawn(retry_strategy, || async {
             self.base_delete_object(key.clone()).await
+        })
+        .await
+    }
+
+    async fn get_time_from_host(&self) -> Result<GetClockSyncResponse> {
+        let retry_strategy = ExponentialBackoff::from_millis(500).map(jitter).take(2);
+
+        Retry::spawn(retry_strategy, || async {
+            self.base_get_time_from_host().await
         })
         .await
     }

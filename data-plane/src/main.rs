@@ -11,8 +11,10 @@ use data_plane::dns::enclavedns::EnclaveDnsProxy;
 use data_plane::env::Environment;
 use data_plane::health::start_health_check_server;
 use data_plane::stats_client::StatsClient;
+use data_plane::time::ClockSync;
 use data_plane::FeatureContext;
 use shared::ENCLAVE_CONNECT_PORT;
+use tokio::time::Duration;
 
 #[cfg(feature = "enclave")]
 fn try_update_fd_limit(soft_limit: u64, hard_limit: u64) {
@@ -31,6 +33,7 @@ fn try_update_fd_limit(soft_limit: u64, hard_limit: u64) {
 const ENCLAVE_NOFILE_SOFT_LIMIT: u64 = 4096;
 #[cfg(feature = "enclave")]
 const ENCLAVE_NOFILE_HARD_LIMIT: u64 = 16384;
+const ENCLAVE_CLOCK_SYNC_INTERVAL: Duration = Duration::from_secs(300);
 
 fn main() {
     shared::logging::init_env_logger();
@@ -83,10 +86,11 @@ async fn start(data_plane_port: u16) {
     };
 
     log::info!("Running data plane with egress disabled");
-    let (_, e3_api_result, stats_result) = tokio::join!(
+    let (_, e3_api_result, stats_result, _) = tokio::join!(
         start_data_plane(data_plane_port, context),
         CryptoApi::listen(),
-        StatsProxy::listen()
+        StatsProxy::listen(),
+        ClockSync::run(ENCLAVE_CLOCK_SYNC_INTERVAL)
     );
 
     if let Err(e) = e3_api_result {
@@ -111,12 +115,13 @@ async fn start(data_plane_port: u16) {
         }
     };
 
-    let (_, dns_result, e3_api_result, egress_result, stats_result) = tokio::join!(
+    let (_, dns_result, e3_api_result, egress_result, stats_result, _) = tokio::join!(
         start_data_plane(data_plane_port, context.clone()),
         EnclaveDnsProxy::bind_server(context.egress.allow_list),
         CryptoApi::listen(),
         EgressProxy::listen(),
-        StatsProxy::listen()
+        StatsProxy::listen(),
+        ClockSync::run(ENCLAVE_CLOCK_SYNC_INTERVAL)
     );
 
     if let Err(e) = dns_result {

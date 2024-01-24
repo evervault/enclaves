@@ -104,7 +104,6 @@ impl EgressProxy {
                 &mut len as *mut _,
             )
         };
-
         if response_code == -1 {
             let e = Error::last_os_error();
             Err(e.into())

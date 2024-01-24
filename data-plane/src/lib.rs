@@ -20,6 +20,7 @@ pub mod error;
 pub mod health;
 pub mod stats;
 pub mod stats_client;
+pub mod time;
 pub mod utils;
 #[cfg(feature = "network_egress")]
 use shared::server::egress::EgressConfig;
