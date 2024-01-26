@@ -528,7 +528,7 @@ mod test {
             content_type: None,
             response_content_type: None,
             elapsed: None,
-            request_type: super::RequestType::Websocket.into(),
+            request_type: Some(super::RequestType::Websocket.into()),
         };
         assert_eq!(log, expected_log);
     }
