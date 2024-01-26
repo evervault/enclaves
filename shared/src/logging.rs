@@ -52,7 +52,7 @@ pub struct TrxContext {
     response_content_type: Option<String>,
     #[builder(default)]
     elapsed: Option<f64>,
-    request_type: String,
+    request_type: Option<String>,
 }
 
 impl TrxContext {
@@ -114,7 +114,7 @@ impl TrxContextBuilder {
         let timestamp = get_iso_timestamp();
         let trx_id = format!("{}", TrxContextId::new());
         let trx_type = "cage_trx".to_string();
-        TrxContextBuilder {
+        let mut builder = TrxContextBuilder {
             txid: Some(trx_id),
             ts: Some(timestamp),
             msg: Some("Cage Transaction Complete".to_string()),
@@ -135,8 +135,10 @@ impl TrxContextBuilder {
             response_content_type: None,
             elapsed: None,
             remote_ip: None,
-            request_type: Some(request_type.into()),
-        }
+            request_type: None,
+        };
+        builder.request_type(Some(request_type.into()));
+        builder
     }
 
     pub fn get_timer() -> SystemTime {
@@ -526,7 +528,7 @@ mod test {
             content_type: None,
             response_content_type: None,
             elapsed: None,
-            request_type: super::RequestType::Websocket.into(),
+            request_type: Some(super::RequestType::Websocket.into()),
         };
         assert_eq!(log, expected_log);
     }
