@@ -73,7 +73,7 @@ jobs:
         run: |
           echo "${{ env.CHECKSUM }}" > latest.txt
           aws s3 cp ./latest.txt s3://cage-build-assets-${{ inputs.stage }}/installer/latest
-          sh ./scripts/update-installer-version.sh ${{ inputs.version  }} ${{ env.CHECKSUM }}
+          sh ./scripts/update-installer-version.sh ${{ inputs.version  }} ${{ env.CHECKSUM }} ${{ inputs.stage}}
           aws s3 cp scripts/versions s3://cage-build-assets-${{ inputs.stage }}/runtime/versions
        
       - name: Cloudfront Cache Invalidation
