@@ -14,6 +14,9 @@ ifconfig
 command -v iptables
 iptables -h
 
+command -v ip6tables
+ip6tables -h
+
 command -v ip
 # List available addresses
 ip addr

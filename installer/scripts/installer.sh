@@ -35,6 +35,19 @@ if [ -z "$IPTABLES_PATH" ]; then
   echo "iptables installed successfully"
 fi
 
+
+IP6TABLES_PATH=`command -v ip6tables`
+if [ -z "$IP6TABLES_PATH" ]; then
+  IP6TABLES_TARGET_PATH=/usr/local/bin/ip6tables
+  echo "Installing prebuilt ip6tables"
+  install -m 0755 ./iptables-1.8.10/iptables/xtables-legacy-multi "$IP6TABLES_TARGET_PATH" 
+  IP6TABLES_PATH_POST_INSTALL=`command -v ip6tables`
+  echo "IP6TABLES_PATH_POST_INSTALL: $IP6TABLES_PATH_POST_INSTALL"
+  test "$IP6TABLES_PATH_POST_INSTALL" = "$IP6TABLES_TARGET_PATH" || exit 1
+  echo "ip6tables installed successfully"
+fi
+
+
 IP_PATH=`command -v ip`
 if [ -z "$IP_PATH" ]; then
   echo "Installing prebuilt ip"
