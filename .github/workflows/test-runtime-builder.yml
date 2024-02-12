@@ -1,11 +1,11 @@
-on: [push]
-  # pull_request:
-  #   branches:
-  #     - main
-  #   paths:
-  #     - installer/**
-  #     - .github/workflows/test-runtime-builder.yml
-  #     - Cargo.lock
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - installer/**
+      - .github/workflows/test-runtime-builder.yml
+      - Cargo.lock
 name: Build runtime installer
 jobs:
   run-build-on-runtime-installer:
