@@ -4,17 +4,17 @@ use shared::rpc::request::ExternalRequest;
 use shared::server::egress::check_ip_allow_list;
 use shared::server::egress::EgressDestinations;
 use shared::server::error::ServerError;
-use shared::server::tcp::TcpServer;
+use shared::server::get_vsock_client;
 use shared::server::CID::Parent;
-use shared::server::{get_vsock_client, Listener};
 use shared::utils::pipe_streams;
 use shared::EGRESS_PROXY_PORT;
 use shared::EGRESS_PROXY_VSOCK_PORT;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::os::fd::AsRawFd;
 use std::os::fd::RawFd;
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 
 #[derive(Debug, Error)]
@@ -23,6 +23,8 @@ pub enum EgressProxyError {
     ContextError(#[from] crate::ContextError),
     #[error("An error occurred while launching the egress proxy - {0}")]
     ServerError(#[from] ServerError),
+    #[error("An error occurred while launching the egress proxy - {0}")]
+    IOError(#[from] std::io::Error),
 }
 
 pub struct EgressProxy;
@@ -31,14 +33,10 @@ impl EgressProxy {
     pub async fn listen() -> Result<(), EgressProxyError> {
         log::info!("Egress proxy started on port {EGRESS_PROXY_PORT}");
         let allowed_domains = FeatureContext::get()?.egress.allow_list;
-        let mut server = TcpServer::bind(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-            EGRESS_PROXY_PORT,
-        ))
-        .await?;
 
+        let listener = TcpListener::bind(format!("[::]:{EGRESS_PROXY_PORT}")).await?;
         loop {
-            if let Ok(stream) = server.accept().await {
+            if let Ok((stream, _)) = listener.accept().await {
                 tokio::spawn(Self::handle_egress_connection(
                     stream,
                     allowed_domains.clone(),
@@ -53,6 +51,7 @@ impl EgressProxy {
         mut external_stream: TcpStream,
         allowed_domains: EgressDestinations,
     ) -> Result<(), DNSError> {
+        println!("HANDLING EGRESS!");
         let mut buf = vec![0u8; 4096];
         let n = external_stream.read(&mut buf).await?;
         let customer_data = &mut buf[..n];
@@ -87,7 +86,16 @@ impl EgressProxy {
     }
 
     #[cfg(feature = "enclave")]
-    fn get_destination(fd: RawFd) -> Result<(Ipv4Addr, u16), DNSError> {
+    fn get_destination(fd: RawFd) -> Result<(IpAddr, u16), DNSError> {
+        match Self::get_destination_ipv4(fd) {
+            Ok(ip) => Ok(ip),
+            Err(_) => Self::get_destination_ipv6(fd),
+        }
+    }
+
+    #[cfg(feature = "enclave")]
+    fn get_destination_ipv4(fd: RawFd) -> Result<(IpAddr, u16), DNSError> {
+        println!("Getting original destination ipv4!");
         use libc::sockaddr_in;
         use libc::socklen_t;
         use std::io::Error;
@@ -108,9 +116,40 @@ impl EgressProxy {
             let e = Error::last_os_error();
             Err(e.into())
         } else {
-            let ip = Ipv4Addr::from(u32::from_be(addr.sin_addr.s_addr));
+            let ip = Ipv4Addr::from(addr.sin_addr.s_addr);
             let port = u16::from_be(addr.sin_port);
-            Ok((ip, port))
+            println!("ip and port {ip} {port}");
+            Ok((IpAddr::V4(ip), port))
+        }
+    }
+
+    #[cfg(feature = "enclave")]
+    fn get_destination_ipv6(fd: RawFd) -> Result<(IpAddr, u16), DNSError> {
+        println!("Getting original destination ipv6!");
+        use libc::sockaddr_in6;
+        use libc::socklen_t;
+        use std::io::Error;
+
+        let mut addr: sockaddr_in6 = unsafe { std::mem::zeroed() };
+        let mut len: socklen_t = std::mem::size_of::<sockaddr_in6>() as socklen_t;
+
+        let response_code = unsafe {
+            libc::getsockopt(
+                fd,
+                libc::SOL_IPV6,
+                libc::IP6T_SO_ORIGINAL_DST,
+                &mut addr as *mut _ as *mut _,
+                &mut len as *mut _,
+            )
+        };
+        if response_code == -1 {
+            let e = Error::last_os_error();
+            Err(e.into())
+        } else {
+            let ip = Ipv6Addr::from(addr.sin6_addr.s6_addr);
+            let port = u16::from_be(addr.sin6_port);
+            println!("ip and port {ip} {port}");
+            Ok((IpAddr::V6(ip), port))
         }
     }
 }
