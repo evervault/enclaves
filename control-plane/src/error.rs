@@ -18,7 +18,7 @@ pub enum ServerError {
     #[error(transparent)]
     DNSError(#[from] ResolveError),
     #[error("Request to internal IP ({0}) blocked")]
-    IllegalInternalIp(std::net::Ipv4Addr),
+    IllegalInternalIp(std::net::IpAddr),
     #[error("Invalid IP included in egress request — {0}")]
     InvalidIp(#[from] std::net::AddrParseError),
     #[error("Failed sending request - {0}")]
