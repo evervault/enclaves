@@ -9,7 +9,7 @@ use shared::server::CID::Parent;
 use shared::utils::pipe_streams;
 use shared::EGRESS_PROXY_PORT;
 use shared::EGRESS_PROXY_VSOCK_PORT;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr};
 use std::os::fd::AsRawFd;
 use std::os::fd::RawFd;
 use thiserror::Error;
@@ -51,7 +51,6 @@ impl EgressProxy {
         mut external_stream: TcpStream,
         allowed_domains: EgressDestinations,
     ) -> Result<(), DNSError> {
-        println!("HANDLING EGRESS!");
         let mut buf = vec![0u8; 4096];
         let n = external_stream.read(&mut buf).await?;
         let customer_data = &mut buf[..n];
@@ -76,13 +75,13 @@ impl EgressProxy {
     }
 
     #[cfg(not(feature = "enclave"))]
-    fn get_destination(_: RawFd) -> Result<(Ipv4Addr, u16), DNSError> {
+    fn get_destination(_: RawFd) -> Result<(IpAddr, u16), DNSError> {
         // Hardcode egress IP for docker setup as SO_ORIGINAL_DST is not supported
         let addr = std::env::var("TEST_EGRESS_IP")
             .expect("TEST_EGRESS_IP not found in env")
             .parse::<Ipv4Addr>()
             .expect("Invalid IP address");
-        Ok((addr, 443))
+        Ok((IpAddr::V4(addr), 443))
     }
 
     #[cfg(feature = "enclave")]
@@ -118,7 +117,6 @@ impl EgressProxy {
         } else {
             let ip = Ipv4Addr::from(addr.sin_addr.s_addr);
             let port = u16::from_be(addr.sin_port);
-            println!("ip and port {ip} {port}");
             Ok((IpAddr::V4(ip), port))
         }
     }
@@ -129,7 +127,7 @@ impl EgressProxy {
         use libc::sockaddr_in6;
         use libc::socklen_t;
         use std::io::Error;
-
+        use std::net::Ipv6Addr;
         let mut addr: sockaddr_in6 = unsafe { std::mem::zeroed() };
         let mut len: socklen_t = std::mem::size_of::<sockaddr_in6>() as socklen_t;
 
@@ -148,7 +146,6 @@ impl EgressProxy {
         } else {
             let ip = Ipv6Addr::from(addr.sin6_addr.s6_addr);
             let port = u16::from_be(addr.sin6_port);
-            println!("ip and port {ip} {port}");
             Ok((IpAddr::V6(ip), port))
         }
     }

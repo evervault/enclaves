@@ -6,10 +6,9 @@ use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
 use shared::utils::pipe_streams;
 use shared::{env_var_present_and_true, EGRESS_PROXY_VSOCK_PORT};
-use std::net::{Ipv4Addr, Ipv6Addr, IpAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-
 
 use lazy_static::lazy_static;
 
@@ -213,7 +212,6 @@ mod test {
         }
     }
 
-
     #[test]
     fn normal_ipv6_reachable() {
         let ip_addr = IpAddr::V6(Ipv6Addr::new(0x26, 0, 0x1c9, 0, 0, 0xafc8, 0x10, 0x1));
@@ -240,7 +238,7 @@ mod test {
 
     #[test]
     fn attempt_egress_to_benchmarking_ipv6() {
-        let ip_addr = IpAddr::V6(Ipv6Addr::new(0x2001, 2, 0, 0, 0, 0, 0, 1,));
+        let ip_addr = IpAddr::V6(Ipv6Addr::new(0x2001, 2, 0, 0, 0, 0, 0, 1));
         match validate_requested_ip(ip_addr, false) {
             Ok(_) => panic!(),
             Err(e) => assert!(matches!(e, ServerError::IllegalInternalIp(_))),
