@@ -17,6 +17,6 @@ iptables -h
 command -v ip6tables
 ip6tables -h
 
-command -v ip
-# List available addresses
-ip addr
+command -v ev-ip
+# Get version of iproute2
+ev-ip -V

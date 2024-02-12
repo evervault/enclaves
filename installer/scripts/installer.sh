@@ -51,9 +51,9 @@ fi
 IP_PATH=`command -v ip`
 if [ -z "$IP_PATH" ]; then
   echo "Installing prebuilt ip"
-  IP_TARGET_PATH=/usr/local/bin/ip 
+  IP_TARGET_PATH=/usr/local/bin/ev-ip 
   install -m 0755 ./iproute2-6.7.0/ip "$IP_TARGET_PATH"
-  IP_PATH_POST_INSTALL=`command -v ip`
+  IP_PATH_POST_INSTALL=`command -v ev-ip`
   echo "IP_PATH_POST_INSTALL: $IP_PATH_POST_INSTALL"
   test "$IP_PATH_POST_INSTALL" = "$IP_TARGET_PATH" || exit 1
   echo "ip installed successfully"
