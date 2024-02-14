@@ -558,8 +558,7 @@ mod tests {
 
         write_to_trusted_cert_store(Some(test_trustable_cert.clone()));
 
-        let resolver =
-            AttestableCertResolver::new(cert, key).unwrap();
+        let resolver = AttestableCertResolver::new(cert, key).unwrap();
         let returned_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();
