@@ -109,7 +109,7 @@ impl RawAcmeCertificate {
             }
 
             let thirty_days_in_seconds = 60 * 60 * 24 * 30;
-            let time_till_expiry_converted = asn1_time_to_system_time(&earliest_expiry)?;
+            let time_till_expiry_converted = asn1_time_to_system_time(earliest_expiry)?;
             let thirty_days_before_expiry =
                 time_till_expiry_converted - Duration::from_secs(thirty_days_in_seconds);
 

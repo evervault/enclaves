@@ -2,6 +2,9 @@ use async_trait::async_trait;
 
 #[cfg(feature = "enclave")]
 use once_cell::sync::OnceCell;
+#[cfg(feature = "enclave")]
+use tokio_rustls::rustls::sign::CertifiedKey;
+
 use openssl::pkey::PKey;
 use openssl::pkey::Private;
 use openssl::x509::X509;
