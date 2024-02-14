@@ -347,7 +347,9 @@ impl AcmeCertificateRetreiver {
                 }
             }
             _ => {
-                log::error!("[ACME] Error renewing certificate. Not updating trusted certificate store: {:?}", e);
+                log::error!(
+                    "[ACME] Error renewing certificate. Not updating trusted certificate store"
+                );
                 Err(AcmeError::General("Error renewing certificate".into()))
             }
         }
