@@ -38,6 +38,8 @@ use super::{
 
 const CERTIFICATE_LOCK_NAME: &str = "certificate-v1";
 const CERTIFICATE_OBJECT_KEY: &str = "certificate-v1.pem";
+const THIRTY_DAYS_IN_SECONDS: u64 = 86400;
+const SIXTY_DAYS_IN_SECONDS: u64 = 172800;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RawAcmeCertificate {
@@ -108,10 +110,9 @@ impl RawAcmeCertificate {
                 return Ok(Duration::from_secs(0));
             }
 
-            let thirty_days_in_seconds = 60 * 60 * 24 * 30;
             let time_till_expiry_converted = asn1_time_to_system_time(earliest_expiry)?;
             let thirty_days_before_expiry =
-                time_till_expiry_converted - Duration::from_secs(thirty_days_in_seconds);
+                time_till_expiry_converted - Duration::from_secs(THIRTY_DAYS_IN_SECONDS);
 
             let time_to_renew_with_jitter = get_jittered_time(thirty_days_before_expiry);
             let time_till_renewal = time_to_renew_with_jitter.duration_since(SystemTime::now())?;
@@ -236,6 +237,17 @@ impl AcmeCertificateRetreiver {
                         )
                         .await?;
                     persisted_certificate = decrypted_certificate_maybe;
+
+                    let sixty_days_from_now =
+                        SystemTime::now() + Duration::from_secs(SIXTY_DAYS_IN_SECONDS);
+                    let time_for_renewal = get_jittered_time(sixty_days_from_now);
+                    let time_till_renewal = time_for_renewal.duration_since(SystemTime::now())?;
+
+                    self.schedule_certificate_renewal(
+                        time_till_renewal,
+                        key.clone(),
+                        enclave_context.clone(),
+                    );
                 }
             };
 
@@ -278,18 +290,17 @@ impl AcmeCertificateRetreiver {
             time_till_renewal_required,
             key.clone(),
             enclave_context.clone(),
-        )
-        .await?;
+        );
 
         Some(decrypted_certificate.to_certified_key(x509s, key)).transpose()
     }
 
-    async fn schedule_certificate_renewal(
+    fn schedule_certificate_renewal(
         &self,
         time_till_renewal: Duration,
         key: PKey<Private>,
         enclave_context: EnclaveContext,
-    ) -> Result<(), AcmeError> {
+    ) {
         let self_clone = self.clone();
 
         tokio::spawn(async move {
@@ -308,8 +319,6 @@ impl AcmeCertificateRetreiver {
                 }
             }
         });
-
-        Ok(())
     }
 
     async fn renew_certificate_and_update_store(
