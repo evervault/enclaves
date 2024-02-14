@@ -46,6 +46,8 @@ chrono-tz = { version = "0.8.3" }
 tower = { version = "0.4.13", features = ["util"] }
 tower-http = { version = "0.5.0", features = ["catch-panic"] }
 libc = "0.2.150"
+serial_test = "3.0.0"
+
 
 [dev-dependencies]
 tokio-test = "0.4.2"

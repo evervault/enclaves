@@ -319,8 +319,17 @@ impl AttestableCertResolver {
                     return Some(Arc::new(cert.clone()));
                 }
             }
-            log::error!("Trusted cert not set in resolver. Unable to terminate TLS connection.");
-            None
+
+            // trusted cert not set - return custom signed base cert
+            self.base_cert_container.resolve_cert(|| {
+                let enclave_hostnames = self.enclave_context.get_cert_names();
+                Self::generate_self_signed_cert(
+                    self.internal_ca.as_ref(),
+                    self.internal_pk.as_ref(),
+                    enclave_hostnames,
+                    None,
+                )
+            })
         } else {
             // no nonce given - serve base cert
             self.base_cert_container.resolve_cert(|| {
@@ -347,11 +356,10 @@ impl ResolvesServerCert for AttestableCertResolver {
 
 #[cfg(test)]
 mod tests {
-    use crate::server::tls::trusted_cert_container;
-
     use super::*;
     use nom::AsBytes;
     use openssl::x509::X509;
+    use serial_test::serial;
 
     fn parse_x509_from_rustls_certified_key(cert: &CertifiedKey) -> X509 {
         let cert_chain = cert.cert.clone();
@@ -405,6 +413,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_base_cert_used_without_nonce() {
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
@@ -416,6 +425,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_base_cert_using_hyphen_without_nonce() {
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
@@ -427,6 +437,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_base_cert_used_with_nonce() {
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
@@ -479,6 +490,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_common_name_not_included_for_long_enclave_name() {
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
@@ -514,6 +526,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_common_name_is_included_for_shorter_enclave_name() {
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
@@ -559,6 +572,7 @@ mod tests {
         write_to_trusted_cert_store(Some(test_trustable_cert.clone()));
 
         let resolver = AttestableCertResolver::new(cert, key).unwrap();
+
         let returned_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();
@@ -576,24 +590,28 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_trusted_cert_used_with_trusted_hostname() {
         let server_name = Some("wicked_enclave.app_123543.cage.evervault.com".to_string());
         test_trusted_cert_with_hostname(server_name, true);
     }
 
     #[test]
+    #[serial]
     fn test_trusted_cert_used_with_trusted_enclave_hostname() {
         let server_name = Some("wicked_enclave.app_123543.enclave.evervault.com".to_string());
         test_trusted_cert_with_hostname(server_name, true);
     }
 
     #[test]
+    #[serial]
     fn test_trusted_cert_used_with_other_hostname() {
         let server_name = Some("wicked_enclave.app_123543.cages.evervault.com".to_string());
         test_trusted_cert_with_hostname(server_name, false);
     }
 
     #[test]
+    #[serial]
     fn test_trusted_cert_not_set_in_resolver() {
         let (cert, key) = generate_ca().unwrap();
         let resolver = AttestableCertResolver::new(cert, key).unwrap();
