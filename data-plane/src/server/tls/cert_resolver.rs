@@ -361,6 +361,15 @@ mod tests {
     use openssl::x509::X509;
     use serial_test::serial;
 
+    fn init_context() {
+        let app_uuid = "app_123".to_string();
+        let team_uuid = "team_456".to_string();
+        let enclave_uuid = "enclave_123".to_string();
+        let enclave_name = "my-sick-enclave".to_string();
+        let ctx = EnclaveContext::new(app_uuid, team_uuid, enclave_uuid, enclave_name);
+        EnclaveContext::set(ctx.clone());
+    }
+
     fn parse_x509_from_rustls_certified_key(cert: &CertifiedKey) -> X509 {
         let cert_chain = cert.cert.clone();
         let end_node = cert_chain[0].clone();
@@ -415,6 +424,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_base_cert_used_without_nonce() {
+        init_context();
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
         let enclave_uuid = "enclave_123".to_string();
@@ -427,6 +437,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_base_cert_using_hyphen_without_nonce() {
+        init_context();
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
         let enclave_uuid = "enclave_123".to_string();
@@ -439,6 +450,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_base_cert_used_with_nonce() {
+        init_context();
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
         let enclave_uuid = "enclave_123".to_string();
@@ -480,6 +492,7 @@ mod tests {
     #[cfg(staging)]
     #[test]
     fn test_tld_is_correct_when_compiler_flag_is_set() {
+        init_context();
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
         let enclave_uuid = "enclave_123".to_string();
@@ -492,6 +505,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_common_name_not_included_for_long_enclave_name() {
+        init_context();
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
         let enclave_uuid = "enclave_123".to_string();
@@ -528,6 +542,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_common_name_is_included_for_shorter_enclave_name() {
+        init_context();
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
         let enclave_uuid = "enclave_123".to_string();
@@ -566,6 +581,7 @@ mod tests {
         server_name: Option<String>,
         should_return_trusted_cert: bool,
     ) {
+        init_context();
         let (cert, key) = generate_ca().unwrap();
         let test_trustable_cert = generate_end_cert();
 
@@ -592,6 +608,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_trusted_cert_used_with_trusted_hostname() {
+        init_context();
         let server_name = Some("wicked_enclave.app_123543.cage.evervault.com".to_string());
         test_trusted_cert_with_hostname(server_name, true);
     }
@@ -599,6 +616,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_trusted_cert_used_with_trusted_enclave_hostname() {
+        init_context();
         let server_name = Some("wicked_enclave.app_123543.enclave.evervault.com".to_string());
         test_trusted_cert_with_hostname(server_name, true);
     }
@@ -606,6 +624,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_trusted_cert_used_with_other_hostname() {
+        init_context();
         let server_name = Some("wicked_enclave.app_123543.cages.evervault.com".to_string());
         test_trusted_cert_with_hostname(server_name, false);
     }
@@ -632,12 +651,14 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_checking_for_trusted_hostname_true() {
         let hostname = Some("wicked_enclave.app_123543.enclave.evervault.com");
         assert!(AttestableCertResolver::is_trusted_cert_domain(hostname));
     }
 
     #[test]
+    #[serial]
     fn test_checking_for_trusted_hostname_false() {
         let hostname = Some("wicked_enclave.app_123543.enclaves.evervault.com");
         assert!(!AttestableCertResolver::is_trusted_cert_domain(hostname));
