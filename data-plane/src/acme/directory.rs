@@ -224,7 +224,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        acme::{mocks::client_mock::MockAcmeClientInterface, provider},
+        acme::mocks::client_mock::MockAcmeClientInterface,
         config_client,
     };
 

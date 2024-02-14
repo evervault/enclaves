@@ -347,6 +347,8 @@ impl ResolvesServerCert for AttestableCertResolver {
 
 #[cfg(test)]
 mod tests {
+    use crate::server::tls::trusted_cert_container;
+
     use super::*;
     use nom::AsBytes;
     use openssl::x509::X509;
@@ -366,10 +368,20 @@ mod tests {
         };
     }
 
+    fn write_to_trusted_cert_store(cert: Option<CertifiedKey>) -> () {
+        if let Err(e) = TRUSTED_CERT_STORE
+            .try_write()
+            .map(|mut store| *store = cert)
+        {
+            panic!("Error updating trusted certificate store");
+        }
+    }
+
     fn test_cert_with_hostname(server_name: Option<String>) {
         let (cert, key) = generate_ca().unwrap();
         let test_trustable_cert = generate_end_cert();
-        let resolver = AttestableCertResolver::new(cert, key, Some(test_trustable_cert)).unwrap();
+        write_to_trusted_cert_store(Some(test_trustable_cert));
+        let resolver = AttestableCertResolver::new(cert, key).unwrap();
         let first_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();
@@ -389,6 +401,7 @@ mod tests {
             .unwrap();
         let diff_sni_cert = parse_x509_from_rustls_certified_key(&cert_with_diff_sni);
         assert_eq!(get_digest!(&first_x509), get_digest!(&diff_sni_cert));
+        write_to_trusted_cert_store(None);
     }
 
     #[test]
@@ -424,7 +437,8 @@ mod tests {
         let server_name = Some(ctx.get_cert_name());
         let (cert, key) = generate_ca().unwrap();
         let test_trustable_cert = generate_end_cert();
-        let resolver = AttestableCertResolver::new(cert, key, Some(test_trustable_cert)).unwrap();
+        write_to_trusted_cert_store(Some(test_trustable_cert));
+        let resolver = AttestableCertResolver::new(cert, key).unwrap();
         let first_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();
@@ -448,6 +462,8 @@ mod tests {
             .unwrap();
         let same_nonce_cert = parse_x509_from_rustls_certified_key(&cert_with_same_nonce);
         assert_ne!(get_digest!(&x509_with_nonce), get_digest!(&same_nonce_cert));
+
+        write_to_trusted_cert_store(None);
     }
 
     #[cfg(staging)]
@@ -480,7 +496,8 @@ mod tests {
         let server_name = Some(hostname.clone());
         let (cert, key) = generate_ca().unwrap();
         let test_trustable_cert = generate_end_cert();
-        let resolver = AttestableCertResolver::new(cert, key, Some(test_trustable_cert)).unwrap();
+        write_to_trusted_cert_store(Some(test_trustable_cert));
+        let resolver = AttestableCertResolver::new(cert, key).unwrap();
         let first_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();
@@ -493,6 +510,7 @@ mod tests {
             entry_string.to_string() == hostname
         });
         assert!(final_name_entry.is_none());
+        write_to_trusted_cert_store(None);
     }
 
     #[test]
@@ -512,7 +530,8 @@ mod tests {
         let server_name = Some(hostname.clone());
         let (cert, key) = generate_ca().unwrap();
         let test_trustable_cert = generate_end_cert();
-        let resolver = AttestableCertResolver::new(cert, key, Some(test_trustable_cert)).unwrap();
+        write_to_trusted_cert_store(Some(test_trustable_cert));
+        let resolver = AttestableCertResolver::new(cert, key).unwrap();
         let first_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();
@@ -527,6 +546,7 @@ mod tests {
             given_host == hostname
         });
         assert!(final_name_entry.is_some());
+        write_to_trusted_cert_store(None);
     }
 
     fn test_trusted_cert_with_hostname(
@@ -535,8 +555,11 @@ mod tests {
     ) {
         let (cert, key) = generate_ca().unwrap();
         let test_trustable_cert = generate_end_cert();
+
+        write_to_trusted_cert_store(Some(test_trustable_cert.clone()));
+
         let resolver =
-            AttestableCertResolver::new(cert, key, Some(test_trustable_cert.clone())).unwrap();
+            AttestableCertResolver::new(cert, key).unwrap();
         let returned_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();
@@ -549,6 +572,8 @@ mod tests {
         } else {
             assert_ne!(get_digest!(&returned_x509), get_digest!(&expected_x509));
         }
+
+        write_to_trusted_cert_store(None);
     }
 
     #[test]
@@ -572,7 +597,7 @@ mod tests {
     #[test]
     fn test_trusted_cert_not_set_in_resolver() {
         let (cert, key) = generate_ca().unwrap();
-        let resolver = AttestableCertResolver::new(cert, key, None).unwrap();
+        let resolver = AttestableCertResolver::new(cert, key).unwrap();
 
         //Should return default cert when trusted cert not set.
         let first_cert = resolver
