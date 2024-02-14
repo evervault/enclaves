@@ -7,4 +7,4 @@ pub mod layers;
 #[allow(clippy::module_inception)]
 pub mod server;
 #[cfg(feature = "tls_termination")]
-mod tls;
+pub mod tls;

@@ -23,6 +23,8 @@ use tokio_rustls::rustls::{Certificate, PrivateKey};
 use crate::server::error::{ServerResult, TlsError};
 use crate::EnclaveContext;
 
+use super::trusted_cert_container::TRUSTED_CERT_STORE;
+
 /// Shared struct to implement cert expiry checks and refreshes
 struct CertContainer {
     // Need to track both the cert and the expiry time of the AD embedded
@@ -90,15 +92,13 @@ pub struct AttestableCertResolver {
     internal_ca: X509,
     internal_pk: PKey<Private>,
     // if we don't receive a nonce, we should return a generic, attestable cert
-    base_cert_container: CertContainer,
-    trusted_cert: Option<CertifiedKey>,
+    base_cert_container: CertContainer
 }
 
 impl AttestableCertResolver {
     pub fn new(
         internal_ca: X509,
         internal_pk: PKey<Private>,
-        trusted_cert: Option<CertifiedKey>,
     ) -> ServerResult<Self> {
         let enclave_context = EnclaveContext::get()?;
         let hostnames = enclave_context.get_cert_names();
@@ -113,8 +113,7 @@ impl AttestableCertResolver {
             enclave_context,
             internal_ca,
             internal_pk,
-            base_cert_container: CertContainer::new(created_at, cert_and_key),
-            trusted_cert,
+            base_cert_container: CertContainer::new(created_at, cert_and_key)
         })
     }
 
@@ -317,13 +316,14 @@ impl AttestableCertResolver {
             .ok()
             .map(|(_expiry, cert)| Arc::new(cert))?;
             Some(certified_key)
-        } else if self.trusted_cert.is_some() && Self::is_trusted_cert_domain(server_name) {
-            let trusted_cert = self
-                .trusted_cert
-                .clone()
-                .expect("Infallible - Checked in if condition earlier");
-
-            Some(Arc::new(trusted_cert))
+        } else if Self::is_trusted_cert_domain(server_name) {
+            if let Ok(cert_ref) = TRUSTED_CERT_STORE.try_read() {
+                if let Some(cert) = &*cert_ref {
+                    return Some(Arc::new(cert.clone()));
+                }
+            }
+            log::error!("Trusted cert not set in resolver. Unable to terminate TLS connection.");
+            None
         } else {
             // no nonce given - serve base cert
             self.base_cert_container.resolve_cert(|| {

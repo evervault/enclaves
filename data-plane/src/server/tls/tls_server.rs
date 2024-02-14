@@ -94,8 +94,7 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
 
         let attestable_cert_resolver = super::cert_resolver::AttestableCertResolver::new(
             ca_cert,
-            ca_private_key,
-            trusted_cert,
+            ca_private_key
         )?;
         let mut tls_config =
             Self::get_base_config().with_cert_resolver(Arc::new(attestable_cert_resolver));
