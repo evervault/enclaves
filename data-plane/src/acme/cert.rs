@@ -321,13 +321,13 @@ impl AcmeCertificateRetreiver {
         let attempts = order_lock_maybe
             .as_ref()
             .map_or(0, |lock| lock.number_of_attempts().unwrap_or(0));
-    
+
         if Self::order_lock_exists_and_is_valid(&order_lock_maybe)? {
             log::info!("[ACME] Lock is valid, waiting for Certificate to be created by other instance or waiting for lock to expire");
             // If the lock is valid, do nothing and wait for the certificate to be renewed by another instance or for the lock to expire.
             return Ok(());
         }
-    
+
         match self
             .clone()
             .create_certificate_and_persist_with_lock(key, enclave_context, attempts + 1)
@@ -339,11 +339,13 @@ impl AcmeCertificateRetreiver {
                     .map(|mut store| *store = Some(cert))
                 {
                     log::error!("[ACME] Error updating trusted certificate store: {:?}", e);
-                    Err(AcmeError::General("Error updating trusted certificate store".into()))
+                    Err(AcmeError::General(
+                        "Error updating trusted certificate store".into(),
+                    ))
                 } else {
                     Ok(())
                 }
-            },
+            }
             _ => {
                 log::error!("[ACME] Error renewing certificate. Not updating trusted certificate store: {:?}", e);
                 Err(AcmeError::General("Error renewing certificate".into()))

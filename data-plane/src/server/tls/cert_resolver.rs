@@ -92,14 +92,11 @@ pub struct AttestableCertResolver {
     internal_ca: X509,
     internal_pk: PKey<Private>,
     // if we don't receive a nonce, we should return a generic, attestable cert
-    base_cert_container: CertContainer
+    base_cert_container: CertContainer,
 }
 
 impl AttestableCertResolver {
-    pub fn new(
-        internal_ca: X509,
-        internal_pk: PKey<Private>,
-    ) -> ServerResult<Self> {
+    pub fn new(internal_ca: X509, internal_pk: PKey<Private>) -> ServerResult<Self> {
         let enclave_context = EnclaveContext::get()?;
         let hostnames = enclave_context.get_cert_names();
         let (created_at, cert_and_key) = Self::generate_self_signed_cert(
@@ -113,7 +110,7 @@ impl AttestableCertResolver {
             enclave_context,
             internal_ca,
             internal_pk,
-            base_cert_container: CertContainer::new(created_at, cert_and_key)
+            base_cert_container: CertContainer::new(created_at, cert_and_key),
         })
     }
 

@@ -92,10 +92,8 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
         //Once intermediate cert and trusted cert retrieved, write cage initialised vars
         Environment::write_startup_complete_env_vars()?;
 
-        let attestable_cert_resolver = super::cert_resolver::AttestableCertResolver::new(
-            ca_cert,
-            ca_private_key
-        )?;
+        let attestable_cert_resolver =
+            super::cert_resolver::AttestableCertResolver::new(ca_cert, ca_private_key)?;
         let mut tls_config =
             Self::get_base_config().with_cert_resolver(Arc::new(attestable_cert_resolver));
         tls_config.alpn_protocols.push(b"http/1.1".to_vec());
