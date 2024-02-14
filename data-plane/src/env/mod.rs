@@ -111,10 +111,7 @@ impl Environment {
     }
 
     pub fn write_startup_complete_env_vars() -> Result<(), EnvError> {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .append(true)
-            .open("/etc/customer-env")?;
+        let mut file = OpenOptions::new().append(true).open("/etc/customer-env")?;
 
         write!(file, "export EV_INITIALIZED=true")?;
 
