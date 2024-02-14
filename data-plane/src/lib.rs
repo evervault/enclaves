@@ -5,7 +5,9 @@ use std::fs;
 #[cfg(test)]
 pub mod mocks;
 
+#[cfg(feature = "tls_termination")]
 pub mod acme;
+
 pub mod base_tls_client;
 pub mod cache;
 pub mod cert_provisioner_client;
