@@ -259,6 +259,7 @@ impl AcmeCertificateRetreiver {
 
         if let Some(persisted_certificate) = persisted_certificate {
             log::info!("[ACME] Certificate found after polling");
+            Self::write_certificate_to_rwlock(persisted_certificate.clone())?;
             Ok(persisted_certificate)
         } else {
             Err(AcmeError::General(
@@ -342,19 +343,7 @@ impl AcmeCertificateRetreiver {
             .create_certificate_and_persist_with_lock(key, enclave_context, attempts + 1)
             .await
         {
-            Ok(Some(cert)) => {
-                if let Err(e) = TRUSTED_CERT_STORE
-                    .try_write()
-                    .map(|mut store| *store = Some(cert))
-                {
-                    log::error!("[ACME] Error updating trusted certificate store: {:?}", e);
-                    Err(AcmeError::General(
-                        "Error updating trusted certificate store".into(),
-                    ))
-                } else {
-                    Ok(())
-                }
-            }
+            Ok(Some(cert)) => Self::write_certificate_to_rwlock(cert),
             _ => {
                 log::error!(
                     "[ACME] Error renewing certificate. Not updating trusted certificate store"
@@ -584,5 +573,23 @@ impl AcmeCertificateRetreiver {
         let encrypted_acme_key_pair: RawAcmeCertificate = serde_json::from_value(e3_response.data)?;
 
         Ok(encrypted_acme_key_pair)
+    }
+
+    fn write_certificate_to_rwlock(cert: CertifiedKey) -> Result<(), AcmeError> {
+        match TRUSTED_CERT_STORE.write() {
+            Ok(mut store) => {
+                *store = Some(cert);
+                Ok(())
+            }
+            Err(e) => {
+                log::error!(
+                    "[ACME] Error acquiring write lock on trusted certificate store: {:?}",
+                    e
+                );
+                Err(AcmeError::General(
+                    "Error acquiring write lock on trusted certificate store".into(),
+                ))
+            }
+        }
     }
 }
