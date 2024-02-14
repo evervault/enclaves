@@ -115,7 +115,7 @@ impl EgressProxy {
             let e = Error::last_os_error();
             Err(e.into())
         } else {
-            let ip = Ipv4Addr::from(addr.sin_addr.s_addr);
+            let ip = Ipv4Addr::from(u32::from_be(addr.sin_addr.s_addr));
             let port = u16::from_be(addr.sin_port);
             Ok((IpAddr::V4(ip), port))
         }
