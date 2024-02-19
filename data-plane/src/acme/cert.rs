@@ -332,7 +332,7 @@ impl AcmeCertificateRetreiver {
                     last_error = None;
                     break;
                 }
-                delay_in_seconds = delay_in_seconds * i;
+                delay_in_seconds *= i;
                 tokio::time::sleep(Duration::from_secs(delay_in_seconds)).await;
             }
 
