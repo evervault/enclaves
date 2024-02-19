@@ -38,8 +38,9 @@ use super::{
 
 const CERTIFICATE_LOCK_NAME: &str = "certificate-v1";
 const CERTIFICATE_OBJECT_KEY: &str = "certificate-v1.pem";
-const THIRTY_DAYS_IN_SECONDS: u64 = 86400;
-const SIXTY_DAYS_IN_SECONDS: u64 = 172800;
+const ONE_DAY_IN_SECONDS: u64 = 86400;
+const THIRTY_DAYS_IN_SECONDS: u64 = ONE_DAY_IN_SECONDS * 30;
+const SIXTY_DAYS_IN_SECONDS: u64 = ONE_DAY_IN_SECONDS * 60;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RawAcmeCertificate {
@@ -167,6 +168,14 @@ fn get_jittered_time(base_time: SystemTime) -> SystemTime {
     let mut rng = rand::thread_rng();
     let jitter_duration = Duration::from_secs(rng.gen_range(1..86400));
     base_time + jitter_duration
+}
+
+fn seconds_with_jitter_to_time(seconds: u64) -> Result<Duration, AcmeError> {
+    let time = SystemTime::now() + Duration::from_secs(seconds);
+    let jittered_time = get_jittered_time(time);
+    jittered_time
+        .duration_since(SystemTime::now())
+        .map_err(AcmeError::SystemTimeError)
 }
 
 #[derive(Clone)]
@@ -310,18 +319,50 @@ impl AcmeCertificateRetreiver {
             //Retry certificate renewal if it fails
             let retries = 3;
             let mut delay_in_seconds = 10;
+            let mut last_error: Option<AcmeError> = None;
             for i in 1..retries {
                 if let Err(e) = self_clone
                     .renew_certificate_and_update_store(key.clone(), &enclave_context)
                     .await
                 {
                     log::error!("[ACME] Error renewing certificate: {:?}", e);
+                    last_error = Some(e);
                 } else {
                     log::info!("[ACME] Certificate renewed successfully.");
+                    last_error = None;
                     break;
                 }
                 delay_in_seconds = delay_in_seconds * i;
                 tokio::time::sleep(Duration::from_secs(delay_in_seconds)).await;
+            }
+
+            if let Some(e) = last_error {
+                log::error!(
+                    "[ACME] Error renewing certificate after retries: {:?}. Try again in a day",
+                    e
+                );
+                if let Ok(time_till_renewal) = seconds_with_jitter_to_time(ONE_DAY_IN_SECONDS) {
+                    log::info!("[ACME] Scheduling renewal for 1 day from now");
+                    self_clone.schedule_certificate_renewal(
+                        time_till_renewal,
+                        key,
+                        enclave_context,
+                    );
+                } else {
+                    log::error!("[ACME] Error scheduling renewal for 60 days from now");
+                }
+            } else {
+                //Once renewal is successful, schedule the next renewal
+                if let Ok(time_till_renewal) = seconds_with_jitter_to_time(SIXTY_DAYS_IN_SECONDS) {
+                    log::info!("[ACME] Scheduling renewal for 60 days from now");
+                    self_clone.schedule_certificate_renewal(
+                        time_till_renewal,
+                        key,
+                        enclave_context,
+                    );
+                } else {
+                    log::error!("[ACME] Error scheduling renewal for 60 days from now");
+                }
             }
         });
     }
