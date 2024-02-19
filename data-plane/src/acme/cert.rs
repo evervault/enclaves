@@ -309,15 +309,19 @@ impl AcmeCertificateRetreiver {
 
             //Retry certificate renewal if it fails
             let retries = 3;
-            for _ in 0..retries {
+            let mut delay_in_seconds = 10;
+            for i in 1..retries {
                 if let Err(e) = self_clone
                     .renew_certificate_and_update_store(key.clone(), &enclave_context)
                     .await
                 {
                     log::error!("[ACME] Error renewing certificate: {:?}", e);
                 } else {
+                    log::info!("[ACME] Certificate renewed successfully.");
                     break;
                 }
+                delay_in_seconds = delay_in_seconds * i;
+                tokio::time::sleep(Duration::from_secs(delay_in_seconds)).await;
             }
         });
     }
