@@ -1,22 +1,15 @@
 use std::{
-    str::from_utf8,
     sync::Arc,
     time::{Duration, SystemTime},
 };
 
-use openssl::asn1::Asn1TimeRef;
 use openssl::{
-    asn1::Asn1Time,
     pkey::{PKey, Private},
     x509::X509,
 };
-use rand::Rng;
-use serde::{Deserialize, Serialize};
+
 use serde_json::json;
-use tokio_rustls::rustls::{
-    sign::{self, CertifiedKey},
-    Certificate, PrivateKey, ServerName,
-};
+use tokio_rustls::rustls::{sign::CertifiedKey, ServerName};
 
 use crate::{
     config_client::{ConfigClient, StorageConfigClientInterface},
@@ -34,149 +27,9 @@ use super::{
     lock::StorageLock,
     order::OrderBuilder,
     provider::Provider,
+    raw_cert::RawAcmeCertificate,
+    utils,
 };
-
-const CERTIFICATE_LOCK_NAME: &str = "certificate-v1";
-const CERTIFICATE_OBJECT_KEY: &str = "certificate-v1.pem";
-const ONE_DAY_IN_SECONDS: u64 = 86400;
-const THIRTY_DAYS_IN_SECONDS: u64 = ONE_DAY_IN_SECONDS * 30;
-const SIXTY_DAYS_IN_SECONDS: u64 = ONE_DAY_IN_SECONDS * 60;
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct RawAcmeCertificate {
-    pub certificate: String,
-}
-
-impl RawAcmeCertificate {
-    pub fn new(certificate: String) -> Self {
-        Self { certificate }
-    }
-
-    pub fn from_x509s(x509s: Vec<X509>) -> Result<RawAcmeCertificate, AcmeError> {
-        let pem_string = Self::convert_to_pemfile(x509s)?;
-
-        Ok(RawAcmeCertificate::new(pem_string))
-    }
-
-    fn convert_to_pemfile(certificates: Vec<X509>) -> Result<String, AcmeError> {
-        let mut pem_strings: Vec<String> = Vec::new();
-
-        for x509 in certificates {
-            let pem = x509.to_pem()?;
-            let pem_string = from_utf8(&pem)?.to_string();
-            pem_strings.push(pem_string);
-        }
-
-        let combined_pem: String = pem_strings.join("\n");
-
-        Ok(combined_pem)
-    }
-
-    pub async fn from_storage(
-        config_client: ConfigClient,
-    ) -> Result<Option<RawAcmeCertificate>, AcmeError> {
-        let response_maybe = config_client
-            .get_object(CERTIFICATE_OBJECT_KEY.into())
-            .await?;
-
-        let parsed_response =
-            response_maybe.map(|response| RawAcmeCertificate::new(response.body()));
-
-        Ok(parsed_response)
-    }
-
-    fn to_x509s(&self) -> Result<Vec<X509>, AcmeError> {
-        let pem_encoded_certs = self.certificate.as_bytes();
-        let certs = X509::stack_from_pem(pem_encoded_certs)?;
-        Ok(certs)
-    }
-
-    pub fn time_till_renewal_required(&self, x509s: Vec<X509>) -> Result<Duration, AcmeError> {
-        let thirty_days_from_now = Asn1Time::days_from_now(30)?;
-
-        let mut earliest_expiry = None;
-        for cert in x509s.iter() {
-            let cert_expiry = cert.not_after();
-            if earliest_expiry.is_none()
-                || cert_expiry < earliest_expiry.expect("Infallible - Option checked")
-            {
-                earliest_expiry = Some(cert_expiry);
-            }
-        }
-
-        if let Some(earliest_expiry) = earliest_expiry {
-            // If the certificate expires in the next month, renew it immediately.
-            if earliest_expiry < thirty_days_from_now {
-                log::info!("[ACME] Certificate expires in the coming month. Renew it now now");
-                return Ok(Duration::from_secs(0));
-            }
-
-            let time_till_expiry_converted = asn1_time_to_system_time(earliest_expiry)?;
-            let thirty_days_before_expiry =
-                time_till_expiry_converted - Duration::from_secs(THIRTY_DAYS_IN_SECONDS);
-
-            let time_to_renew_with_jitter = get_jittered_time(thirty_days_before_expiry);
-            let time_till_renewal = time_to_renew_with_jitter.duration_since(SystemTime::now())?;
-            return Ok(time_till_renewal);
-        }
-
-        //If failed to get expiry, renew straight away as cert must be corrupted
-        Ok(Duration::from_secs(0))
-    }
-
-    fn to_certified_key(
-        &self,
-        x509s: Vec<X509>,
-        private_key: PKey<Private>,
-    ) -> Result<CertifiedKey, AcmeError> {
-        let der_encoded_private_key = private_key.private_key_to_der()?;
-        let ecdsa_private_key = sign::any_ecdsa_type(&PrivateKey(der_encoded_private_key))?;
-
-        let mut pem_certs = Vec::new();
-        for cert in x509s.iter() {
-            let pem_encoded_cert: Vec<u8> = cert.to_pem()?;
-            pem_certs.push(pem_encoded_cert);
-        }
-
-        let combined_pem_encoded_certs: Vec<u8> = pem_certs.concat();
-        let parsed_pems = pem::parse_many(combined_pem_encoded_certs)?;
-
-        let cert_chain: Vec<Certificate> = parsed_pems
-            .into_iter()
-            .map(|p| Certificate(p.contents))
-            .collect();
-        let cert_and_key = CertifiedKey::new(cert_chain, ecdsa_private_key);
-        Ok(cert_and_key)
-    }
-
-    pub async fn persist(&self, config_client: &ConfigClient) -> Result<(), AcmeError> {
-        config_client
-            .put_object(CERTIFICATE_OBJECT_KEY.into(), self.certificate.clone())
-            .await?;
-
-        Ok(())
-    }
-}
-
-fn asn1_time_to_system_time(time: &Asn1TimeRef) -> Result<SystemTime, AcmeError> {
-    let unix_time = Asn1Time::from_unix(0)?.diff(time)?;
-    Ok(SystemTime::UNIX_EPOCH
-        + Duration::from_secs(unix_time.days as u64 * 86400 + unix_time.secs as u64))
-}
-
-fn get_jittered_time(base_time: SystemTime) -> SystemTime {
-    let mut rng = rand::thread_rng();
-    let jitter_duration = Duration::from_secs(rng.gen_range(1..86400));
-    base_time + jitter_duration
-}
-
-fn seconds_with_jitter_to_time(seconds: u64) -> Result<Duration, AcmeError> {
-    let time = SystemTime::now() + Duration::from_secs(seconds);
-    let jittered_time = get_jittered_time(time);
-    jittered_time
-        .duration_since(SystemTime::now())
-        .map_err(AcmeError::SystemTimeError)
-}
 
 #[derive(Clone)]
 pub struct AcmeCertificateRetreiver {
@@ -248,8 +101,8 @@ impl AcmeCertificateRetreiver {
                     persisted_certificate = decrypted_certificate_maybe;
 
                     let sixty_days_from_now =
-                        SystemTime::now() + Duration::from_secs(SIXTY_DAYS_IN_SECONDS);
-                    let time_for_renewal = get_jittered_time(sixty_days_from_now);
+                        SystemTime::now() + Duration::from_secs(utils::SIXTY_DAYS_IN_SECONDS);
+                    let time_for_renewal = utils::get_jittered_time(sixty_days_from_now);
                     let time_till_renewal = time_for_renewal.duration_since(SystemTime::now())?;
 
                     self.schedule_certificate_renewal(
@@ -275,6 +128,31 @@ impl AcmeCertificateRetreiver {
                 "[ACME] Certificate not found after polling".into(),
             ))
         }
+    }
+
+    async fn fetch_certificate_and_renewal_time(
+        &self,
+        key: PKey<Private>,
+    ) -> Result<Option<(CertifiedKey, Duration)>, AcmeError> {
+        let raw_acme_certificate =
+            match RawAcmeCertificate::from_storage(self.config_client.clone()).await {
+                Ok(Some(cert)) => {
+                    log::info!("[ACME] Certificate found in storage");
+                    cert
+                }
+                Ok(None) => return Ok(None),
+                Err(e) => return Err(e),
+            };
+
+        let decrypted_certificate =
+            Self::decrypt_certificate(&self.e3_client, &raw_acme_certificate).await?;
+        let x509s = decrypted_certificate.to_x509s()?;
+        let time_till_renewal_required =
+            decrypted_certificate.time_till_renewal_required(x509s.clone())?;
+
+        let certified_key = decrypted_certificate.to_certified_key(x509s, key)?;
+
+        Ok(Some((certified_key, time_till_renewal_required)))
     }
 
     async fn fetch_and_decrypt_certificate(
@@ -316,6 +194,22 @@ impl AcmeCertificateRetreiver {
         tokio::spawn(async move {
             tokio::time::sleep(time_till_renewal).await;
 
+            if let Ok(Some((cert, time_till_expiry))) = self_clone
+                .fetch_certificate_and_renewal_time(key.clone())
+                .await
+            {
+                if time_till_expiry.as_secs() > utils::SIXTY_DAYS_IN_SECONDS {
+                    log::info!("[ACME] Certificate has already being renewed by other instance.");
+                    if let Err(err) = Self::write_certificate_to_rwlock(cert) {
+                        log::error!(
+                            "[ACME] Error writing renewed certificate to trusted certificate store: {:?}",
+                            err)
+                    } else {
+                        return;
+                    }
+                }
+            }
+
             //Retry certificate renewal if it fails
             let retries = 3;
             let mut delay_in_seconds = 10;
@@ -336,34 +230,21 @@ impl AcmeCertificateRetreiver {
                 tokio::time::sleep(Duration::from_secs(delay_in_seconds)).await;
             }
 
-            if let Some(e) = last_error {
+            let days_till_renewal = if let Some(e) = last_error {
                 log::error!(
                     "[ACME] Error renewing certificate after retries: {:?}. Try again in a day",
                     e
                 );
-                if let Ok(time_till_renewal) = seconds_with_jitter_to_time(ONE_DAY_IN_SECONDS) {
-                    log::info!("[ACME] Scheduling renewal for 1 day from now");
-                    self_clone.schedule_certificate_renewal(
-                        time_till_renewal,
-                        key,
-                        enclave_context,
-                    );
-                } else {
-                    log::error!("[ACME] Error scheduling renewal for 60 days from now");
-                }
+                utils::ONE_DAY_IN_SECONDS
             } else {
-                //Once renewal is successful, schedule the next renewal
-                if let Ok(time_till_renewal) = seconds_with_jitter_to_time(SIXTY_DAYS_IN_SECONDS) {
-                    log::info!("[ACME] Scheduling renewal for 60 days from now");
-                    self_clone.schedule_certificate_renewal(
-                        time_till_renewal,
-                        key,
-                        enclave_context,
-                    );
-                } else {
-                    log::error!("[ACME] Error scheduling renewal for 60 days from now");
-                }
-            }
+                log::info!("[ACME] Scheduling renewal for 60 days from now");
+                utils::SIXTY_DAYS_IN_SECONDS
+            };
+
+            if let Ok(time_till_renewal) = utils::seconds_with_jitter_to_time(days_till_renewal) {
+                log::info!("[ACME] Scheduling renewal for 1 day from now");
+                self_clone.schedule_certificate_renewal(time_till_renewal, key, enclave_context);
+            };
         });
     }
 
@@ -399,7 +280,8 @@ impl AcmeCertificateRetreiver {
     }
 
     async fn get_order_lock() -> Result<Option<StorageLock>, AcmeError> {
-        let order_lock_maybe = StorageLock::read_from_storage(CERTIFICATE_LOCK_NAME.into()).await?;
+        let order_lock_maybe =
+            StorageLock::read_from_storage(utils::CERTIFICATE_LOCK_NAME.into()).await?;
         match order_lock_maybe {
             Some(lock) => Ok(Some(lock)),
             None => Ok(None),
@@ -420,7 +302,7 @@ impl AcmeCertificateRetreiver {
         attempts: u32,
     ) -> Result<Option<CertifiedKey>, AcmeError> {
         let certificate_lock = StorageLock::new_with_config_client(
-            CERTIFICATE_LOCK_NAME.into(),
+            utils::CERTIFICATE_LOCK_NAME.into(),
             attempts,
             self.config_client.clone(),
         );

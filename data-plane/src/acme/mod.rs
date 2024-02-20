@@ -15,6 +15,8 @@ pub mod key;
 pub mod lock;
 pub mod order;
 pub mod provider;
+pub mod raw_cert;
+pub mod utils;
 
 #[cfg(test)]
 pub mod mocks;
