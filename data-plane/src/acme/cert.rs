@@ -242,7 +242,7 @@ impl AcmeCertificateRetreiver {
             };
 
             if let Ok(time_till_renewal) = utils::seconds_with_jitter_to_time(days_till_renewal) {
-                log::info!("[ACME] Scheduling renewal for 1 day from now");
+                log::info!("[ACME] Scheduling renewal in {} seconds", days_till_renewal);
                 self_clone.schedule_certificate_renewal(time_till_renewal, key, enclave_context);
             };
         });
