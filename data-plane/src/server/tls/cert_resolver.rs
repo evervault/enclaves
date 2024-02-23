@@ -23,6 +23,8 @@ use tokio_rustls::rustls::{Certificate, PrivateKey};
 use crate::server::error::{ServerResult, TlsError};
 use crate::EnclaveContext;
 
+use super::trusted_cert_container::TRUSTED_CERT_STORE;
+
 /// Shared struct to implement cert expiry checks and refreshes
 struct CertContainer {
     // Need to track both the cert and the expiry time of the AD embedded
@@ -91,15 +93,10 @@ pub struct AttestableCertResolver {
     internal_pk: PKey<Private>,
     // if we don't receive a nonce, we should return a generic, attestable cert
     base_cert_container: CertContainer,
-    trusted_cert: Option<CertifiedKey>,
 }
 
 impl AttestableCertResolver {
-    pub fn new(
-        internal_ca: X509,
-        internal_pk: PKey<Private>,
-        trusted_cert: Option<CertifiedKey>,
-    ) -> ServerResult<Self> {
+    pub fn new(internal_ca: X509, internal_pk: PKey<Private>) -> ServerResult<Self> {
         let enclave_context = EnclaveContext::get()?;
         let hostnames = enclave_context.get_cert_names();
         let (created_at, cert_and_key) = Self::generate_self_signed_cert(
@@ -114,7 +111,6 @@ impl AttestableCertResolver {
             internal_ca,
             internal_pk,
             base_cert_container: CertContainer::new(created_at, cert_and_key),
-            trusted_cert,
         })
     }
 
@@ -317,13 +313,23 @@ impl AttestableCertResolver {
             .ok()
             .map(|(_expiry, cert)| Arc::new(cert))?;
             Some(certified_key)
-        } else if self.trusted_cert.is_some() && Self::is_trusted_cert_domain(server_name) {
-            let trusted_cert = self
-                .trusted_cert
-                .clone()
-                .expect("Infallible - Checked in if condition earlier");
+        } else if Self::is_trusted_cert_domain(server_name) {
+            if let Ok(cert_ref) = TRUSTED_CERT_STORE.try_read() {
+                if let Some(cert) = &*cert_ref {
+                    return Some(Arc::new(cert.clone()));
+                }
+            }
 
-            Some(Arc::new(trusted_cert))
+            // trusted cert not set - return custom signed base cert
+            self.base_cert_container.resolve_cert(|| {
+                let enclave_hostnames = self.enclave_context.get_cert_names();
+                Self::generate_self_signed_cert(
+                    self.internal_ca.as_ref(),
+                    self.internal_pk.as_ref(),
+                    enclave_hostnames,
+                    None,
+                )
+            })
         } else {
             // no nonce given - serve base cert
             self.base_cert_container.resolve_cert(|| {
@@ -353,6 +359,16 @@ mod tests {
     use super::*;
     use nom::AsBytes;
     use openssl::x509::X509;
+    use serial_test::serial;
+
+    fn init_context() {
+        let app_uuid = "app_123".to_string();
+        let team_uuid = "team_456".to_string();
+        let enclave_uuid = "enclave_123".to_string();
+        let enclave_name = "my-sick-enclave".to_string();
+        let ctx = EnclaveContext::new(app_uuid, team_uuid, enclave_uuid, enclave_name);
+        EnclaveContext::set(ctx.clone());
+    }
 
     fn parse_x509_from_rustls_certified_key(cert: &CertifiedKey) -> X509 {
         let cert_chain = cert.cert.clone();
@@ -369,10 +385,20 @@ mod tests {
         };
     }
 
+    fn write_to_trusted_cert_store(cert: Option<CertifiedKey>) -> () {
+        if let Err(e) = TRUSTED_CERT_STORE
+            .try_write()
+            .map(|mut store| *store = cert)
+        {
+            panic!("Error updating trusted certificate store");
+        }
+    }
+
     fn test_cert_with_hostname(server_name: Option<String>) {
         let (cert, key) = generate_ca().unwrap();
         let test_trustable_cert = generate_end_cert();
-        let resolver = AttestableCertResolver::new(cert, key, Some(test_trustable_cert)).unwrap();
+        write_to_trusted_cert_store(Some(test_trustable_cert));
+        let resolver = AttestableCertResolver::new(cert, key).unwrap();
         let first_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();
@@ -392,10 +418,13 @@ mod tests {
             .unwrap();
         let diff_sni_cert = parse_x509_from_rustls_certified_key(&cert_with_diff_sni);
         assert_eq!(get_digest!(&first_x509), get_digest!(&diff_sni_cert));
+        write_to_trusted_cert_store(None);
     }
 
     #[test]
+    #[serial]
     fn test_base_cert_used_without_nonce() {
+        init_context();
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
         let enclave_uuid = "enclave_123".to_string();
@@ -406,7 +435,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_base_cert_using_hyphen_without_nonce() {
+        init_context();
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
         let enclave_uuid = "enclave_123".to_string();
@@ -417,7 +448,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_base_cert_used_with_nonce() {
+        init_context();
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
         let enclave_uuid = "enclave_123".to_string();
@@ -427,7 +460,8 @@ mod tests {
         let server_name = Some(ctx.get_cert_name());
         let (cert, key) = generate_ca().unwrap();
         let test_trustable_cert = generate_end_cert();
-        let resolver = AttestableCertResolver::new(cert, key, Some(test_trustable_cert)).unwrap();
+        write_to_trusted_cert_store(Some(test_trustable_cert));
+        let resolver = AttestableCertResolver::new(cert, key).unwrap();
         let first_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();
@@ -451,11 +485,14 @@ mod tests {
             .unwrap();
         let same_nonce_cert = parse_x509_from_rustls_certified_key(&cert_with_same_nonce);
         assert_ne!(get_digest!(&x509_with_nonce), get_digest!(&same_nonce_cert));
+
+        write_to_trusted_cert_store(None);
     }
 
     #[cfg(staging)]
     #[test]
     fn test_tld_is_correct_when_compiler_flag_is_set() {
+        init_context();
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
         let enclave_uuid = "enclave_123".to_string();
@@ -466,7 +503,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_common_name_not_included_for_long_enclave_name() {
+        init_context();
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
         let enclave_uuid = "enclave_123".to_string();
@@ -483,7 +522,8 @@ mod tests {
         let server_name = Some(hostname.clone());
         let (cert, key) = generate_ca().unwrap();
         let test_trustable_cert = generate_end_cert();
-        let resolver = AttestableCertResolver::new(cert, key, Some(test_trustable_cert)).unwrap();
+        write_to_trusted_cert_store(Some(test_trustable_cert));
+        let resolver = AttestableCertResolver::new(cert, key).unwrap();
         let first_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();
@@ -496,10 +536,13 @@ mod tests {
             entry_string.to_string() == hostname
         });
         assert!(final_name_entry.is_none());
+        write_to_trusted_cert_store(None);
     }
 
     #[test]
+    #[serial]
     fn test_common_name_is_included_for_shorter_enclave_name() {
+        init_context();
         let app_uuid = "app_123".to_string();
         let team_uuid = "team_456".to_string();
         let enclave_uuid = "enclave_123".to_string();
@@ -515,7 +558,8 @@ mod tests {
         let server_name = Some(hostname.clone());
         let (cert, key) = generate_ca().unwrap();
         let test_trustable_cert = generate_end_cert();
-        let resolver = AttestableCertResolver::new(cert, key, Some(test_trustable_cert)).unwrap();
+        write_to_trusted_cert_store(Some(test_trustable_cert));
+        let resolver = AttestableCertResolver::new(cert, key).unwrap();
         let first_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();
@@ -530,16 +574,21 @@ mod tests {
             given_host == hostname
         });
         assert!(final_name_entry.is_some());
+        write_to_trusted_cert_store(None);
     }
 
     fn test_trusted_cert_with_hostname(
         server_name: Option<String>,
         should_return_trusted_cert: bool,
     ) {
+        init_context();
         let (cert, key) = generate_ca().unwrap();
         let test_trustable_cert = generate_end_cert();
-        let resolver =
-            AttestableCertResolver::new(cert, key, Some(test_trustable_cert.clone())).unwrap();
+
+        write_to_trusted_cert_store(Some(test_trustable_cert.clone()));
+
+        let resolver = AttestableCertResolver::new(cert, key).unwrap();
+
         let returned_cert = resolver
             .resolve_cert_using_sni(server_name.as_deref())
             .unwrap();
@@ -552,30 +601,39 @@ mod tests {
         } else {
             assert_ne!(get_digest!(&returned_x509), get_digest!(&expected_x509));
         }
+
+        write_to_trusted_cert_store(None);
     }
 
     #[test]
+    #[serial]
     fn test_trusted_cert_used_with_trusted_hostname() {
+        init_context();
         let server_name = Some("wicked_enclave.app_123543.cage.evervault.com".to_string());
         test_trusted_cert_with_hostname(server_name, true);
     }
 
     #[test]
+    #[serial]
     fn test_trusted_cert_used_with_trusted_enclave_hostname() {
+        init_context();
         let server_name = Some("wicked_enclave.app_123543.enclave.evervault.com".to_string());
         test_trusted_cert_with_hostname(server_name, true);
     }
 
     #[test]
+    #[serial]
     fn test_trusted_cert_used_with_other_hostname() {
+        init_context();
         let server_name = Some("wicked_enclave.app_123543.cages.evervault.com".to_string());
         test_trusted_cert_with_hostname(server_name, false);
     }
 
     #[test]
+    #[serial]
     fn test_trusted_cert_not_set_in_resolver() {
         let (cert, key) = generate_ca().unwrap();
-        let resolver = AttestableCertResolver::new(cert, key, None).unwrap();
+        let resolver = AttestableCertResolver::new(cert, key).unwrap();
 
         //Should return default cert when trusted cert not set.
         let first_cert = resolver
@@ -593,12 +651,14 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_checking_for_trusted_hostname_true() {
         let hostname = Some("wicked_enclave.app_123543.enclave.evervault.com");
         assert!(AttestableCertResolver::is_trusted_cert_domain(hostname));
     }
 
     #[test]
+    #[serial]
     fn test_checking_for_trusted_hostname_false() {
         let hostname = Some("wicked_enclave.app_123543.enclaves.evervault.com");
         assert!(!AttestableCertResolver::is_trusted_cert_domain(hostname));

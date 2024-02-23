@@ -2,6 +2,9 @@ use async_trait::async_trait;
 
 #[cfg(feature = "enclave")]
 use once_cell::sync::OnceCell;
+#[cfg(feature = "enclave")]
+use tokio_rustls::rustls::sign::CertifiedKey;
+
 use openssl::pkey::PKey;
 use openssl::pkey::Private;
 use openssl::x509::X509;
@@ -11,7 +14,6 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use tokio_rustls::rustls::server::WantsServerCert;
-use tokio_rustls::rustls::sign::CertifiedKey;
 use tokio_rustls::rustls::ConfigBuilder;
 use tokio_rustls::rustls::ServerConfig;
 use tokio_rustls::server::TlsStream;
@@ -84,19 +86,13 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
         log::debug!("Received intermediate CA from cert provisioner. Using it with TLS Server.");
 
         #[cfg(feature = "enclave")]
-        let trusted_cert: Option<CertifiedKey> = enclave_trusted_cert().await;
-
-        #[cfg(not(feature = "enclave"))] // Don't order trusted certs locally
-        let trusted_cert: Option<CertifiedKey> = None;
+        let _: Option<CertifiedKey> = enclave_trusted_cert().await;
 
         //Once intermediate cert and trusted cert retrieved, write cage initialised vars
         Environment::write_startup_complete_env_vars()?;
 
-        let attestable_cert_resolver = super::cert_resolver::AttestableCertResolver::new(
-            ca_cert,
-            ca_private_key,
-            trusted_cert,
-        )?;
+        let attestable_cert_resolver =
+            super::cert_resolver::AttestableCertResolver::new(ca_cert, ca_private_key)?;
         let mut tls_config =
             Self::get_base_config().with_cert_resolver(Arc::new(attestable_cert_resolver));
         tls_config.alpn_protocols.push(b"http/1.1".to_vec());

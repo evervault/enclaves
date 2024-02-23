@@ -141,6 +141,7 @@ async fn start(data_plane_port: u16) {
     }
 }
 
+#[allow(unused_variables)]
 async fn start_data_plane(data_plane_port: u16, context: FeatureContext) {
     log::info!("Data plane starting up. Forwarding traffic to {data_plane_port}");
     let server = match get_vsock_server_with_proxy_protocol(ENCLAVE_CONNECT_PORT, Enclave).await {

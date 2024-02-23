@@ -1,20 +1,20 @@
-use std::{str::from_utf8, sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
 
 use openssl::{
-    asn1::Asn1Time,
     pkey::{PKey, Private},
     x509::X509,
 };
-use serde::{Deserialize, Serialize};
+
 use serde_json::json;
-use tokio_rustls::rustls::{
-    sign::{self, CertifiedKey},
-    Certificate, PrivateKey, ServerName,
-};
+use tokio_rustls::rustls::{sign::CertifiedKey, ServerName};
 
 use crate::{
     config_client::{ConfigClient, StorageConfigClientInterface},
     e3client::{CryptoRequest, CryptoResponse, E3Api, E3Client},
+    server::tls::trusted_cert_container::TRUSTED_CERT_STORE,
     stats_client::StatsClient,
     EnclaveContext,
 };
@@ -27,128 +27,9 @@ use super::{
     lock::StorageLock,
     order::OrderBuilder,
     provider::Provider,
+    raw_cert::RawAcmeCertificate,
+    utils,
 };
-
-pub enum RenewalStrategy {
-    AsyncRenewal,
-    SyncRenewal,
-    NoRenewal,
-}
-
-const CERTIFICATE_LOCK_NAME: &str = "certificate-v1";
-const CERTIFICATE_OBJECT_KEY: &str = "certificate-v1.pem";
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct RawAcmeCertificate {
-    pub certificate: String,
-}
-
-impl RawAcmeCertificate {
-    pub fn new(certificate: String) -> Self {
-        Self { certificate }
-    }
-
-    pub fn from_x509s(x509s: Vec<X509>) -> Result<RawAcmeCertificate, AcmeError> {
-        let pem_string = Self::convert_to_pemfile(x509s)?;
-
-        Ok(RawAcmeCertificate::new(pem_string))
-    }
-
-    fn convert_to_pemfile(certificates: Vec<X509>) -> Result<String, AcmeError> {
-        let mut pem_strings: Vec<String> = Vec::new();
-
-        for x509 in certificates {
-            let pem = x509.to_pem()?;
-            let pem_string = from_utf8(&pem)?.to_string();
-            pem_strings.push(pem_string);
-        }
-
-        let combined_pem: String = pem_strings.join("\n");
-
-        Ok(combined_pem)
-    }
-
-    pub async fn from_storage(
-        config_client: ConfigClient,
-    ) -> Result<Option<RawAcmeCertificate>, AcmeError> {
-        let response_maybe = config_client
-            .get_object(CERTIFICATE_OBJECT_KEY.into())
-            .await?;
-
-        let parsed_response =
-            response_maybe.map(|response| RawAcmeCertificate::new(response.body()));
-
-        Ok(parsed_response)
-    }
-
-    fn to_x509s(&self) -> Result<Vec<X509>, AcmeError> {
-        let pem_encoded_certs = self.certificate.as_bytes();
-        let certs = X509::stack_from_pem(pem_encoded_certs)?;
-        Ok(certs)
-    }
-
-    pub fn should_renew_cert(x509s: Vec<X509>) -> Result<RenewalStrategy, AcmeError> {
-        let thirty_days = Asn1Time::days_from_now(30)?;
-        let seven_days = Asn1Time::days_from_now(7)?;
-
-        let mut earliest_expiry = None;
-
-        for cert in x509s.iter() {
-            let cert_expiry = cert.not_after();
-            if earliest_expiry.is_none()
-                || cert_expiry < earliest_expiry.expect("Infallible - Option checked")
-            {
-                earliest_expiry = Some(cert_expiry);
-            }
-        }
-
-        let renewal_strategy = match earliest_expiry {
-            Some(earliest_expiry)
-                if earliest_expiry < thirty_days && earliest_expiry > seven_days =>
-            {
-                RenewalStrategy::AsyncRenewal
-            }
-            Some(earliest_expiry) if earliest_expiry < seven_days => RenewalStrategy::SyncRenewal,
-            None => RenewalStrategy::SyncRenewal, //If failed to get expiry, renew straight away as cert must be corrupted
-            _ => RenewalStrategy::NoRenewal,      // Else, no need to renew
-        };
-
-        Ok(renewal_strategy)
-    }
-
-    fn to_certified_key(
-        &self,
-        x509s: Vec<X509>,
-        private_key: PKey<Private>,
-    ) -> Result<CertifiedKey, AcmeError> {
-        let der_encoded_private_key = private_key.private_key_to_der()?;
-        let ecdsa_private_key = sign::any_ecdsa_type(&PrivateKey(der_encoded_private_key))?;
-
-        let mut pem_certs = Vec::new();
-        for cert in x509s.iter() {
-            let pem_encoded_cert: Vec<u8> = cert.to_pem()?;
-            pem_certs.push(pem_encoded_cert);
-        }
-
-        let combined_pem_encoded_certs: Vec<u8> = pem_certs.concat();
-        let parsed_pems = pem::parse_many(combined_pem_encoded_certs)?;
-
-        let cert_chain: Vec<Certificate> = parsed_pems
-            .into_iter()
-            .map(|p| Certificate(p.contents))
-            .collect();
-        let cert_and_key = CertifiedKey::new(cert_chain, ecdsa_private_key);
-        Ok(cert_and_key)
-    }
-
-    pub async fn persist(&self, config_client: &ConfigClient) -> Result<(), AcmeError> {
-        config_client
-            .put_object(CERTIFICATE_OBJECT_KEY.into(), self.certificate.clone())
-            .await?;
-
-        Ok(())
-    }
-}
 
 #[derive(Clone)]
 pub struct AcmeCertificateRetreiver {
@@ -208,6 +89,7 @@ impl AcmeCertificateRetreiver {
                         "[ACME] No valid lock on ACME ordering, creating lock and certificate. {} attempt(s) made.",
                         attempts
                     );
+
                     //No Lock on order - create lock - create Certificate - encrypt Certificate - persist Certificate - delete lock
                     let decrypted_certificate_maybe = self
                         .create_certificate_and_persist_with_lock(
@@ -217,6 +99,17 @@ impl AcmeCertificateRetreiver {
                         )
                         .await?;
                     persisted_certificate = decrypted_certificate_maybe;
+
+                    let sixty_days_from_now =
+                        SystemTime::now() + Duration::from_secs(utils::SIXTY_DAYS_IN_SECONDS);
+                    let time_for_renewal = utils::get_jittered_time(sixty_days_from_now);
+                    let time_till_renewal = time_for_renewal.duration_since(SystemTime::now())?;
+
+                    self.schedule_certificate_renewal(
+                        time_till_renewal,
+                        key.clone(),
+                        enclave_context.clone(),
+                    );
                 }
             };
 
@@ -228,6 +121,7 @@ impl AcmeCertificateRetreiver {
 
         if let Some(persisted_certificate) = persisted_certificate {
             log::info!("[ACME] Certificate found after polling");
+            Self::write_certificate_to_rwlock(persisted_certificate.clone())?;
             Ok(persisted_certificate)
         } else {
             Err(AcmeError::General(
@@ -236,67 +130,158 @@ impl AcmeCertificateRetreiver {
         }
     }
 
+    async fn fetch_certificate_and_renewal_time(
+        &self,
+        key: PKey<Private>,
+    ) -> Result<Option<(CertifiedKey, Duration)>, AcmeError> {
+        let raw_acme_certificate =
+            match RawAcmeCertificate::from_storage(self.config_client.clone()).await {
+                Ok(Some(cert)) => {
+                    log::info!("[ACME] Certificate found in storage");
+                    cert
+                }
+                Ok(None) => return Ok(None),
+                Err(e) => return Err(e),
+            };
+
+        let decrypted_certificate =
+            Self::decrypt_certificate(&self.e3_client, &raw_acme_certificate).await?;
+        let x509s = decrypted_certificate.to_x509s()?;
+        let time_till_renewal_required =
+            decrypted_certificate.time_till_renewal_required(x509s.clone())?;
+
+        let certified_key = decrypted_certificate.to_certified_key(x509s, key)?;
+
+        Ok(Some((certified_key, time_till_renewal_required)))
+    }
+
     async fn fetch_and_decrypt_certificate(
         &self,
         key: PKey<Private>,
         enclave_context: &EnclaveContext,
     ) -> Result<Option<CertifiedKey>, AcmeError> {
-        if let Some(raw_acme_certificate) =
-            RawAcmeCertificate::from_storage(self.config_client.clone()).await?
-        {
-            log::info!("[ACME] Certificate found in storage");
-            //Certificate already exists, decrypt it
-            let decrypted_certificate =
-                Self::decrypt_certificate(&self.e3_client, &raw_acme_certificate).await?;
+        let raw_acme_certificate =
+            match RawAcmeCertificate::from_storage(self.config_client.clone()).await? {
+                Some(cert) => cert,
+                None => return Ok(None),
+            };
 
-            let x509s = decrypted_certificate.to_x509s()?;
+        log::info!("[ACME] Certificate found in storage");
 
-            match RawAcmeCertificate::should_renew_cert(x509s.clone())? {
-                RenewalStrategy::AsyncRenewal => {
-                    let order_lock_maybe = Self::get_order_lock().await?;
-                    let attempts = match order_lock_maybe {
-                        Some(ref lock) => lock.number_of_attempts().unwrap_or(0),
-                        None => 0,
-                    };
+        let decrypted_certificate =
+            Self::decrypt_certificate(&self.e3_client, &raw_acme_certificate).await?;
+        let x509s = decrypted_certificate.to_x509s()?;
+        let time_till_renewal_required =
+            decrypted_certificate.time_till_renewal_required(x509s.clone())?;
 
-                    if Self::order_lock_exists_and_is_valid(&order_lock_maybe)? {
-                        log::info!("[ACME] Lock is valid, waiting for Certificate to be created by other instance or waiting for lock to expire");
-                        //Do nothing if Lock is not expired - wait for certificate to be renewed by other instance or wait for lock to expire
-                        Some(decrypted_certificate.to_certified_key(x509s, key)).transpose()
+        self.schedule_certificate_renewal(
+            time_till_renewal_required,
+            key.clone(),
+            enclave_context.clone(),
+        );
+
+        Some(decrypted_certificate.to_certified_key(x509s, key)).transpose()
+    }
+
+    fn schedule_certificate_renewal(
+        &self,
+        time_till_renewal: Duration,
+        key: PKey<Private>,
+        enclave_context: EnclaveContext,
+    ) {
+        let self_clone = self.clone();
+
+        tokio::spawn(async move {
+            tokio::time::sleep(time_till_renewal).await;
+
+            if let Ok(Some((cert, time_till_expiry))) = self_clone
+                .fetch_certificate_and_renewal_time(key.clone())
+                .await
+            {
+                if time_till_expiry.as_secs() > utils::SIXTY_DAYS_IN_SECONDS {
+                    log::info!("[ACME] Certificate has already being renewed by other instance.");
+                    if let Err(err) = Self::write_certificate_to_rwlock(cert) {
+                        log::error!(
+                            "[ACME] Error writing renewed certificate to trusted certificate store: {:?}",
+                            err)
                     } else {
-                        log::info!("[ACME] Certificate expires in the comming month. Should be renewed asynchronously");
-                        let mut self_clone = self.clone();
-                        let key_clone = key.clone();
-                        let enclave_context_clone = enclave_context.clone();
-                        tokio::spawn(async move {
-                            let _ = self_clone
-                                .create_certificate_and_persist_with_lock(
-                                    key_clone,
-                                    &enclave_context_clone,
-                                    attempts + 1,
-                                )
-                                .await;
-                        });
-                        Some(decrypted_certificate.to_certified_key(x509s, key)).transpose()
+                        return;
                     }
                 }
-                RenewalStrategy::SyncRenewal => {
-                    log::info!("[ACME] Certificate expires in the coming week. Should be renewed synchronously");
-                    Ok(None)
-                }
-                RenewalStrategy::NoRenewal => {
-                    log::info!("[ACME] Certificate expires in more than a month. No need to renew");
-                    Some(decrypted_certificate.to_certified_key(x509s, key)).transpose()
-                }
             }
-        } else {
-            log::info!("[ACME] Certificate not found in storage");
-            Ok(None)
+
+            //Retry certificate renewal if it fails
+            let retries = 3;
+            let mut delay_in_seconds = 10;
+            let mut last_error: Option<AcmeError> = None;
+            for i in 1..retries {
+                if let Err(e) = self_clone
+                    .renew_certificate_and_update_store(key.clone(), &enclave_context)
+                    .await
+                {
+                    log::error!("[ACME] Error renewing certificate: {:?}", e);
+                    last_error = Some(e);
+                } else {
+                    log::info!("[ACME] Certificate renewed successfully.");
+                    last_error = None;
+                    break;
+                }
+                delay_in_seconds *= i;
+                tokio::time::sleep(Duration::from_secs(delay_in_seconds)).await;
+            }
+
+            let days_till_renewal = if let Some(e) = last_error {
+                log::error!(
+                    "[ACME] Error renewing certificate after retries: {:?}. Try again in a day",
+                    e
+                );
+                utils::ONE_DAY_IN_SECONDS
+            } else {
+                log::info!("[ACME] Scheduling renewal for 60 days from now");
+                utils::SIXTY_DAYS_IN_SECONDS
+            };
+
+            if let Ok(time_till_renewal) = utils::seconds_with_jitter_to_time(days_till_renewal) {
+                log::info!("[ACME] Scheduling renewal in {} seconds", days_till_renewal);
+                self_clone.schedule_certificate_renewal(time_till_renewal, key, enclave_context);
+            };
+        });
+    }
+
+    async fn renew_certificate_and_update_store(
+        &self,
+        key: PKey<Private>,
+        enclave_context: &EnclaveContext,
+    ) -> Result<(), AcmeError> {
+        let order_lock_maybe = Self::get_order_lock().await?;
+        let attempts = order_lock_maybe
+            .as_ref()
+            .map_or(0, |lock| lock.number_of_attempts().unwrap_or(0));
+
+        if Self::order_lock_exists_and_is_valid(&order_lock_maybe)? {
+            log::info!("[ACME] Lock is valid, waiting for Certificate to be created by other instance or waiting for lock to expire");
+            // If the lock is valid, do nothing and wait for the certificate to be renewed by another instance or for the lock to expire.
+            return Ok(());
+        }
+
+        match self
+            .clone()
+            .create_certificate_and_persist_with_lock(key, enclave_context, attempts + 1)
+            .await
+        {
+            Ok(Some(cert)) => Self::write_certificate_to_rwlock(cert),
+            _ => {
+                log::error!(
+                    "[ACME] Error renewing certificate. Not updating trusted certificate store"
+                );
+                Err(AcmeError::General("Error renewing certificate".into()))
+            }
         }
     }
 
     async fn get_order_lock() -> Result<Option<StorageLock>, AcmeError> {
-        let order_lock_maybe = StorageLock::read_from_storage(CERTIFICATE_LOCK_NAME.into()).await?;
+        let order_lock_maybe =
+            StorageLock::read_from_storage(utils::CERTIFICATE_LOCK_NAME.into()).await?;
         match order_lock_maybe {
             Some(lock) => Ok(Some(lock)),
             None => Ok(None),
@@ -317,7 +302,7 @@ impl AcmeCertificateRetreiver {
         attempts: u32,
     ) -> Result<Option<CertifiedKey>, AcmeError> {
         let certificate_lock = StorageLock::new_with_config_client(
-            CERTIFICATE_LOCK_NAME.into(),
+            utils::CERTIFICATE_LOCK_NAME.into(),
             attempts,
             self.config_client.clone(),
         );
@@ -515,5 +500,23 @@ impl AcmeCertificateRetreiver {
         let encrypted_acme_key_pair: RawAcmeCertificate = serde_json::from_value(e3_response.data)?;
 
         Ok(encrypted_acme_key_pair)
+    }
+
+    fn write_certificate_to_rwlock(cert: CertifiedKey) -> Result<(), AcmeError> {
+        match TRUSTED_CERT_STORE.write() {
+            Ok(mut store) => {
+                *store = Some(cert);
+                Ok(())
+            }
+            Err(e) => {
+                log::error!(
+                    "[ACME] Error acquiring write lock on trusted certificate store: {:?}",
+                    e
+                );
+                Err(AcmeError::General(
+                    "Error acquiring write lock on trusted certificate store".into(),
+                ))
+            }
+        }
     }
 }

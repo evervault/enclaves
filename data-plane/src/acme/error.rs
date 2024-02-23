@@ -51,6 +51,8 @@ pub enum AcmeError {
     RustlsSignError(#[from] tokio_rustls::rustls::sign::SignError),
     #[error("Failed to access context - {0}")]
     ContextError(#[from] ContextError),
+    #[error("System Time Error - {0:?}")]
+    SystemTimeError(#[from] std::time::SystemTimeError),
     #[error("ACME Error {0:?}")]
     AcmeError(#[from] shared::acme::error::AcmeError),
     #[error("ACME Error {0:?}")]
