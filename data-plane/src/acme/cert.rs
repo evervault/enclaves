@@ -191,6 +191,11 @@ impl AcmeCertificateRetreiver {
     ) {
         let self_clone = self.clone();
 
+        log::info!(
+            "[ACME] Certificate renewal scheduled {:?} seconds from now",
+            time_till_renewal.as_secs()
+        );
+
         tokio::spawn(async move {
             tokio::time::sleep(time_till_renewal).await;
 
@@ -232,17 +237,16 @@ impl AcmeCertificateRetreiver {
 
             let days_till_renewal = if let Some(e) = last_error {
                 log::error!(
-                    "[ACME] Error renewing certificate after retries: {:?}. Try again in a day",
+                    "[ACME] Error renewing certificate after retries: {:?}. Scheduling next renewal for tomorrow.",
                     e
                 );
                 utils::ONE_DAY_IN_SECONDS
             } else {
-                log::info!("[ACME] Scheduling renewal for 60 days from now");
+                log::info!("[ACME] Scheduling next renewal for 60 days from now");
                 utils::SIXTY_DAYS_IN_SECONDS
             };
 
             if let Ok(time_till_renewal) = utils::seconds_with_jitter_to_time(days_till_renewal) {
-                log::info!("[ACME] Scheduling renewal in {} seconds", days_till_renewal);
                 self_clone.schedule_certificate_renewal(time_till_renewal, key, enclave_context);
             };
         });
