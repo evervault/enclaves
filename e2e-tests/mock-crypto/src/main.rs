@@ -5,13 +5,13 @@ use rustls::server::ServerConfig;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::convert::Infallible;
-use rust_crypto::backend::{CryptoClient, Datatype};
 use axum::response::IntoResponse;
 use axum::http::StatusCode;
 use axum::http::HeaderMap;
 
 lazy_static::lazy_static! {
-  static ref KEY_PAIR: rust_crypto::backend::ies_secp256r1_openssl::Client = create_key_pair();
+  static ref APP_UUID: String = std::env::var("EV_APP_UUID").expect("No app id given");
+  static ref API_KEY: String = std::env::var("EV_API_KEY").expect("No api key given");
 }
 
 #[tokio::main]
@@ -20,11 +20,6 @@ async fn main() {
     run_https_server(7676),
     run_http_server(7677),
   );
-}
-
-fn create_key_pair() -> rust_crypto::backend::ies_secp256r1_openssl::Client {
-  let keypair = rust_crypto::backend::ies_secp256r1_openssl::EcKey::generate_key_pair().unwrap();
-  rust_crypto::backend::ies_secp256r1_openssl::Client::new(keypair)
 }
 
 async fn run_https_server(port: u16) {
@@ -81,14 +76,14 @@ fn encrypt(value: &mut Value) {
   } else if value.is_array() {
     value.as_array_mut().unwrap().iter_mut().for_each(encrypt);
   } else {
-    let mut val = value.clone();
-    let to_encrypt = convert_value_to_string(&value);
-    let encrypted_data_result = KEY_PAIR.encrypt(
-      to_encrypt, 
-      Datatype::try_from(&mut val).unwrap(), 
-      false
-    ).unwrap();
-    *value = Value::String(encrypted_data_result);
+    let to_encrypt = serde_json::Value::String(convert_value_to_string(&value));
+    let client = reqwest::blocking::Client::new();
+    let response = client.post("https://api.evervault.com/encrypt")
+      .basic_auth(&*APP_UUID,Some(&*API_KEY))
+      .json(&to_encrypt)
+      .send()
+      .unwrap();
+    *value = Value::String(response.text().unwrap());
   }
 }
 
@@ -98,9 +93,15 @@ fn decrypt(value: &mut Value) {
   } else if value.is_array() {
     value.as_array_mut().unwrap().iter_mut().for_each(decrypt);
   } else if value.is_string() { // all encrypted values are strings
-    let to_decrypt = convert_value_to_string(&value); // convert from serde value string to std string
-    if let Ok(decrypted) = KEY_PAIR.decrypt(to_decrypt) {
-      *value = decrypted;
+    let to_decrypt = serde_json::Value::String(convert_value_to_string(&value)); // convert from serde value string to std string
+    let client = reqwest::blocking::Client::new();
+    let response = client.post("https://api.evervault.com/decrypt")
+      .basic_auth(&*APP_UUID,Some(&*API_KEY))
+      .json(&to_decrypt)
+      .send()
+      .unwrap();
+    if let Ok(decrypted) = response.text() {
+      *value = serde_json::Value::String(decrypted);
     }
   }
 }

@@ -6,13 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rust-crypto = { version = "=1.0.0-beta.8", registry="evervault-rust-libraries", features=["vendored-openssl"] }
 axum = "0.5.16"
 axum-server = { version = "0.4.2", features = ["tls-rustls"] }
 tokio = {version="1.24.2", features=["macros", "rt-multi-thread"]}
 lazy_static = "1.4.0"
-serde_json = "1.0.87"
-serde = "1.0.147"
+serde_json = "1.0.114"
+serde = { version="1.0.147", features = ["derive"] }
 rustls = "0.20.7"
 rustls-pemfile = "1.0.1"
 serde_cbor = "0.11.2"
+reqwest = { version = "0.11.24", features = ["blocking", "json"] }

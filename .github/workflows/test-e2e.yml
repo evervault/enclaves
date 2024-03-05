@@ -32,6 +32,7 @@ jobs:
       - name: Run end-to-end test script
         env:
           CI: true
+          EV_API_KEY: ${{ secrets.EV_API_KEY }}
         run: |
           sh e2e-tests/generate-sample-ca.sh
           sh e2e-tests/run-all-feature-tests.sh
@@ -59,6 +60,7 @@ jobs:
       - name: Run end-to-end test script
         env:
           CI: true
+          EV_API_KEY: ${{ secrets.EV_API_KEY }}
         run: |
           sh e2e-tests/generate-sample-ca.sh
           sh e2e-tests/run-tls-disabled-tests.sh
