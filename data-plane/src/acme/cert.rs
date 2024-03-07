@@ -331,7 +331,6 @@ impl AcmeCertificateRetreiver {
                     e,
                     provider
                 );
-                certificate_lock.delete().await?;
                 return Err(e);
             } else {
                 StatsClient::record_cert_order(provider.get_stats_key(), true);
@@ -440,10 +439,10 @@ impl AcmeCertificateRetreiver {
             let challenge_validated = challenge.validate().await?;
 
             challenge_validated
-                .wait_done(Duration::from_secs(5), 5)
+                .wait_done(Duration::from_secs(10), 7)
                 .await?;
 
-            auth.wait_done(Duration::from_secs(5), 5).await?;
+            auth.wait_done(Duration::from_secs(10), 7).await?;
         }
 
         log::info!(
