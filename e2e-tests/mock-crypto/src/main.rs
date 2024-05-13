@@ -19,7 +19,7 @@ lazy_static::lazy_static! {
 #[tokio::main]
 async fn main() {
   tokio::join!(
-    // run_https_server(7676),
+    run_https_server(7676),
     run_http_server(7677),
   );
 }
