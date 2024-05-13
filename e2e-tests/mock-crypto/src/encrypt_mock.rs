@@ -66,13 +66,13 @@ pub fn convert_value_to_string(value: &serde_json::Value) -> String {
 }
 
 fn mock_iv() -> String {
-  let mut iv = [0u8;16];
+  let mut iv = [0u8;12];
   rand::thread_rng().fill_bytes(&mut iv);
   base64::encode(iv)
 }
 
 fn mock_pub_key() -> String {
-  let mut pub_key = [0u8;44];
+  let mut pub_key = [0u8;33];
   rand::thread_rng().fill_bytes(&mut pub_key);
   base64::encode(pub_key)
 }
