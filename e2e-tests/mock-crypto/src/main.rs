@@ -19,7 +19,7 @@ lazy_static::lazy_static! {
 #[tokio::main]
 async fn main() {
   tokio::join!(
-    run_https_server(7676),
+    // run_https_server(7676),
     run_http_server(7677),
   );
 }
@@ -78,8 +78,7 @@ fn encrypt(value: &mut Value) {
   } else if value.is_array() {
     value.as_array_mut().unwrap().iter_mut().for_each(encrypt);
   } else {
-    let encrypted = encrypt_mock::encrypt(value.clone());
-    *value = Value::String(format!("{encrypted}"));
+    *value = encrypt_mock::encrypt(value.clone());
   }
 }
 
