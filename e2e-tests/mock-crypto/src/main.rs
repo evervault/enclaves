@@ -9,6 +9,8 @@ use axum::response::IntoResponse;
 use axum::http::StatusCode;
 use axum::http::HeaderMap;
 
+mod encrypt_mock;
+
 lazy_static::lazy_static! {
   static ref APP_UUID: String = std::env::var("EV_APP_UUID").expect("No app id given");
   static ref API_KEY: String = std::env::var("EV_API_KEY").expect("No api key given");
@@ -76,14 +78,8 @@ fn encrypt(value: &mut Value) {
   } else if value.is_array() {
     value.as_array_mut().unwrap().iter_mut().for_each(encrypt);
   } else {
-    let to_encrypt = serde_json::Value::String(convert_value_to_string(&value));
-    let client = reqwest::blocking::Client::new();
-    let response = client.post("https://api.evervault.com/encrypt")
-      .basic_auth(&*APP_UUID,Some(&*API_KEY))
-      .json(&to_encrypt)
-      .send()
-      .unwrap();
-    *value = Value::String(response.text().unwrap());
+    let encrypted = encrypt_mock::encrypt(value.clone());
+    *value = Value::String(format!("{encrypted}"));
   }
 }
 
@@ -93,23 +89,11 @@ fn decrypt(value: &mut Value) {
   } else if value.is_array() {
     value.as_array_mut().unwrap().iter_mut().for_each(decrypt);
   } else if value.is_string() { // all encrypted values are strings
-    let to_decrypt = serde_json::Value::String(convert_value_to_string(&value)); // convert from serde value string to std string
-    let client = reqwest::blocking::Client::new();
-    let response = client.post("https://api.evervault.com/decrypt")
-      .basic_auth(&*APP_UUID,Some(&*API_KEY))
-      .json(&to_decrypt)
-      .send()
-      .unwrap();
-    if let Ok(decrypted) = response.text() {
-      *value = serde_json::Value::String(decrypted);
+    let str_val = encrypt_mock::convert_value_to_string(&value);
+    if let Ok(decrypted) = encrypt_mock::decrypt(str_val) {
+      *value = decrypted;
     }
   }
-}
-
-fn convert_value_to_string(value: &Value) -> String {
-  value.as_str()
-    .map(|val| val.to_string())
-    .unwrap_or_else(|| serde_json::to_string(&value).unwrap())
 }
 
 async fn encryption_handler(
