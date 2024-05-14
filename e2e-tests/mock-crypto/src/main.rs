@@ -89,8 +89,13 @@ fn decrypt(value: &mut Value) {
     value.as_array_mut().unwrap().iter_mut().for_each(decrypt);
   } else if value.is_string() { // all encrypted values are strings
     let str_val = encrypt_mock::convert_value_to_string(&value);
-    if let Ok(decrypted) = encrypt_mock::decrypt(str_val) {
-      *value = decrypted;
+    match encrypt_mock::decrypt(str_val) {
+      Ok(decrypted) => {
+        *value = decrypted;
+      },
+      Err(e) => {
+        eprintln!("Failed to decrypt: {e:?}");
+      }
     }
   }
 }
