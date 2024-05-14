@@ -99,7 +99,7 @@ describe("POST data to enclave", () => {
       { headers: { "api-key": "placeholder" } }
     );
     const { response, ...echoPayload } = decryptResult.data;
-    expect(data).to.deep.equal(echoPayload);
+    expect(echoPayload).to.deep.equal(data);
   });
 
   it("returns the injected environment", async () => {

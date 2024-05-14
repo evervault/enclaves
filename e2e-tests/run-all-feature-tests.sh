@@ -36,7 +36,7 @@ export TEST_EGRESS_IP=$(dig +short jsonplaceholder.typicode.com | head -n 1)
 if [[ -z "${CI}" ]];
 then
   cd ./e2e-tests/mock-crypto
-  cargo build --release --target x86_64-unknown-linux-musl -Z registry-auth
+  cargo build --release --target x86_64-unknown-linux-musl
   cd ../..
 fi
 

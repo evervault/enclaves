@@ -5,13 +5,15 @@ use rustls::server::ServerConfig;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::convert::Infallible;
-use rust_crypto::backend::{CryptoClient, Datatype};
 use axum::response::IntoResponse;
 use axum::http::StatusCode;
 use axum::http::HeaderMap;
 
+mod encrypt_mock;
+
 lazy_static::lazy_static! {
-  static ref KEY_PAIR: rust_crypto::backend::ies_secp256r1_openssl::Client = create_key_pair();
+  static ref APP_UUID: String = std::env::var("EV_APP_UUID").expect("No app id given");
+  static ref API_KEY: String = std::env::var("EV_API_KEY").expect("No api key given");
 }
 
 #[tokio::main]
@@ -20,11 +22,6 @@ async fn main() {
     run_https_server(7676),
     run_http_server(7677),
   );
-}
-
-fn create_key_pair() -> rust_crypto::backend::ies_secp256r1_openssl::Client {
-  let keypair = rust_crypto::backend::ies_secp256r1_openssl::EcKey::generate_key_pair().unwrap();
-  rust_crypto::backend::ies_secp256r1_openssl::Client::new(keypair)
 }
 
 async fn run_https_server(port: u16) {
@@ -81,14 +78,7 @@ fn encrypt(value: &mut Value) {
   } else if value.is_array() {
     value.as_array_mut().unwrap().iter_mut().for_each(encrypt);
   } else {
-    let mut val = value.clone();
-    let to_encrypt = convert_value_to_string(&value);
-    let encrypted_data_result = KEY_PAIR.encrypt(
-      to_encrypt, 
-      Datatype::try_from(&mut val).unwrap(), 
-      false
-    ).unwrap();
-    *value = Value::String(encrypted_data_result);
+    *value = encrypt_mock::encrypt(value.clone());
   }
 }
 
@@ -98,17 +88,16 @@ fn decrypt(value: &mut Value) {
   } else if value.is_array() {
     value.as_array_mut().unwrap().iter_mut().for_each(decrypt);
   } else if value.is_string() { // all encrypted values are strings
-    let to_decrypt = convert_value_to_string(&value); // convert from serde value string to std string
-    if let Ok(decrypted) = KEY_PAIR.decrypt(to_decrypt) {
-      *value = decrypted;
+    let str_val = encrypt_mock::convert_value_to_string(&value);
+    match encrypt_mock::decrypt(str_val) {
+      Ok(decrypted) => {
+        *value = decrypted;
+      },
+      Err(e) => {
+        eprintln!("Failed to decrypt: {e:?}");
+      }
     }
   }
-}
-
-fn convert_value_to_string(value: &Value) -> String {
-  value.as_str()
-    .map(|val| val.to_string())
-    .unwrap_or_else(|| serde_json::to_string(&value).unwrap())
 }
 
 async fn encryption_handler(
