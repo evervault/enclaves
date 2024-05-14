@@ -40,7 +40,7 @@ impl std::convert::TryFrom<String> for EncryptedValue {
     let mut tokens = val.split(":").collect::<Vec<_>>().into_iter();
     let decoded_val = base64::decode(tokens.nth_back(1).unwrap()).map_err(|_| MockCryptoError::InvalidCipher)?;
     let decoded_str = std::str::from_utf8(&decoded_val).map_err(|_| MockCryptoError::InvalidCipher)?;
-    let parsed_val = serde_json::from_str(decoded_str)?;
+    let parsed_val: serde_json::Value = serde_json::from_str(decoded_str).unwrap_or_else(|_| serde_json::Value::String(decoded_str.to_string()));
     Ok(Self(parsed_val))
   }
 }
