@@ -16,7 +16,10 @@ impl Display for EncryptedValue {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let val_str = convert_value_to_string(&self.0);
     let encoded_val = base64::encode(&val_str);
-    write!(f, "ev:{}:{}:{}:{}:$", get_string_repr_for_serde_value(&self.0), mock_iv(), mock_pub_key(), encoded_val)
+    match get_string_repr_for_serde_value(&self.0) {
+      Some(val) => write!(f, "ev:{}:{}:{}:{}:$", val, mock_iv(), mock_pub_key(), encoded_val),
+      None => write!(f, "ev:{}:{}:{}:$", mock_iv(), mock_pub_key(), encoded_val),
+    }
   }
 }
 
@@ -33,21 +36,25 @@ impl std::convert::TryFrom<String> for EncryptedValue {
     if !val.starts_with("ev:") || !val.ends_with(":$") {
       return Err(MockCryptoError::InvalidCipher);
     }
-    let decoded_val = base64::decode(val.split(":").nth(4).unwrap()).map_err(|_| MockCryptoError::InvalidCipher)?;
+    // Use second last token as value
+    let mut tokens = val.split(":").collect::<Vec<_>>().into_iter();
+    let decoded_val = base64::decode(tokens.nth_back(1).unwrap()).map_err(|_| MockCryptoError::InvalidCipher)?;
     let decoded_str = std::str::from_utf8(&decoded_val).map_err(|_| MockCryptoError::InvalidCipher)?;
     let parsed_val = serde_json::from_str(decoded_str)?;
     Ok(Self(parsed_val))
   }
 }
 
-fn get_string_repr_for_serde_value(val: &serde_json::Value) -> String {
-  match val {
-    serde_json::Value::String(_) => "string".to_string(),
+fn get_string_repr_for_serde_value(val: &serde_json::Value) -> Option<String> {
+  let repr = match val {
+    serde_json::Value::String(_) => {
+      return None;
+    },
     serde_json::Value::Number(_) => "number".to_string(),
     serde_json::Value::Bool(_) => "boolean".to_string(),
-    serde_json::Value::Null => "null".to_string(),
     _ => unimplemented!("Ciphertexts can only represent primitives")
-  }
+  };
+  Some(repr)
 }
 
 pub fn encrypt(value: serde_json::Value) -> serde_json::Value {
