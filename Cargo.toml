@@ -2,3 +2,6 @@
 resolver = "2"
 members = ["control-plane","data-plane","shared","crates/*"]
 exclude = ["./e2e-tests/mock-crypto"]
+
+[workspace.dependencies]
+openssl = { version = "0.10.60", features = ["vendored"] }
