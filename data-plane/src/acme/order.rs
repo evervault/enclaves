@@ -200,7 +200,7 @@ impl<T: AcmeClientInterface> Order<T> {
         let mut order: Order<_> = serde_json::from_str(body_str)?;
 
         order.account = Some(account.clone());
-        order.url = self.url.clone();
+        order.url.clone_from(&self.url);
         Ok(order)
     }
 
@@ -246,7 +246,7 @@ impl<T: AcmeClientInterface> Order<T> {
         let mut order: Order<_> = serde_json::from_str(body_str)?;
 
         order.account = Some(account.clone());
-        order.url = self.url.clone();
+        order.url.clone_from(&self.url);
         Ok(order)
     }
 
