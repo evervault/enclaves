@@ -1,3 +1,4 @@
+use crate::configuration::get_external_metrics_enabled;
 use crate::error::Result;
 use shared::server::CID::Parent;
 use shared::server::{get_vsock_server, Listener};
@@ -6,18 +7,23 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::UdpSocket;
 
+const CLOUDWATCH_STATSD_PORT: u16 = 8125;
+const EXTERNAL_STATSD_PORT: u16 = 8126;
 pub struct StatsProxy;
 
 impl StatsProxy {
     pub async fn listen() -> Result<()> {
         log::info!("Started control plane stats proxy");
+        let external_metrics_enabled = get_external_metrics_enabled();
         let mut server = get_vsock_server(STATS_VSOCK_PORT, Parent).await?;
 
         loop {
             match server.accept().await {
                 Ok(stream) => {
                     tokio::spawn(async move {
-                        if let Err(e) = Self::proxy_connection(stream).await {
+                        if let Err(e) =
+                            Self::proxy_connection(stream, external_metrics_enabled).await
+                        {
                             log::error!("Error proxying stats connection: {e}");
                         }
                     });
@@ -36,7 +42,10 @@ impl StatsProxy {
         Ok(socket)
     }
 
-    async fn proxy_connection<T: AsyncRead + AsyncWrite + Unpin>(mut stream: T) -> Result<()> {
+    async fn proxy_connection<T: AsyncRead + AsyncWrite + Unpin>(
+        mut stream: T,
+        external_metrics_enabled: bool,
+    ) -> Result<()> {
         #[cfg(not(feature = "enclave"))]
         let target_ip = std::net::IpAddr::V4(Ipv4Addr::new(172, 20, 0, 6));
         #[cfg(feature = "enclave")]
@@ -44,16 +53,32 @@ impl StatsProxy {
         let mut request_buffer = [0; 512];
         let packet_size = stream.read(&mut request_buffer).await?;
 
-        let (cloudwatch, external_metric) = tokio::join!(
-            Self::send_metrics(target_ip, 8125, &request_buffer[..packet_size]),
-            Self::send_metrics(target_ip, 8124, &request_buffer[..packet_size])
-        );
-
-        if let Err(e) = cloudwatch {
-            log::error!("Error sending metrics to remote server: {e}");
-        }
-        if let Err(e) = external_metric {
-            log::error!("Error sending metrics to external server: {e}");
+        if external_metrics_enabled {
+            let (cloudwatch, external_metric) = tokio::join!(
+                Self::send_metrics(
+                    target_ip,
+                    CLOUDWATCH_STATSD_PORT,
+                    &request_buffer[..packet_size]
+                ),
+                Self::send_metrics(
+                    target_ip,
+                    EXTERNAL_STATSD_PORT,
+                    &request_buffer[..packet_size]
+                )
+            );
+            if let Err(e) = cloudwatch {
+                log::error!("Error sending metrics to remote server: {e}");
+            }
+            if let Err(e) = external_metric {
+                log::error!("Error sending metrics to external server: {e}");
+            }
+        } else {
+            Self::send_metrics(
+                target_ip,
+                CLOUDWATCH_STATSD_PORT,
+                &request_buffer[..packet_size],
+            )
+            .await?;
         }
 
         stream.flush().await?;
