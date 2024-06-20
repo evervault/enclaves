@@ -29,9 +29,9 @@ impl StatsProxy {
         Ok(())
     }
 
-    async fn remote_socket(dns_server_ip: IpAddr) -> Result<UdpSocket> {
+    async fn remote_socket(dns_server_ip: IpAddr, port: u16) -> Result<UdpSocket> {
         let socket = UdpSocket::bind("0.0.0.0:0").await?;
-        let socket_address = SocketAddr::new(dns_server_ip, 8125);
+        let socket_address = SocketAddr::new(dns_server_ip, port);
         socket.connect(&socket_address).await?;
         Ok(socket)
     }
@@ -44,9 +44,25 @@ impl StatsProxy {
         let mut request_buffer = [0; 512];
         let packet_size = stream.read(&mut request_buffer).await?;
 
-        let socket = Self::remote_socket(target_ip).await?;
-        socket.send(&request_buffer[..packet_size]).await?;
+        let (cloudwatch, external_metric) = tokio::join!(
+            Self::send_metrics(target_ip, 8125, &request_buffer[..packet_size]),
+            Self::send_metrics(target_ip, 8124, &request_buffer[..packet_size])
+        );
+
+        if let Err(e) = cloudwatch {
+            log::error!("Error sending metrics to remote server: {e}");
+        }
+        if let Err(e) = external_metric {
+            log::error!("Error sending metrics to external server: {e}");
+        }
+
         stream.flush().await?;
+        Ok(())
+    }
+
+    async fn send_metrics(target_ip: IpAddr, port: u16, stats_buffer: &[u8]) -> Result<()> {
+        let socket = Self::remote_socket(target_ip, port).await?;
+        socket.send(stats_buffer).await?;
         Ok(())
     }
 }
