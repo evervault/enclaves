@@ -202,7 +202,7 @@ impl<T: AcmeClientInterface> Authorization<T> {
         let body_str = from_utf8(&resp_bytes)?;
         let mut authorization: Authorization<T> = serde_json::from_str(body_str)?;
 
-        authorization.url = self.url.clone();
+        authorization.url.clone_from(&self.url);
         authorization.account = Some(account.clone());
 
         Ok(authorization)

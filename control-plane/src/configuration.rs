@@ -181,3 +181,10 @@ pub fn get_trusted_cert_base_domains() -> Vec<String> {
 
     enclave_base_domains
 }
+
+pub fn get_external_metrics_enabled() -> bool {
+    match std::env::var("EXTERNAL_METRICS_ENABLED") {
+        Ok(val) => val.to_lowercase() == "true",
+        Err(_) => false,
+    }
+}
