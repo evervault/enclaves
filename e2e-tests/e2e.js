@@ -199,7 +199,7 @@ describe("Enclave is runnning", () => {
         const keys = Object.keys(stats);
 
         expect(keys).to.include(
-          "decrypt.count;cage_uuid=enclave_123;app_uuid=app_12345678"
+          "decrypt.count;enclave_uuid=enclave_123;app_uuid=app_12345678"
         );
       } finally {
         prodClient.destroy();
