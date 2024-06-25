@@ -31,7 +31,7 @@ macro_rules! publish_count {
         statsd_count!(
           $label,
           $val,
-          "enlave_uuid" => &$context.uuid,
+          "enclave_uuid" => &$context.uuid,
           "app_uuid" => &$context.app_uuid
         );
     };
