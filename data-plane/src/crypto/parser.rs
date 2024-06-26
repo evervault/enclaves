@@ -209,6 +209,8 @@ fn version(input: &[u8]) -> IResult<&[u8], CiphertextVersion> {
             tag(b"Tk9D"),
             tag(b"TENZ"),
             tag(b"QlJV"),
+            tag(b"QkTC"),
+            tag(b"S0lS"),
         )),
         CiphertextVersion::try_from,
     )(input)
@@ -233,6 +235,8 @@ enum CiphertextVersion {
     Tk9d,
     Tenz,
     Qljv,
+    QkTC,
+    S0lS,
 }
 
 impl std::convert::TryFrom<&[u8]> for CiphertextVersion {
@@ -245,6 +249,8 @@ impl std::convert::TryFrom<&[u8]> for CiphertextVersion {
             b"Tk9D" => CiphertextVersion::Tk9d,
             b"TENZ" => CiphertextVersion::Tenz,
             b"QlJV" => CiphertextVersion::Qljv,
+            b"QkTC" => CiphertextVersion::QkTC,
+            b"S0lS" => CiphertextVersion::S0lS,
             _ => return Err(()),
         };
         Ok(version)
@@ -262,6 +268,8 @@ impl std::fmt::Display for CiphertextVersion {
                 Self::Tk9d => "Tk9D",
                 Self::Tenz => "TENZ",
                 Self::Qljv => "QlJV",
+                Self::QkTC => "QkTC",
+                Self::S0lS => "S0lS",
             }
         )
     }
@@ -406,6 +414,16 @@ mod test {
         build_ciphertext_test!(qljv, Datatype::Boolean);
         build_ciphertext_test!(qljv, Datatype::Number);
         build_ciphertext_test!(qljv, Datatype::Number, true);
+        let qktc = Some(CiphertextVersion::QkTC);
+        build_ciphertext_test!(qktc);
+        build_ciphertext_test!(qktc, Datatype::Boolean);
+        build_ciphertext_test!(qktc, Datatype::Number);
+        build_ciphertext_test!(qktc, Datatype::Number, true);
+        let s0ls = Some(CiphertextVersion::S0lS);
+        build_ciphertext_test!(s0ls);
+        build_ciphertext_test!(s0ls, Datatype::Boolean);
+        build_ciphertext_test!(s0ls, Datatype::Number);
+        build_ciphertext_test!(s0ls, Datatype::Number, true);
     }
 
     #[test]
