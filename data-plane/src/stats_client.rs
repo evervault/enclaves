@@ -27,13 +27,13 @@ impl StatsClient {
 
     pub fn record_decrypt() {
         if let Ok(context) = EnclaveContext::get() {
-            publish_count!("decrypt.count", 1, context);
+            publish_count!("evervault.enclaves.decrypt.count", 1, context);
         }
     }
 
     pub fn record_encrypt() {
         if let Ok(context) = EnclaveContext::get() {
-            publish_count!("encrypt.count", 1, context);
+            publish_count!("evervault.enclaves.encrypt.count", 1, context);
         }
     }
 
@@ -57,10 +57,18 @@ impl StatsClient {
         let cpu_num = sys_info::cpu_num()?;
 
         if let Ok(context) = EnclaveContext::get() {
-            publish_gauge!("memory.total", mem_info.total as f64, context);
-            publish_gauge!("memory.avail", mem_info.avail as f64, context);
-            publish_gauge!("cpu.cores", cpu_num as f64, context);
-            publish_gauge!("cpu.one", cpu.one, context);
+            publish_gauge!(
+                "evervault.enclaves.memory.total",
+                mem_info.total as f64,
+                context
+            );
+            publish_gauge!(
+                "evervault.enclaves.memory.avail",
+                mem_info.avail as f64,
+                context
+            );
+            publish_gauge!("evervault.enclaves.cpu.cores", cpu_num as f64, context);
+            publish_gauge!("evervault.enclaves.cpu.one", cpu.one, context);
         };
         Ok(())
     }
