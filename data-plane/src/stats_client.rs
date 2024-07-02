@@ -27,13 +27,13 @@ impl StatsClient {
 
     pub fn record_decrypt() {
         if let Ok(context) = EnclaveContext::get() {
-            publish_count!("decrypt.count", 1, context);
+            publish_count!("evervault.enclaves.decrypt.count", 1, context);
         }
     }
 
     pub fn record_encrypt() {
         if let Ok(context) = EnclaveContext::get() {
-            publish_count!("encrypt.count", 1, context);
+            publish_count!("evervault.enclaves.encrypt.count", 1, context);
         }
     }
 
