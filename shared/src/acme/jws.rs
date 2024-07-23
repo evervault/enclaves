@@ -291,7 +291,7 @@ mod tests {
         let s = BigNum::from_slice(&signature_bytes[32..]).unwrap();
         let ecdsa_sig = EcdsaSig::from_private_components(r, s).unwrap();
 
-        let mut verifier = openssl::sign::Verifier::new(MessageDigest::sha256(), &ec).unwrap();
+        let verifier = openssl::sign::Verifier::new(MessageDigest::sha256(), &ec).unwrap();
 
         let valid = verifier.verify(&ecdsa_sig.to_der().unwrap()).unwrap();
         assert!(valid == false);

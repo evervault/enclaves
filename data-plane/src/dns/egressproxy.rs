@@ -59,7 +59,7 @@ impl EgressProxy {
 
         let fd = external_stream.as_raw_fd();
         let (ip, port) = Self::get_destination(fd)?;
-        check_ip_allow_list(ip.to_string(), allowed_domains.clone())?;
+        check_ip_allow_list(ip.to_string(), &allowed_domains)?;
 
         let external_request = ExternalRequest {
             ip,

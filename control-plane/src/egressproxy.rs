@@ -57,7 +57,7 @@ impl EgressProxy {
 
     async fn handle_connection<T: AsyncReadExt + AsyncWriteExt + Unpin>(
         mut external_stream: T,
-        &egress_destinations: EgressDestinations,
+        egress_destinations: &EgressDestinations,
     ) -> Result<(u64, u64)> {
         log::debug!("Received request to egress proxy");
         let mut request_buffer = [0; 4096];

@@ -110,7 +110,7 @@ fn cache_ip(ip: String, answer: &dns_parser::ResourceRecord<'_>) -> Result<(), E
 
 pub fn check_ip_allow_list(
     ip: String,
-    allowed_destinations: EgressDestinations,
+    allowed_destinations: &EgressDestinations,
 ) -> Result<(), EgressError> {
     if allowed_destinations.allow_all
         || allowed_destinations.ips.contains(&ip)
