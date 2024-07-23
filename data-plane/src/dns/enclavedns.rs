@@ -128,7 +128,7 @@ impl EnclaveDnsDriver {
         allowed_destinations: EgressDestinations,
     ) -> Result<Bytes, DNSError> {
         // Check domain is allowed before proxying lookup
-        check_dns_allowed_for_domain(&dns_packet.clone(), allowed_destinations)?;
+        check_dns_allowed_for_domain(&dns_packet.clone(), &allowed_destinations)?;
         // Attempt DNS lookup wth a timeout, flatten timeout errors into a DNS Error
         let dns_response =
             timeout(request_upper_bound, Self::forward_dns_lookup(dns_packet)).await??;
