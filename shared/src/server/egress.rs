@@ -57,7 +57,7 @@ pub fn get_egress_allow_list(domain_str: String) -> EgressDestinations {
 
 pub fn check_domain_allow_list(
     domain: String,
-    allowed_destinations: EgressDestinations,
+    allowed_destinations: &EgressDestinations,
 ) -> Result<(), EgressError> {
     let valid_wildcard = allowed_destinations
         .wildcard
@@ -75,13 +75,13 @@ pub fn check_domain_allow_list(
 
 pub fn check_dns_allowed_for_domain(
     packet: &[u8],
-    destinations: EgressDestinations,
+    destinations: &EgressDestinations,
 ) -> Result<(), EgressError> {
     let packet = dns_parser::Packet::parse(packet)?;
     packet
         .questions
         .iter()
-        .try_for_each(|q| check_domain_allow_list(q.qname.to_string(), destinations.clone()))
+        .try_for_each(|q| check_domain_allow_list(q.qname.to_string(), destinations))
 }
 
 pub fn cache_ip_for_allowlist(packet: &[u8]) -> Result<(), EgressError> {

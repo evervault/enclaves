@@ -36,6 +36,8 @@ pub enum ServerError {
     StorageClientError(#[from] StorageClientError),
     #[error("Acme Error - {0}")]
     AcmeError(#[from] shared::acme::error::AcmeError),
+    #[error("Invalid DNS Config provided - at least 2 valid DNS Servers must be provided")]
+    InvalidDnsConfig
 }
 
 pub type Result<T> = std::result::Result<T, ServerError>;
