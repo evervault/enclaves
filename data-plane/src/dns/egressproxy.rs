@@ -59,7 +59,7 @@ impl EgressProxy {
 
         let fd = external_stream.as_raw_fd();
         let (ip, port) = Self::get_destination(fd)?;
-        check_ip_allow_list(ip.to_string(), allowed_domains.clone())?;
+        check_ip_allow_list(ip.to_string(), &allowed_domains)?;
 
         let external_request = ExternalRequest {
             ip,
@@ -169,7 +169,7 @@ mod tests {
             ips: vec![],
         };
         assert_eq!(
-            check_domain_allow_list("app.evervault.com".to_string(), egress_domains).unwrap(),
+            check_domain_allow_list("app.evervault.com".to_string(), &egress_domains).unwrap(),
             ()
         );
     }
@@ -182,7 +182,7 @@ mod tests {
             ips: vec![],
         };
         assert_eq!(
-            check_domain_allow_list("app.evervault.com".to_string(), egress_domains).unwrap(),
+            check_domain_allow_list("app.evervault.com".to_string(), &egress_domains).unwrap(),
             ()
         );
     }
@@ -195,7 +195,7 @@ mod tests {
             ips: vec![],
         };
         assert_eq!(
-            check_domain_allow_list("app.evervault.com".to_string(), egress_domains).unwrap(),
+            check_domain_allow_list("app.evervault.com".to_string(), &egress_domains).unwrap(),
             ()
         );
     }
@@ -207,7 +207,7 @@ mod tests {
             allow_all: false,
             ips: vec![],
         };
-        let result = check_domain_allow_list("google.com".to_string(), egress_domains);
+        let result = check_domain_allow_list("google.com".to_string(), &egress_domains);
         assert!(matches!(result, Err(EgressDomainNotAllowed(_))));
     }
 
@@ -219,7 +219,7 @@ mod tests {
             allow_all: false,
             ips: vec!["2.2.2.2".to_string()],
         };
-        let result = check_ip_allow_list("1.1.1.1".to_string(), egress_domains);
+        let result = check_ip_allow_list("1.1.1.1".to_string(), &egress_domains);
         assert!(matches!(result, Err(EgressIpNotAllowed(_))));
     }
 }

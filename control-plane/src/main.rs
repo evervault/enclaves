@@ -114,9 +114,22 @@ async fn main() -> Result<()> {
     {
         listen_for_shutdown_signal();
         let mut health_check_server = health::HealthCheckServer::new().await?;
-        let parsed_ip = control_plane::dnsproxy::read_dns_server_ip_from_env_var()
-            .unwrap_or(control_plane::dnsproxy::CLOUDFLARE_DNS_SERVER);
-        let dns_proxy_server = control_plane::dnsproxy::DnsProxy::new(parsed_ip);
+        let parsed_ip = control_plane::dnsproxy::read_dns_server_ips_from_env_var().unwrap_or(
+            [
+                control_plane::dnsproxy::CLOUDFLARE_DNS_SERVERS.as_slice(),
+                control_plane::dnsproxy::GOOGLE_DNS_SERVERS.as_slice(),
+            ]
+            .concat(),
+        );
+
+        let dns_proxy_server =
+            match control_plane::dnsproxy::DnsProxy::try_from((parsed_ip, rand::thread_rng())) {
+                Ok(proxy_server) => proxy_server,
+                Err(e) => {
+                    log::error!("Failed to create DNS Proxy server - {e}");
+                    return Err(e);
+                }
+            };
         let (
             tcp_result,
             dns_result,
