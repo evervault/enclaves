@@ -29,7 +29,7 @@ async fn run_ecs_health_check_service(
 ) -> std::result::Result<Response<Body>, ServerError> {
     if is_draining {
         let draining_log =
-            HealthCheckLog::new(HealthCheckStatus::Err, Some("Cage is draining".into()));
+            HealthCheckLog::new(HealthCheckStatus::Err, Some("Enclave is draining".into()));
 
         let combined_log = CombinedHealthCheckLog {
             control_plane: draining_log.clone(),

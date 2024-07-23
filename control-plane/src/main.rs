@@ -240,13 +240,14 @@ fn listen_for_shutdown_signal() {
 
         match rx.recv().await {
             Some(_) => {
+                log::info!("SIGTERM received. Setting Enclave draining flag to true and waiting 55 seconds to terminate Enclave.");
                 if let Err(err) = health::IS_DRAINING.set(true) {
                     log::error!(
                         "Error setting IS_DRAINING to true: {err:?}, continuing to shutdown"
                     );
                 }
 
-                // Wait for 55 seconds before terminating enclave - ECS waits 60 seconds to kill the container
+                // Wait for 55 seconds before terminating enclave - ECS waits 55 seconds to kill the container
                 sleep(Duration::from_millis(55000)).await;
 
                 let output = Command::new("sh")
