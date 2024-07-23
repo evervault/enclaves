@@ -36,11 +36,11 @@ impl<R: RngCore + Clone> std::convert::TryFrom<(Vec<IpAddr>, R)> for DnsProxy<R>
 
     fn try_from((dns_server_ips, rng): (Vec<IpAddr>, R)) -> Result<Self> {
         if dns_server_ips.is_empty() {
-          return Err(ServerError::InvalidDnsConfig);
+            return Err(ServerError::InvalidDnsConfig);
         }
         Ok(Self {
-          dns_server_ips,
-          rng
+            dns_server_ips,
+            rng,
         })
     }
 }
@@ -65,20 +65,32 @@ impl<R: RngCore + Clone> DnsProxy<R> {
                     );
                     tokio::spawn(async move {
                         let mut dns_service_iter = selected_dns_services.iter();
-                        let primary_dns_service = dns_service_iter.next().expect("Dns proxy must contain list of at least one service");
-                        let dns_lookup = Self::proxy_dns_connection(primary_dns_service, &mut stream, &domains).await;
+                        let primary_dns_service = dns_service_iter
+                            .next()
+                            .expect("Dns proxy must contain list of at least one service");
+                        let dns_lookup =
+                            Self::proxy_dns_connection(primary_dns_service, &mut stream, &domains)
+                                .await;
                         match dns_lookup {
-                          Ok(_) => {},
-                          Err(ServerError::EgressError(e)) => log::error!("DNS Connection rejected with egress error: {e}"),
-                          Err(e) => {
-                            log::error!("Error proxying dns connection to primary ({primary_dns_service}): {e}");
-                            if let Some(secondary_service) = dns_service_iter.next() {
-                              log::info!("Retrying dns lookup with secondary provider: {secondary_service}");
-                              if let Err(retry_err) = Self::proxy_dns_connection(secondary_service, &mut stream, &domains).await {
-                                log::error!("Error proxying dns connection to secondary ({secondary_service}): {retry_err}");
-                              }
+                            Ok(_) => {}
+                            Err(ServerError::EgressError(e)) => {
+                                log::error!("DNS Connection rejected with egress error: {e}")
                             }
-                          }
+                            Err(e) => {
+                                log::error!("Error proxying dns connection to primary ({primary_dns_service}): {e}");
+                                if let Some(secondary_service) = dns_service_iter.next() {
+                                    log::info!("Retrying dns lookup with secondary provider: {secondary_service}");
+                                    if let Err(retry_err) = Self::proxy_dns_connection(
+                                        secondary_service,
+                                        &mut stream,
+                                        &domains,
+                                    )
+                                    .await
+                                    {
+                                        log::error!("Error proxying dns connection to secondary ({secondary_service}): {retry_err}");
+                                    }
+                                }
+                            }
                         }
                     });
                 }
@@ -107,7 +119,7 @@ impl<R: RngCore + Clone> DnsProxy<R> {
 
         let socket = Self::remote_dns_socket(target_ip).await?;
         let mut response_buffer = [0; 512];
-        check_dns_allowed_for_domain(&request_buffer[..packet_size], &allowed_domains)?;
+        check_dns_allowed_for_domain(&request_buffer[..packet_size], allowed_domains)?;
         socket.send(&request_buffer[..packet_size]).await?;
         let (amt, _) = socket.recv_from(&mut response_buffer).await?;
         let response_bytes = &response_buffer[..amt];
