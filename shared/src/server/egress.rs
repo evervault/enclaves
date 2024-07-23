@@ -224,7 +224,7 @@ mod tests {
             allow_all: false,
             ips: vec![],
         };
-        let result = check_domain_allow_list("invalid.domain.com".to_string(), destinations);
+        let result = check_domain_allow_list("invalid.domain.com".to_string(), &destinations);
         assert!(matches!(result, Err(EgressDomainNotAllowed(_))));
     }
 
@@ -235,7 +235,7 @@ mod tests {
             allow_all: false,
             ips: vec!["2.2.2.2".to_string()],
         };
-        let result = check_ip_allow_list("1.1.1.1".to_string(), destinations);
+        let result = check_ip_allow_list("1.1.1.1".to_string(), &destinations);
         assert!(matches!(result, Err(EgressIpNotAllowed(_))));
     }
 
@@ -246,7 +246,7 @@ mod tests {
             allow_all: false,
             ips: vec!["1.1.1.1".to_string()],
         };
-        let result = check_ip_allow_list("1.1.1.1".to_string(), destinations);
+        let result = check_ip_allow_list("1.1.1.1".to_string(), &destinations);
         assert!(result.is_ok());
     }
 
@@ -257,7 +257,7 @@ mod tests {
             allow_all: true,
             ips: vec![],
         };
-        let result = check_ip_allow_list("1.1.1.1".to_string(), destinations);
+        let result = check_ip_allow_list("1.1.1.1".to_string(), &destinations);
         assert!(result.is_ok());
     }
 
@@ -268,7 +268,7 @@ mod tests {
             allow_all: true,
             ips: vec!["1.1.1.1".to_string()],
         };
-        let result = check_domain_allow_list("a.domain.com".to_string(), destinations);
+        let result = check_domain_allow_list("a.domain.com".to_string(), &destinations);
         assert!(result.is_ok());
     }
 }
