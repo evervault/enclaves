@@ -30,7 +30,7 @@ impl EnclaveDnsProxy {
 
         let dns_driver_socket = shared_socket.clone();
 
-        let dns_request_upper_bound = std::time::Duration::from_secs(3);
+        let dns_request_upper_bound = std::time::Duration::from_secs(10);
         let dns_driver = EnclaveDnsDriver::new(
             dns_driver_socket,
             dns_lookup_receiver,
