@@ -54,7 +54,7 @@ where
         });
     }
 
-    log::info!("TLS Server Created - Listening for new connections.");
+    log::info!("TLS Server Created - Listening for new connections. ::::::::");
     let enclave_context = match EnclaveContext::get() {
         Ok(context) => Arc::new(context),
         Err(e) => {
