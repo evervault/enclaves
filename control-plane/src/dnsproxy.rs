@@ -1,5 +1,4 @@
 use crate::error::{Result, ServerError};
-use rand::{seq::IteratorRandom, RngCore};
 use shared::server::egress::check_dns_allowed_for_domain;
 use shared::server::egress::{cache_ip_for_allowlist, EgressDestinations};
 use shared::server::CID::Parent;
@@ -26,27 +25,30 @@ pub fn read_dns_server_ips_from_env_var() -> Option<Vec<IpAddr>> {
     })
 }
 
-pub struct DnsProxy<R: RngCore + Clone> {
+pub struct DnsProxy {
     dns_server_ips: Vec<IpAddr>,
-    rng: R,
 }
 
-impl<R: RngCore + Clone> std::convert::TryFrom<(Vec<IpAddr>, R)> for DnsProxy<R> {
-    type Error = ServerError;
-
-    fn try_from((dns_server_ips, rng): (Vec<IpAddr>, R)) -> Result<Self> {
-        if dns_server_ips.is_empty() {
-            return Err(ServerError::InvalidDnsConfig);
+impl std::default::Default for DnsProxy {
+    fn default() -> Self {
+        Self {
+            dns_server_ips: [
+                CLOUDFLARE_DNS_SERVERS.as_slice(),
+                GOOGLE_DNS_SERVERS.as_slice(),
+            ]
+            .concat(),
         }
-        Ok(Self {
-            dns_server_ips,
-            rng,
-        })
     }
 }
 
-impl<R: RngCore + Clone> DnsProxy<R> {
-    pub async fn listen(mut self) -> Result<()> {
+impl DnsProxy {
+    pub fn new(ips: Vec<IpAddr>) -> Self {
+        Self {
+            dns_server_ips: ips,
+        }
+    }
+
+    pub async fn listen(self) -> Result<()> {
         let mut server = get_vsock_server(DNS_PROXY_VSOCK_PORT, Parent).await?;
 
         let allowed_domains = shared::server::egress::get_egress_allow_list_from_env();
@@ -54,42 +56,28 @@ impl<R: RngCore + Clone> DnsProxy<R> {
             let domains = allowed_domains.clone();
             match server.accept().await {
                 Ok(mut stream) => {
-                    let selected_dns_services = self
-                        .dns_server_ips
-                        .clone()
-                        .into_iter()
-                        .choose_multiple(&mut self.rng, 2);
-                    log::debug!(
-                        "Selected DNS Services for connection: {:?}",
-                        selected_dns_services
-                    );
+                    let dns_services = self.dns_server_ips.clone();
                     tokio::spawn(async move {
-                        let mut dns_service_iter = selected_dns_services.iter();
-                        let primary_dns_service = dns_service_iter
-                            .next()
-                            .expect("Dns proxy must contain list of at least one service");
-                        let dns_lookup =
-                            Self::proxy_dns_connection(primary_dns_service, &mut stream, &domains)
-                                .await;
-                        match dns_lookup {
-                            Ok(_) => {}
-                            Err(ServerError::EgressError(e)) => {
-                                log::error!("DNS Connection rejected with egress error: {e}")
-                            }
-                            Err(e) => {
-                                log::error!("Error proxying dns connection to primary ({primary_dns_service}): {e}");
-                                if let Some(secondary_service) = dns_service_iter.next() {
-                                    log::info!("Retrying dns lookup with secondary provider: {secondary_service}");
-                                    if let Err(retry_err) = Self::proxy_dns_connection(
-                                        secondary_service,
-                                        &mut stream,
-                                        &domains,
-                                    )
-                                    .await
-                                    {
-                                        log::error!("Error proxying dns connection to secondary ({secondary_service}): {retry_err}");
-                                    }
+                        for dns_service in dns_services.iter() {
+                            let dns_req_timing = std::time::Instant::now();
+                            let dns_lookup =
+                                Self::proxy_dns_connection(dns_service, &mut stream, &domains)
+                                    .await;
+                            let elapsed = std::time::Instant::now()
+                                .duration_since(dns_req_timing)
+                                .as_millis();
+                            match dns_lookup {
+                                Ok(_) => {
+                                  log::info!("DNS Resolved successfully after: {elapsed}ms");
+                                  return;
+                                },
+                                Err(ServerError::EgressError(e)) => {
+                                    log::error!("DNS Connection to {dns_service} rejected with egress error: {e}");
+                                    return;
                                 }
+                                Err(e) => log::error!(
+                                    "Error proxying dns connection to {dns_service}: {e}. Elapsed: {elapsed}ms"
+                                ),
                             }
                         }
                     });
@@ -113,7 +101,7 @@ impl<R: RngCore + Clone> DnsProxy<R> {
         stream: &mut T,
         allowed_domains: &EgressDestinations,
     ) -> Result<()> {
-        log::info!("Proxying request to remote");
+        log::info!("Proxying request to remote: {target_ip}");
         let mut request_buffer = [0; 512];
         let packet_size = stream.read(&mut request_buffer).await?;
 

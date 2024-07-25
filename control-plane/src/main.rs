@@ -122,14 +122,7 @@ async fn main() -> Result<()> {
             .concat(),
         );
 
-        let dns_proxy_server =
-            match control_plane::dnsproxy::DnsProxy::try_from((parsed_ip, rand::thread_rng())) {
-                Ok(proxy_server) => proxy_server,
-                Err(e) => {
-                    log::error!("Failed to create DNS Proxy server - {e}");
-                    return Err(e);
-                }
-            };
+        let dns_proxy_server = control_plane::dnsproxy::DnsProxy::new(parsed_ip);
         let (
             tcp_result,
             dns_result,
