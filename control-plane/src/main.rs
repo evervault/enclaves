@@ -114,13 +114,8 @@ async fn main() -> Result<()> {
     {
         listen_for_shutdown_signal();
         let mut health_check_server = health::HealthCheckServer::new().await?;
-        let parsed_ip = control_plane::dnsproxy::read_dns_server_ips_from_env_var().unwrap_or(
-            [
-                control_plane::dnsproxy::CLOUDFLARE_DNS_SERVERS.as_slice(),
-                control_plane::dnsproxy::GOOGLE_DNS_SERVERS.as_slice(),
-            ]
-            .concat(),
-        );
+        let parsed_ip = control_plane::dnsproxy::read_dns_server_ips_from_env_var()
+            .unwrap_or_else(|| control_plane::dnsproxy::DNS_SERVERS.clone());
 
         let dns_proxy_server = control_plane::dnsproxy::DnsProxy::new(parsed_ip);
         let (

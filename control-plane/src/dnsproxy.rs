@@ -11,9 +11,14 @@ use tokio::net::UdpSocket;
 const DNS_SERVER_OVERRIDE_KEY: &str = "EV_CONTROL_PLANE_DNS_SERVER";
 
 lazy_static::lazy_static! {
-  pub static ref CLOUDFLARE_DNS_SERVERS: Vec<IpAddr> = vec![IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)), IpAddr::V4(Ipv4Addr::new(1, 0, 0, 1))];
-  pub static ref GOOGLE_DNS_SERVERS: Vec<IpAddr> = vec![IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), IpAddr::V4(Ipv4Addr::new(8, 8, 4, 4))];
-  pub static ref OPEN_DNS_SERVERS: Vec<IpAddr> = vec![IpAddr::V4(Ipv4Addr::new(208, 67, 222, 222)), IpAddr::V4(Ipv4Addr::new(208, 67, 220, 220))];
+  pub static ref DNS_SERVERS: Vec<IpAddr> = vec![
+    IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)),        // Cloudflare Primary
+    IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)),        // Google Primary
+    IpAddr::V4(Ipv4Addr::new(208, 67, 222, 222)), // OpenDNS Primary
+    IpAddr::V4(Ipv4Addr::new(1, 0, 0, 1)),        // Cloudflare Secondary
+    IpAddr::V4(Ipv4Addr::new(8, 8, 4, 4)),        // Google Secondary
+    IpAddr::V4(Ipv4Addr::new(208, 67, 220, 220))  // OpenDNS Secondary
+  ];
 }
 
 pub fn read_dns_server_ips_from_env_var() -> Option<Vec<IpAddr>> {
@@ -32,11 +37,7 @@ pub struct DnsProxy {
 impl std::default::Default for DnsProxy {
     fn default() -> Self {
         Self {
-            dns_server_ips: [
-                CLOUDFLARE_DNS_SERVERS.as_slice(),
-                GOOGLE_DNS_SERVERS.as_slice(),
-            ]
-            .concat(),
+            dns_server_ips: DNS_SERVERS.clone(),
         }
     }
 }
