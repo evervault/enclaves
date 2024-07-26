@@ -1,4 +1,6 @@
 use crate::error::{Result, ServerError};
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 use shared::server::egress::check_dns_allowed_for_domain;
 use shared::server::egress::{cache_ip_for_allowlist, EgressDestinations};
 use shared::server::CID::Parent;
@@ -53,11 +55,13 @@ impl DnsProxy {
         let mut server = get_vsock_server(DNS_PROXY_VSOCK_PORT, Parent).await?;
 
         let allowed_domains = shared::server::egress::get_egress_allow_list_from_env();
+        let mut rng = thread_rng();
         loop {
             let domains = allowed_domains.clone();
             match server.accept().await {
                 Ok(mut stream) => {
-                    let dns_services = self.dns_server_ips.clone();
+                    let mut dns_services = self.dns_server_ips.clone();
+                    dns_services.shuffle(&mut rng);
                     tokio::spawn(async move {
                         for dns_service in dns_services.iter() {
                             let dns_req_timing = std::time::Instant::now();
