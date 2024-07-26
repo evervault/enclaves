@@ -37,11 +37,7 @@ pub struct DnsProxy {
 impl std::default::Default for DnsProxy {
     fn default() -> Self {
         Self {
-            dns_server_ips: [
-                CLOUDFLARE_DNS_SERVERS.as_slice(),
-                GOOGLE_DNS_SERVERS.as_slice(),
-            ]
-            .concat(),
+            dns_server_ips: DNS_SERVERS.clone()
         }
     }
 }
