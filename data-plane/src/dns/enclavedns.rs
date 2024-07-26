@@ -46,16 +46,17 @@ impl EnclaveDnsProxy {
 
         loop {
             let mut buffer = [0; 512];
-            let (amt, src) = shared_socket.recv_from(&mut buffer).await?;
-            let buf = Bytes::copy_from_slice(&buffer[..amt]);
-            let dispatch_result =
-                timeout(dns_dispatch_timeout, dns_lookup_sender.send((buf, src))).await;
+            if let Ok((amt, src)) = shared_socket.recv_from(&mut buffer).await {
+                let buf = Bytes::copy_from_slice(&buffer[..amt]);
+                let dispatch_result =
+                    timeout(dns_dispatch_timeout, dns_lookup_sender.send((buf, src))).await;
 
-            match dispatch_result {
-                Ok(Err(e)) => log::error!("Error dispatching DNS request: {e:?}"),
-                Err(e) => log::error!("Timeout dispatching DNS request: {e:?}"),
-                _ => {}
-            };
+                match dispatch_result {
+                    Ok(Err(e)) => log::error!("Error dispatching DNS request: {e:?}"),
+                    Err(e) => log::error!("Timeout dispatching DNS request: {e:?}"),
+                    _ => {}
+                };
+            }
         }
     }
 }

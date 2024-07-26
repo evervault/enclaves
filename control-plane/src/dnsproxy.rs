@@ -37,7 +37,7 @@ pub struct DnsProxy {
 impl std::default::Default for DnsProxy {
     fn default() -> Self {
         Self {
-            dns_server_ips: DNS_SERVERS.clone()
+            dns_server_ips: DNS_SERVERS.clone(),
         }
     }
 }
