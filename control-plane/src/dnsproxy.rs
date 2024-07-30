@@ -116,6 +116,7 @@ impl DnsProxy {
         socket.send(&request_buffer[..packet_size]).await?;
         let (amt, _) = socket.recv_from(&mut response_buffer).await?;
         let response_bytes = &response_buffer[..amt];
+        println!("About to cache IP");
         cache_ip_for_allowlist(response_bytes)?;
         stream.write_all(response_bytes).await?;
         stream.flush().await?;

@@ -2,13 +2,11 @@ use super::error::DNSError;
 use bytes::Bytes;
 use shared::server::egress::check_dns_allowed_for_domain;
 use shared::server::egress::get_cached_dns;
-use shared::server::egress::{cache_ip_for_allowlist, EgressDestinations};
+use shared::server::egress::EgressDestinations;
 use shared::server::get_vsock_client;
 use shared::server::CID::Parent;
 use shared::DNS_PROXY_VSOCK_PORT;
-use std::net::Ipv4Addr;
 use std::net::SocketAddr;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -16,8 +14,9 @@ use tokio::net::UdpSocket;
 use tokio::sync::{mpsc::Receiver, Semaphore};
 use tokio::time::timeout;
 use trust_dns_proto::op::{Message, MessageType, OpCode, ResponseCode};
-use trust_dns_proto::rr::{DNSClass, Name, RData, Record, RecordType};
-use trust_dns_proto::serialize::binary::{BinEncodable, BinEncoder};
+use trust_dns_proto::rr::Record;
+use trust_dns_proto::serialize::binary::BinEncodable;
+use shared::server::egress::cache_ip_for_allowlist;
 
 /// Empty struct for the DNS proxy that runs in the data plane
 pub struct EnclaveDnsProxy;
@@ -137,21 +136,12 @@ impl EnclaveDnsDriver {
         message.set_recursion_desired(true);
         message.set_response_code(ResponseCode::NoError);
 
-        // Create an answer
-        let mut record: Record = Record::new();
-        record.set_name(Name::from_str("jsonplaceholder.typicode.com").unwrap());
-        record.set_record_type(RecordType::A);
-        record.set_dns_class(DNSClass::IN);
-        record.set_ttl(300);
-        record.set_data(Some(RData::A(trust_dns_proto::rr::rdata::A(
-            Ipv4Addr::new(172, 67, 167, 151),
-        ))));
         message.add_answer(record);
 
-        let bbb = message.to_bytes().unwrap();
-        println!("TESTTTTT::::::: {:?}", bbb.len());
+        let response_bytes = message.to_bytes().unwrap();
+        println!("TESTTTTT::::::: {:?}", response_bytes.len());
 
-        return bbb;
+        response_bytes
     }
 
     /// Perform a DNS lookup using the proxy running on the Host
@@ -164,17 +154,26 @@ impl EnclaveDnsDriver {
         let packet = check_dns_allowed_for_domain(&dns_packet, &allowed_destinations)?;
         match get_cached_dns(packet.clone()) {
             Ok(record) => {
-                let dns_response = Self::get_dns_answer(packet.header().id(), record);
-                return Ok(Bytes::copy_from_slice(&dns_response));
+                match record {
+                    Some(record) => {
+                        let dns_response = Self::get_dns_answer(packet.header().id(), record);
+                        return Ok(Bytes::copy_from_slice(&dns_response));
+                    }
+                    None => {
+                        let dns_response = timeout(request_upper_bound, Self::forward_dns_lookup(dns_packet)).await??;
+                        cache_ip_for_allowlist(&dns_response.clone())?;
+                        Ok(dns_response)
+                    }
+                }
             }
             Err(_) => {
                 // // Attempt DNS lookup wth a timeout, flatten timeout errors into a DNS Error
                 let dns_response =
                     timeout(request_upper_bound, Self::forward_dns_lookup(dns_packet)).await??;
+                    cache_ip_for_allowlist(&dns_response.clone())?;
                 Ok(dns_response)
             }
         }
-
     }
 
     /// Takes a DNS lookup as `Bytes` and sends forwards it over VSock to the host process to be sent to
