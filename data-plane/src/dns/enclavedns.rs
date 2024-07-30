@@ -127,7 +127,7 @@ impl EnclaveDnsDriver {
         }
     }
 
-    fn get_dns_answer(id: u16, record: Record) -> Vec<u8> {
+    fn get_dns_answer(id: u16, record: Record) -> Result<Vec<u8>, DNSError> {
         let mut message = Message::new();
         message.set_id(id);
         message.set_message_type(MessageType::Response);
@@ -138,10 +138,8 @@ impl EnclaveDnsDriver {
 
         message.add_answer(record);
 
-        let response_bytes = message.to_bytes().unwrap();
-        println!("TESTTTTT::::::: {:?}", response_bytes.len());
-
-        response_bytes
+        let response_bytes = message.to_bytes()?;
+        Ok(response_bytes)
     }
 
     /// Perform a DNS lookup using the proxy running on the Host
@@ -155,7 +153,7 @@ impl EnclaveDnsDriver {
         match get_cached_dns(packet.clone()) {
             Ok(record) => match record {
                 Some(record) => {
-                    let dns_response = Self::get_dns_answer(packet.header().id(), record);
+                    let dns_response = Self::get_dns_answer(packet.header().id(), record)?;
                     Ok(Bytes::copy_from_slice(&dns_response))
                 }
                 None => {
