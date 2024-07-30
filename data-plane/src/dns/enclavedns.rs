@@ -150,28 +150,31 @@ impl EnclaveDnsDriver {
     ) -> Result<Bytes, DNSError> {
         // Check domain is allowed before proxying lookup
         let packet = check_dns_allowed_for_domain(&dns_packet, &allowed_destinations)?;
-        match get_cached_dns(packet.clone()) {
+        let query = match packet.query() {
+            Some(query) => query,
+            None => return Self::proxy_dns_request(request_upper_bound, dns_packet).await,
+        };
+        match get_cached_dns(query) {
             Ok(record) => match record {
                 Some(record) => {
                     let dns_response = Self::get_dns_answer(packet.header().id(), record)?;
                     Ok(Bytes::copy_from_slice(&dns_response))
                 }
-                None => {
-                    let dns_response =
-                        timeout(request_upper_bound, Self::forward_dns_lookup(dns_packet))
-                            .await??;
-                    cache_ip_for_allowlist(&dns_response.clone())?;
-                    Ok(dns_response)
-                }
+                None => Self::proxy_dns_request(request_upper_bound, dns_packet).await,
             },
-            Err(_) => {
-                // // Attempt DNS lookup wth a timeout, flatten timeout errors into a DNS Error
-                let dns_response =
-                    timeout(request_upper_bound, Self::forward_dns_lookup(dns_packet)).await??;
-                cache_ip_for_allowlist(&dns_response.clone())?;
-                Ok(dns_response)
-            }
+            Err(_) => Self::proxy_dns_request(request_upper_bound, dns_packet).await,
         }
+    }
+
+    async fn proxy_dns_request(
+        request_upper_bound: Duration,
+        dns_packet: Bytes,
+    ) -> Result<Bytes, DNSError> {
+        // Attempt DNS lookup wth a timeout, flatten timeout errors into a DNS Error
+        let dns_response =
+            timeout(request_upper_bound, Self::forward_dns_lookup(dns_packet)).await??;
+        cache_ip_for_allowlist(&dns_response.clone())?;
+        Ok(dns_response)
     }
 
     /// Takes a DNS lookup as `Bytes` and sends forwards it over VSock to the host process to be sent to

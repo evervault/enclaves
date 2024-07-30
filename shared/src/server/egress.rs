@@ -1,11 +1,13 @@
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde::Deserializer;
+use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::sync::Mutex;
 use std::time::Duration;
 use thiserror::Error;
 use trust_dns_proto::op::Message;
+use trust_dns_proto::op::Query;
 use trust_dns_proto::rr::Record;
 use trust_dns_proto::serialize::binary::BinDecodable;
 use ttl_cache::TtlCache;
@@ -26,6 +28,8 @@ pub enum EgressError {
     DNSParseError(#[from] trust_dns_proto::error::ProtoError),
     #[error("Could not obtain lock for IP cache")]
     CouldntObtainLock,
+    #[error("IP not found")]
+    EgressIpNotFound,
 }
 
 pub static ALLOWED_IPS_FROM_DNS: Lazy<Mutex<TtlCache<String, String>>> =
@@ -94,9 +98,18 @@ pub fn check_dns_allowed_for_domain(
 pub fn cache_ip_for_allowlist(packet: &[u8]) -> Result<(), EgressError> {
     let parsed_packet = Message::from_bytes(packet)?;
     parsed_packet.answers().iter().try_for_each(|ans| {
-        let ip = ans.data().unwrap().ip_addr().unwrap().to_string();
-        cache_ip(ip, ans.name().to_string(), ans.ttl())?;
-        cache_dns_record(ans.name().to_string(), ans.clone())
+        let ip = ans
+            .data()
+            .ok_or(EgressError::EgressIpNotFound)?
+            .ip_addr()
+            .ok_or(EgressError::EgressIpNotFound)?;
+        match ip {
+            IpAddr::V4(id_addr) => {
+                cache_ip(id_addr.to_string(), ans.name().to_string(), ans.ttl())?;
+                cache_dns_record(ans.name().to_string(), ans.clone())
+            }
+            _ => Ok(()),
+        }
     })
 }
 
@@ -111,12 +124,8 @@ pub fn get_ip_from_cache(ip: String) -> Result<(), EgressError> {
     }
 }
 
-pub fn get_cached_dns(parsed_packet: Message) -> Result<Option<Record>, EgressError> {
-    let domains = parsed_packet
-        .queries()
-        .iter()
-        .map(|query| query.name().to_string());
-    let domain = domains.clone().next().unwrap().to_string();
+pub fn get_cached_dns(query: &Query) -> Result<Option<Record>, EgressError> {
+    let domain = query.name().to_string();
     let cache = match DOMAINS_CACHED_DNS.lock() {
         Ok(cache) => cache,
         Err(_) => return Err(EgressError::CouldntObtainLock),
