@@ -1,5 +1,6 @@
 use super::error::DNSError;
 use bytes::Bytes;
+use shared::server::egress::cache_ip_for_allowlist;
 use shared::server::egress::check_dns_allowed_for_domain;
 use shared::server::egress::get_cached_dns;
 use shared::server::egress::EgressDestinations;
@@ -16,7 +17,6 @@ use tokio::time::timeout;
 use trust_dns_proto::op::{Message, MessageType, OpCode, ResponseCode};
 use trust_dns_proto::rr::Record;
 use trust_dns_proto::serialize::binary::BinEncodable;
-use shared::server::egress::cache_ip_for_allowlist;
 
 /// Empty struct for the DNS proxy that runs in the data plane
 pub struct EnclaveDnsProxy;
@@ -153,24 +153,24 @@ impl EnclaveDnsDriver {
         // Check domain is allowed before proxying lookup
         let packet = check_dns_allowed_for_domain(&dns_packet, &allowed_destinations)?;
         match get_cached_dns(packet.clone()) {
-            Ok(record) => {
-                match record {
-                    Some(record) => {
-                        let dns_response = Self::get_dns_answer(packet.header().id(), record);
-                        return Ok(Bytes::copy_from_slice(&dns_response));
-                    }
-                    None => {
-                        let dns_response = timeout(request_upper_bound, Self::forward_dns_lookup(dns_packet)).await??;
-                        cache_ip_for_allowlist(&dns_response.clone())?;
-                        Ok(dns_response)
-                    }
+            Ok(record) => match record {
+                Some(record) => {
+                    let dns_response = Self::get_dns_answer(packet.header().id(), record);
+                    Ok(Bytes::copy_from_slice(&dns_response))
                 }
-            }
+                None => {
+                    let dns_response =
+                        timeout(request_upper_bound, Self::forward_dns_lookup(dns_packet))
+                            .await??;
+                    cache_ip_for_allowlist(&dns_response.clone())?;
+                    Ok(dns_response)
+                }
+            },
             Err(_) => {
                 // // Attempt DNS lookup wth a timeout, flatten timeout errors into a DNS Error
                 let dns_response =
                     timeout(request_upper_bound, Self::forward_dns_lookup(dns_packet)).await??;
-                    cache_ip_for_allowlist(&dns_response.clone())?;
+                cache_ip_for_allowlist(&dns_response.clone())?;
                 Ok(dns_response)
             }
         }

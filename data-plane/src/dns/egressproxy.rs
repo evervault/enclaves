@@ -51,7 +51,6 @@ impl EgressProxy {
         mut external_stream: TcpStream,
         allowed_domains: EgressDestinations,
     ) -> Result<(), DNSError> {
-        println!("Handling egress connection:::::::::");
         let mut buf = vec![0u8; 4096];
         let n = external_stream.read(&mut buf).await?;
         let customer_data = &mut buf[..n];
@@ -60,10 +59,8 @@ impl EgressProxy {
 
         let fd = external_stream.as_raw_fd();
         let (ip, port) = Self::get_destination(fd)?;
-        println!("IP: {ip}, Port: {port}");
         check_ip_allow_list(ip.to_string(), &allowed_domains)?;
 
-        println!("Sending request to data plane :::: {}", ip);
         let external_request = ExternalRequest {
             ip,
             data: customer_data.to_vec(),

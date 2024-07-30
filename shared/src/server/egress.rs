@@ -95,28 +95,19 @@ pub fn check_dns_allowed_for_domain(
 pub fn cache_ip_for_allowlist(packet: &[u8]) -> Result<(), EgressError> {
     let parsed_packet = Message::from_bytes(packet).unwrap();
     parsed_packet.answers().iter().try_for_each(|ans| {
-        let ip =  ans.data().unwrap().ip_addr().unwrap().to_string();
-        println!("Caching IP: {}", ip);
-        cache_ip(
-            ip,
-            ans.name().to_string(),
-            ans.ttl(),
-        )
+        let ip = ans.data().unwrap().ip_addr().unwrap().to_string();
+        cache_ip(ip, ans.name().to_string(), ans.ttl())?;
+        cache_dns_record(ans.name().to_string(), ans.clone())
     })
 }
 
 pub fn get_ip_from_cache(ip: String) -> Result<(), EgressError> {
-    println!("Checking IP cache!!!!!!!!");
-    ALLOWED_IPS_FROM_DNS.lock().unwrap().iter().for_each(|(k, v)| println!("{}: {}", k, v));
     let cache = match ALLOWED_IPS_FROM_DNS.lock() {
         Ok(cache) => cache,
         Err(_) => return Err(EgressError::CouldntObtainLock),
     };
     match cache.get(&ip) {
-        Some(_) => {
-            println!("Found IP: {} in cache", ip);
-            Ok(())
-        }
+        Some(_) => Ok(()),
         None => Err(EgressError::EgressIpNotAllowed(ip)),
     }
 }
@@ -139,7 +130,6 @@ fn cache_ip(ip: String, name: String, ttl: u32) -> Result<(), EgressError> {
         Ok(cache) => cache,
         Err(_) => return Err(EgressError::CouldntObtainLock),
     };
-    println!("Caching IP: {} for domain: {}", ip, name);
     cache.insert(ip, name, Duration::from_secs(ttl as u64));
     Ok(())
 }
@@ -157,14 +147,12 @@ pub fn check_ip_allow_list(
     ip: String,
     allowed_destinations: &EgressDestinations,
 ) -> Result<(), EgressError> {
-    println!("Checking IP: {}", ip);
     if allowed_destinations.allow_all
         || allowed_destinations.ips.contains(&ip)
         || get_ip_from_cache(ip.clone()).is_ok()
     {
         Ok(())
     } else {
-        println!("IP not allowed: {}", ip);
         Err(EgressError::EgressIpNotAllowed(ip))
     }
 }
