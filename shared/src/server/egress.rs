@@ -217,14 +217,10 @@ mod tests {
     use std::net::Ipv4Addr;
     use std::str::FromStr;
     use trust_dns_proto::op::Message;
-    use trust_dns_proto::rr::domain;
-    use trust_dns_proto::rr::rdata::A;
-    use trust_dns_proto::rr::DNSClass;
-    use trust_dns_proto::rr::Name;
-    use trust_dns_proto::rr::RData;
-    use trust_dns_proto::rr::Record;
-    use trust_dns_proto::rr::RecordType;
+    use trust_dns_proto::rr::{DNSClass, Name, RData, Record, RecordType};
     use trust_dns_proto::serialize::binary::BinEncodable;
+    use std::time::Duration;
+    use std::thread::sleep;
 
     #[test]
     fn test_sequentially() {
@@ -236,6 +232,7 @@ mod tests {
         test_allow_valid_ip();
         test_allow_valid_domain();
         test_allow_valid_ip_for_all_allowed();
+        test_cache_ip_for_allowlist();
     }
 
     fn test_valid_all_domains() {
@@ -343,7 +340,7 @@ mod tests {
         let domain = "a.domain.com".to_string();
         let ip = "172.67.167.151".to_string();
 
-        let record_a = create_record(domain.clone(), 300);
+        let record_a = create_record(domain.clone(), 3);
         let record_b = create_record(domain.clone(), 500);
         let record_c = create_record(domain.clone(), 600);
 
@@ -353,9 +350,13 @@ mod tests {
         let packet = message.to_bytes().unwrap();
         cache_ip_for_allowlist(&packet).unwrap();
         let cache = ALLOWED_IPS_FROM_DNS.lock().unwrap();
-        assert_eq!(cache.get(&ip), Some(domain.clone()).as_ref());
+        assert_eq!(cache.get(&ip), Some("a.domain.com.".to_string()).as_ref());
         let cache = DOMAINS_CACHED_DNS.lock().unwrap();
-        assert_eq!(cache.get(&domain), Some(&records));
+        assert_eq!(cache.get("a.domain.com."), Some(&records));
+
+        // Assert shortest TTL is used
+        sleep(Duration::from_secs(3));
+        assert_eq!(cache.get("a.domain.com."), None);
     }
 
     fn create_record(domain: String, ttl: u32) -> Record {
@@ -363,7 +364,7 @@ mod tests {
         record.set_name(Name::from_str(&domain).unwrap());
         record.set_record_type(RecordType::A);
         record.set_dns_class(DNSClass::IN);
-        record.set_ttl(300);
+        record.set_ttl(ttl);
         record.set_data(Some(RData::A(trust_dns_proto::rr::rdata::A(
             Ipv4Addr::new(172, 67, 167, 151),
         ))));
