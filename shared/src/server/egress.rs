@@ -216,11 +216,11 @@ mod tests {
     use crate::server::egress::DOMAINS_CACHED_DNS;
     use std::net::Ipv4Addr;
     use std::str::FromStr;
+    use std::thread::sleep;
+    use std::time::Duration;
     use trust_dns_proto::op::Message;
     use trust_dns_proto::rr::{DNSClass, Name, RData, Record, RecordType};
     use trust_dns_proto::serialize::binary::BinEncodable;
-    use std::time::Duration;
-    use std::thread::sleep;
 
     #[test]
     fn test_sequentially() {
@@ -337,7 +337,7 @@ mod tests {
 
     fn test_cache_ip_for_allowlist() {
         let mut message = Message::new();
-        let domain = "a.domain.com".to_string();
+        let domain = "a.domain.com.".to_string();
         let ip = "172.67.167.151".to_string();
 
         let record_a = create_record(domain.clone(), 3);
@@ -350,13 +350,13 @@ mod tests {
         let packet = message.to_bytes().unwrap();
         cache_ip_for_allowlist(&packet).unwrap();
         let cache = ALLOWED_IPS_FROM_DNS.lock().unwrap();
-        assert_eq!(cache.get(&ip), Some("a.domain.com.".to_string()).as_ref());
+        assert_eq!(cache.get(&ip), Some(domain.clone()).as_ref());
         let cache = DOMAINS_CACHED_DNS.lock().unwrap();
-        assert_eq!(cache.get("a.domain.com."), Some(&records));
+        assert_eq!(cache.get(&domain), Some(&records));
 
         // Assert shortest TTL is used
         sleep(Duration::from_secs(3));
-        assert_eq!(cache.get("a.domain.com."), None);
+        assert_eq!(cache.get(&domain), None);
     }
 
     fn create_record(domain: String, ttl: u32) -> Record {
