@@ -1,6 +1,7 @@
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde::Deserializer;
+use std::collections::HashMap;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::sync::Mutex;
@@ -11,7 +12,6 @@ use trust_dns_proto::op::Query;
 use trust_dns_proto::rr::Record;
 use trust_dns_proto::serialize::binary::BinDecodable;
 use ttl_cache::TtlCache;
-use std::collections::HashMap;
 
 #[derive(Debug, Error)]
 pub enum EgressError {
@@ -99,13 +99,13 @@ pub fn check_dns_allowed_for_domain(
 pub fn cache_ip_for_allowlist(packet: &[u8]) -> Result<(), EgressError> {
     let parsed_packet = Message::from_bytes(packet)?;
     let mut dns_records: HashMap<String, (u32, Vec<Record>)> = HashMap::new();
-    
+
     for ans in parsed_packet.answers() {
         let ip = match ans.data().ok_or(EgressError::EgressIpNotFound)?.ip_addr() {
             Some(ip) => ip,
             None => return Err(EgressError::EgressIpNotFound),
         };
-        
+
         if let IpAddr::V4(id_addr) = ip {
             dns_records
                 .entry(ans.name().to_string())
@@ -118,7 +118,7 @@ pub fn cache_ip_for_allowlist(packet: &[u8]) -> Result<(), EgressError> {
                     }
                 })
                 .or_insert_with(|| (ans.ttl(), vec![ans.clone()]));
-                
+
             cache_ip(id_addr.to_string(), ans.name().to_string(), ans.ttl())?;
         }
     }
@@ -126,7 +126,7 @@ pub fn cache_ip_for_allowlist(packet: &[u8]) -> Result<(), EgressError> {
     for (name, (ttl, records)) in dns_records {
         cache_dns_record(name, records, ttl as u64)?;
     }
-    
+
     Ok(())
 }
 
@@ -206,11 +206,25 @@ pub struct EgressConfig {
 
 #[cfg(test)]
 mod tests {
+    use crate::server::egress::cache_ip_for_allowlist;
     use crate::server::egress::check_domain_allow_list;
     use crate::server::egress::check_ip_allow_list;
     use crate::server::egress::get_egress_allow_list_from_env;
     use crate::server::egress::EgressDestinations;
     use crate::server::egress::EgressError::{EgressDomainNotAllowed, EgressIpNotAllowed};
+    use crate::server::egress::ALLOWED_IPS_FROM_DNS;
+    use crate::server::egress::DOMAINS_CACHED_DNS;
+    use std::net::Ipv4Addr;
+    use std::str::FromStr;
+    use trust_dns_proto::op::Message;
+    use trust_dns_proto::rr::domain;
+    use trust_dns_proto::rr::rdata::A;
+    use trust_dns_proto::rr::DNSClass;
+    use trust_dns_proto::rr::Name;
+    use trust_dns_proto::rr::RData;
+    use trust_dns_proto::rr::Record;
+    use trust_dns_proto::rr::RecordType;
+    use trust_dns_proto::serialize::binary::BinEncodable;
 
     #[test]
     fn test_sequentially() {
@@ -322,5 +336,37 @@ mod tests {
         };
         let result = check_domain_allow_list("a.domain.com".to_string(), &destinations);
         assert!(result.is_ok());
+    }
+
+    fn test_cache_ip_for_allowlist() {
+        let mut message = Message::new();
+        let domain = "a.domain.com".to_string();
+        let ip = "172.67.167.151".to_string();
+
+        let record_a = create_record(domain.clone(), 300);
+        let record_b = create_record(domain.clone(), 500);
+        let record_c = create_record(domain.clone(), 600);
+
+        let records = vec![record_a.clone(), record_b.clone(), record_c];
+
+        message.add_answers(records.clone());
+        let packet = message.to_bytes().unwrap();
+        cache_ip_for_allowlist(&packet).unwrap();
+        let cache = ALLOWED_IPS_FROM_DNS.lock().unwrap();
+        assert_eq!(cache.get(&ip), Some(domain.clone()).as_ref());
+        let cache = DOMAINS_CACHED_DNS.lock().unwrap();
+        assert_eq!(cache.get(&domain), Some(&records));
+    }
+
+    fn create_record(domain: String, ttl: u32) -> Record {
+        let mut record: Record = Record::new();
+        record.set_name(Name::from_str(&domain).unwrap());
+        record.set_record_type(RecordType::A);
+        record.set_dns_class(DNSClass::IN);
+        record.set_ttl(300);
+        record.set_data(Some(RData::A(trust_dns_proto::rr::rdata::A(
+            Ipv4Addr::new(172, 67, 167, 151),
+        ))));
+        record
     }
 }
