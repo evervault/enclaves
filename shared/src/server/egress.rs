@@ -101,20 +101,19 @@ pub fn cache_ip_for_allowlist(packet: &[u8]) -> Result<(), EgressError> {
     let mut dns_records: HashMap<String, (u32, Vec<Record>)> = HashMap::new();
 
     for ans in parsed_packet.answers() {
-        let ip = match ans.data().ok_or(EgressError::EgressIpNotFound)?.ip_addr() {
-            Some(ip) => ip,
-            None => return Err(EgressError::EgressIpNotFound),
-        };
+        let ip = ans
+            .data()
+            .ok_or(EgressError::EgressIpNotFound)?
+            .ip_addr()
+            .ok_or(EgressError::EgressIpNotFound)?;
 
         if let IpAddr::V4(id_addr) = ip {
             dns_records
                 .entry(ans.name().to_string())
                 .and_modify(|(ttl, records)| {
+                    records.push(ans.clone());
                     if ans.ttl() < *ttl {
-                        records.push(ans.clone());
                         *ttl = ans.ttl();
-                    } else {
-                        records.push(ans.clone());
                     }
                 })
                 .or_insert_with(|| (ans.ttl(), vec![ans.clone()]));
