@@ -14,7 +14,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UdpSocket;
 use tokio::sync::{mpsc::Receiver, Semaphore};
 use tokio::time::timeout;
-use trust_dns_proto::op::{Message, MessageType, OpCode, ResponseCode};
+use trust_dns_proto::op::{Message, ResponseCode};
 use trust_dns_proto::rr::Record;
 use trust_dns_proto::serialize::binary::BinEncodable;
 
@@ -127,16 +127,10 @@ impl EnclaveDnsDriver {
         }
     }
 
-    fn get_dns_answer(id: u16, record: Record) -> Result<Vec<u8>, DNSError> {
-        let mut message = Message::new();
-        message.set_id(id);
-        message.set_message_type(MessageType::Response);
-        message.set_op_code(OpCode::Query);
-        message.set_authoritative(true);
-        message.set_recursion_desired(true);
+    fn get_dns_response(mut message: Message, records: Vec<Record>) -> Result<Vec<u8>, DNSError> {
+        message.set_id(message.header().id());
         message.set_response_code(ResponseCode::NoError);
-
-        message.add_answer(record);
+        message.add_answers(records);
 
         let response_bytes = message.to_bytes()?;
         Ok(response_bytes)
@@ -149,15 +143,15 @@ impl EnclaveDnsDriver {
         allowed_destinations: EgressDestinations,
     ) -> Result<Bytes, DNSError> {
         // Check domain is allowed before proxying lookup
-        let packet = check_dns_allowed_for_domain(&dns_packet, &allowed_destinations)?;
-        let query = match packet.query() {
+        let message = check_dns_allowed_for_domain(&dns_packet, &allowed_destinations)?;
+        let query = match message.query() {
             Some(query) => query,
             None => return Self::proxy_dns_request(request_upper_bound, dns_packet).await,
         };
         match get_cached_dns(query) {
             Ok(record) => match record {
                 Some(record) => {
-                    let dns_response = Self::get_dns_answer(packet.header().id(), record)?;
+                    let dns_response = Self::get_dns_response(message.clone(), record)?;
                     Ok(Bytes::copy_from_slice(&dns_response))
                 }
                 None => Self::proxy_dns_request(request_upper_bound, dns_packet).await,

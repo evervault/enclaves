@@ -11,6 +11,7 @@ use trust_dns_proto::op::Query;
 use trust_dns_proto::rr::Record;
 use trust_dns_proto::serialize::binary::BinDecodable;
 use ttl_cache::TtlCache;
+use std::collections::HashMap;
 
 #[derive(Debug, Error)]
 pub enum EgressError {
@@ -35,7 +36,7 @@ pub enum EgressError {
 pub static ALLOWED_IPS_FROM_DNS: Lazy<Mutex<TtlCache<String, String>>> =
     Lazy::new(|| Mutex::new(TtlCache::new(1000)));
 
-pub static DOMAINS_CACHED_DNS: Lazy<Mutex<TtlCache<String, Record>>> =
+pub static DOMAINS_CACHED_DNS: Lazy<Mutex<TtlCache<String, Vec<Record>>>> =
     Lazy::new(|| Mutex::new(TtlCache::new(1000)));
 
 pub fn get_egress_allow_list_from_env() -> EgressDestinations {
@@ -97,20 +98,36 @@ pub fn check_dns_allowed_for_domain(
 
 pub fn cache_ip_for_allowlist(packet: &[u8]) -> Result<(), EgressError> {
     let parsed_packet = Message::from_bytes(packet)?;
-    parsed_packet.answers().iter().try_for_each(|ans| {
-        let ip = ans
-            .data()
-            .ok_or(EgressError::EgressIpNotFound)?
-            .ip_addr()
-            .ok_or(EgressError::EgressIpNotFound)?;
-        match ip {
-            IpAddr::V4(id_addr) => {
-                cache_ip(id_addr.to_string(), ans.name().to_string(), ans.ttl())?;
-                cache_dns_record(ans.name().to_string(), ans.clone())
-            }
-            _ => Ok(()),
+    let mut dns_records: HashMap<String, (u32, Vec<Record>)> = HashMap::new();
+    
+    for ans in parsed_packet.answers() {
+        let ip = match ans.data().ok_or(EgressError::EgressIpNotFound)?.ip_addr() {
+            Some(ip) => ip,
+            None => return Err(EgressError::EgressIpNotFound),
+        };
+        
+        if let IpAddr::V4(id_addr) = ip {
+            dns_records
+                .entry(ans.name().to_string())
+                .and_modify(|(ttl, records)| {
+                    if ans.ttl() < *ttl {
+                        records.push(ans.clone());
+                        *ttl = ans.ttl();
+                    } else {
+                        records.push(ans.clone());
+                    }
+                })
+                .or_insert_with(|| (ans.ttl(), vec![ans.clone()]));
+                
+            cache_ip(id_addr.to_string(), ans.name().to_string(), ans.ttl())?;
         }
-    })
+    }
+
+    for (name, (ttl, records)) in dns_records {
+        cache_dns_record(name, records, ttl as u64)?;
+    }
+    
+    Ok(())
 }
 
 pub fn get_ip_from_cache(ip: String) -> Result<(), EgressError> {
@@ -124,7 +141,7 @@ pub fn get_ip_from_cache(ip: String) -> Result<(), EgressError> {
     }
 }
 
-pub fn get_cached_dns(query: &Query) -> Result<Option<Record>, EgressError> {
+pub fn get_cached_dns(query: &Query) -> Result<Option<Vec<Record>>, EgressError> {
     let domain = query.name().to_string();
     let cache = match DOMAINS_CACHED_DNS.lock() {
         Ok(cache) => cache,
@@ -142,12 +159,12 @@ fn cache_ip(ip: String, name: String, ttl: u32) -> Result<(), EgressError> {
     Ok(())
 }
 
-fn cache_dns_record(ip: String, answer: Record) -> Result<(), EgressError> {
+fn cache_dns_record(name: String, answers: Vec<Record>, ttl: u64) -> Result<(), EgressError> {
     let mut cache = match DOMAINS_CACHED_DNS.lock() {
         Ok(cache) => cache,
         Err(_) => return Err(EgressError::CouldntObtainLock),
     };
-    cache.insert(ip, answer.clone(), Duration::from_secs(answer.ttl() as u64));
+    cache.insert(name, answers.clone(), Duration::from_secs(ttl));
     Ok(())
 }
 
