@@ -128,7 +128,6 @@ impl EnclaveDnsDriver {
     }
 
     fn get_dns_response(mut message: Message, records: Vec<Record>) -> Result<Vec<u8>, DNSError> {
-        message.set_id(message.header().id());
         message.set_response_code(ResponseCode::NoError);
         message.add_answers(records);
 
