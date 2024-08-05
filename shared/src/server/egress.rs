@@ -1,16 +1,11 @@
+use dns_parser::RData;
 use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serde::Deserializer;
-use std::collections::HashMap;
-use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::sync::Mutex;
 use std::time::Duration;
 use thiserror::Error;
-use trust_dns_proto::op::Message;
-use trust_dns_proto::op::Query;
-use trust_dns_proto::rr::Record;
-use trust_dns_proto::serialize::binary::BinDecodable;
 use ttl_cache::TtlCache;
 
 #[derive(Debug, Error)]
@@ -26,17 +21,12 @@ pub enum EgressError {
     #[error("TLS extension missing")]
     ExtensionMissing,
     #[error(transparent)]
-    DNSParseError(#[from] trust_dns_proto::error::ProtoError),
+    DNSParseError(#[from] dns_parser::Error),
     #[error("Could not obtain lock for IP cache")]
     CouldntObtainLock,
-    #[error("IP not found")]
-    EgressIpNotFound,
 }
 
 pub static ALLOWED_IPS_FROM_DNS: Lazy<Mutex<TtlCache<String, String>>> =
-    Lazy::new(|| Mutex::new(TtlCache::new(1000)));
-
-pub static DOMAINS_CACHED_DNS: Lazy<Mutex<TtlCache<String, Vec<Record>>>> =
     Lazy::new(|| Mutex::new(TtlCache::new(1000)));
 
 pub fn get_egress_allow_list_from_env() -> EgressDestinations {
@@ -86,84 +76,35 @@ pub fn check_domain_allow_list(
 pub fn check_dns_allowed_for_domain(
     packet: &[u8],
     destinations: &EgressDestinations,
-) -> Result<Message, EgressError> {
-    let parsed_packet = Message::from_bytes(packet)?;
-    parsed_packet.queries().iter().try_for_each(|q| {
-        let domain = q.name().to_string();
-        let domain = &domain[..domain.len() - 1];
-        check_domain_allow_list(domain.into(), destinations)
-    })?;
-    Ok(parsed_packet)
+) -> Result<(), EgressError> {
+    let packet = dns_parser::Packet::parse(packet)?;
+    packet
+        .questions
+        .iter()
+        .try_for_each(|q| check_domain_allow_list(q.qname.to_string(), destinations))
 }
 
 pub fn cache_ip_for_allowlist(packet: &[u8]) -> Result<(), EgressError> {
-    let parsed_packet = Message::from_bytes(packet)?;
-    let mut dns_records: HashMap<String, (u32, Vec<Record>)> = HashMap::new();
-
-    for ans in parsed_packet.answers() {
-        let ip = ans
-            .data()
-            .ok_or(EgressError::EgressIpNotFound)?
-            .ip_addr()
-            .ok_or(EgressError::EgressIpNotFound)?;
-
-        if let IpAddr::V4(id_addr) = ip {
-            dns_records
-                .entry(ans.name().to_string())
-                .and_modify(|(ttl, records)| {
-                    records.push(ans.clone());
-                    if ans.ttl() < *ttl {
-                        *ttl = ans.ttl();
-                    }
-                })
-                .or_insert_with(|| (ans.ttl(), vec![ans.clone()]));
-
-            cache_ip(id_addr.to_string(), ans.name().to_string(), ans.ttl())?;
+    let packet = dns_parser::Packet::parse(packet)?;
+    packet.answers.iter().try_for_each(|ans| {
+        if let RData::A(ip) = ans.data {
+            cache_ip(ip.0.to_string(), ans)
+        } else {
+            Ok(())
         }
-    }
-
-    for (name, (ttl, records)) in dns_records {
-        cache_dns_record(name, records, ttl as u64)?;
-    }
-
-    Ok(())
+    })
 }
 
-pub fn get_ip_from_cache(ip: String) -> Result<(), EgressError> {
-    let cache = match ALLOWED_IPS_FROM_DNS.lock() {
-        Ok(cache) => cache,
-        Err(_) => return Err(EgressError::CouldntObtainLock),
-    };
-    match cache.get(&ip) {
-        Some(_) => Ok(()),
-        None => Err(EgressError::EgressIpNotAllowed(ip)),
-    }
-}
-
-pub fn get_cached_dns(query: &Query) -> Result<Option<Vec<Record>>, EgressError> {
-    let domain = query.name().to_string();
-    let cache = match DOMAINS_CACHED_DNS.lock() {
-        Ok(cache) => cache,
-        Err(_) => return Err(EgressError::CouldntObtainLock),
-    };
-    Ok(cache.get(&domain).cloned())
-}
-
-fn cache_ip(ip: String, name: String, ttl: u32) -> Result<(), EgressError> {
+fn cache_ip(ip: String, answer: &dns_parser::ResourceRecord<'_>) -> Result<(), EgressError> {
     let mut cache = match ALLOWED_IPS_FROM_DNS.lock() {
         Ok(cache) => cache,
         Err(_) => return Err(EgressError::CouldntObtainLock),
     };
-    cache.insert(ip, name, Duration::from_secs(ttl as u64));
-    Ok(())
-}
-
-fn cache_dns_record(name: String, answers: Vec<Record>, ttl: u64) -> Result<(), EgressError> {
-    let mut cache = match DOMAINS_CACHED_DNS.lock() {
-        Ok(cache) => cache,
-        Err(_) => return Err(EgressError::CouldntObtainLock),
-    };
-    cache.insert(name, answers.clone(), Duration::from_secs(ttl));
+    cache.insert(
+        ip,
+        answer.name.to_string(),
+        Duration::from_secs(answer.ttl.into()),
+    );
     Ok(())
 }
 
@@ -173,12 +114,20 @@ pub fn check_ip_allow_list(
 ) -> Result<(), EgressError> {
     if allowed_destinations.allow_all
         || allowed_destinations.ips.contains(&ip)
-        || get_ip_from_cache(ip.clone()).is_ok()
+        || is_valid_ip_from_dns(ip.clone())?
     {
         Ok(())
     } else {
         Err(EgressError::EgressIpNotAllowed(ip))
     }
+}
+
+fn is_valid_ip_from_dns(ip: String) -> Result<bool, EgressError> {
+    let cache = match ALLOWED_IPS_FROM_DNS.lock() {
+        Ok(cache) => cache,
+        Err(_) => return Err(EgressError::CouldntObtainLock),
+    };
+    Ok(cache.get(&ip).is_some())
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize)]
@@ -205,21 +154,11 @@ pub struct EgressConfig {
 
 #[cfg(test)]
 mod tests {
-    use crate::server::egress::cache_ip_for_allowlist;
     use crate::server::egress::check_domain_allow_list;
     use crate::server::egress::check_ip_allow_list;
     use crate::server::egress::get_egress_allow_list_from_env;
     use crate::server::egress::EgressDestinations;
     use crate::server::egress::EgressError::{EgressDomainNotAllowed, EgressIpNotAllowed};
-    use crate::server::egress::ALLOWED_IPS_FROM_DNS;
-    use crate::server::egress::DOMAINS_CACHED_DNS;
-    use std::net::Ipv4Addr;
-    use std::str::FromStr;
-    use std::thread::sleep;
-    use std::time::Duration;
-    use trust_dns_proto::op::Message;
-    use trust_dns_proto::rr::{DNSClass, Name, RData, Record, RecordType};
-    use trust_dns_proto::serialize::binary::BinEncodable;
 
     #[test]
     fn test_sequentially() {
@@ -231,7 +170,6 @@ mod tests {
         test_allow_valid_ip();
         test_allow_valid_domain();
         test_allow_valid_ip_for_all_allowed();
-        test_cache_ip_for_allowlist();
     }
 
     fn test_valid_all_domains() {
@@ -332,41 +270,5 @@ mod tests {
         };
         let result = check_domain_allow_list("a.domain.com".to_string(), &destinations);
         assert!(result.is_ok());
-    }
-
-    fn test_cache_ip_for_allowlist() {
-        let mut message = Message::new();
-        let domain = "a.domain.com.".to_string();
-        let ip = "172.67.167.151".to_string();
-
-        let record_a = create_record(domain.clone(), 3);
-        let record_b = create_record(domain.clone(), 500);
-        let record_c = create_record(domain.clone(), 600);
-
-        let records = vec![record_a.clone(), record_b.clone(), record_c];
-
-        message.add_answers(records.clone());
-        let packet = message.to_bytes().unwrap();
-        cache_ip_for_allowlist(&packet).unwrap();
-        let cache = ALLOWED_IPS_FROM_DNS.lock().unwrap();
-        assert_eq!(cache.get(&ip), Some(domain.clone()).as_ref());
-        let cache = DOMAINS_CACHED_DNS.lock().unwrap();
-        assert_eq!(cache.get(&domain), Some(&records));
-
-        // Assert shortest TTL is used
-        sleep(Duration::from_secs(3));
-        assert_eq!(cache.get(&domain), None);
-    }
-
-    fn create_record(domain: String, ttl: u32) -> Record {
-        let mut record: Record = Record::new();
-        record.set_name(Name::from_str(&domain).unwrap());
-        record.set_record_type(RecordType::A);
-        record.set_dns_class(DNSClass::IN);
-        record.set_ttl(ttl);
-        record.set_data(Some(RData::A(trust_dns_proto::rr::rdata::A(
-            Ipv4Addr::new(172, 67, 167, 151),
-        ))));
-        record
     }
 }
