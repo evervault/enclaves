@@ -12,7 +12,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - run: rustup component add clippy
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.79.0
+          components: clippy, rustfmt
+          override: true
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: "standard-cache"

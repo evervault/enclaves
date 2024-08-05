@@ -19,6 +19,4 @@ pub enum DNSError {
     EgressError(#[from] EgressError),
     #[error("DNS lookup failed due to a timeout after: {0}")]
     DNSTimeout(#[from] tokio::time::error::Elapsed),
-    #[error("DNS parse error: {0}")]
-    ProtoError(#[from] trust_dns_proto::error::ProtoError),
 }

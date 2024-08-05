@@ -1,9 +1,7 @@
 use super::error::DNSError;
 use bytes::Bytes;
-use shared::server::egress::cache_ip_for_allowlist;
 use shared::server::egress::check_dns_allowed_for_domain;
-use shared::server::egress::get_cached_dns;
-use shared::server::egress::EgressDestinations;
+use shared::server::egress::{cache_ip_for_allowlist, EgressDestinations};
 use shared::server::get_vsock_client;
 use shared::server::CID::Parent;
 use shared::DNS_PROXY_VSOCK_PORT;
@@ -14,9 +12,6 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UdpSocket;
 use tokio::sync::{mpsc::Receiver, Semaphore};
 use tokio::time::timeout;
-use trust_dns_proto::op::{Message, ResponseCode};
-use trust_dns_proto::rr::Record;
-use trust_dns_proto::serialize::binary::BinEncodable;
 
 /// Empty struct for the DNS proxy that runs in the data plane
 pub struct EnclaveDnsProxy;
@@ -127,14 +122,6 @@ impl EnclaveDnsDriver {
         }
     }
 
-    fn get_dns_response(mut message: Message, records: Vec<Record>) -> Result<Vec<u8>, DNSError> {
-        message.set_response_code(ResponseCode::NoError);
-        message.add_answers(records);
-
-        let response_bytes = message.to_bytes()?;
-        Ok(response_bytes)
-    }
-
     /// Perform a DNS lookup using the proxy running on the Host
     async fn perform_dns_lookup(
         dns_packet: Bytes,
@@ -142,27 +129,7 @@ impl EnclaveDnsDriver {
         allowed_destinations: EgressDestinations,
     ) -> Result<Bytes, DNSError> {
         // Check domain is allowed before proxying lookup
-        let message = check_dns_allowed_for_domain(&dns_packet, &allowed_destinations)?;
-        let query = match message.query() {
-            Some(query) => query,
-            None => return Self::proxy_dns_request(request_upper_bound, dns_packet).await,
-        };
-        match get_cached_dns(query) {
-            Ok(record) => match record {
-                Some(record) => {
-                    let dns_response = Self::get_dns_response(message.clone(), record)?;
-                    Ok(Bytes::copy_from_slice(&dns_response))
-                }
-                None => Self::proxy_dns_request(request_upper_bound, dns_packet).await,
-            },
-            Err(_) => Self::proxy_dns_request(request_upper_bound, dns_packet).await,
-        }
-    }
-
-    async fn proxy_dns_request(
-        request_upper_bound: Duration,
-        dns_packet: Bytes,
-    ) -> Result<Bytes, DNSError> {
+        check_dns_allowed_for_domain(&dns_packet.clone(), &allowed_destinations)?;
         // Attempt DNS lookup wth a timeout, flatten timeout errors into a DNS Error
         let dns_response =
             timeout(request_upper_bound, Self::forward_dns_lookup(dns_packet)).await??;
