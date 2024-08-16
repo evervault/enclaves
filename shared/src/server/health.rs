@@ -45,3 +45,57 @@ impl std::fmt::Display for HealthCheckStatus {
         }
     }
 }
+
+pub trait HealthCheck {
+    fn status_code(&self) -> u16;
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum ControlPlaneState {
+    Draining,
+    Ok,
+}
+
+impl HealthCheck for ControlPlaneState {
+    fn status_code(&self) -> u16 {
+        match self {
+            ControlPlaneState::Ok => 200,
+            ControlPlaneState::Draining => 500,
+        }
+    }
+}
+
+pub type DataPlaneHealthCheck = Result<DataPlaneState, String>;
+
+impl HealthCheck for DataPlaneHealthCheck {
+    fn status_code(&self) -> u16 {
+        match self {
+            Ok(state) => match state {
+                DataPlaneState::Initialized(diagnostic) if diagnostic.is_healthy => 200,
+                _ => 500,
+            },
+            _ => 500,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum DataPlaneState {
+    Unknown(String),
+    Provisioning,
+    Attesting,
+    SourcingTlsCerts,
+    Initialized(DataPlaneDiagnostic),
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DataPlaneDiagnostic {
+    pub is_healthy: bool,
+    pub customer_process: CustomerProcessHealth,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CustomerProcessHealth {
+    pub status_code: u16,
+    pub response: Option<serde_json::Value>,
+}
