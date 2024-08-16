@@ -72,15 +72,10 @@ impl HealthCheck for ControlPlaneState {
     }
 }
 
-pub type DataPlaneHealthCheck = Result<DataPlaneState, String>;
-
-impl HealthCheck for DataPlaneHealthCheck {
+impl HealthCheck for DataPlaneState {
     fn status_code(&self) -> u16 {
         match self {
-            Ok(state) => match state {
-                DataPlaneState::Initialized(diagnostic) if diagnostic.is_healthy => 200,
-                _ => 500,
-            },
+            DataPlaneState::Initialized(diagnostic) if diagnostic.is_healthy => 200,
             _ => 500,
         }
     }
