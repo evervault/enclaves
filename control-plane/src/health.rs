@@ -3,9 +3,9 @@ use crate::error::ServerError;
 use axum::http::HeaderValue;
 use hyper::{Body, Request, Response};
 use serde::{Deserialize, Serialize};
-use shared::server::health::{HealthCheckLog, HealthCheckStatus, HealthCheckVersion};
+use shared::server::health::{ControlPlaneState, DataPlaneHealthCheck, DataPlaneState, Health};
 use shared::server::{error::ServerResult, tcp::TcpServer, Listener};
-use shared::{env_var_present_and_true, ENCLAVE_HEALTH_CHECK_PORT};
+use shared::ENCLAVE_HEALTH_CHECK_PORT;
 use std::net::SocketAddr;
 use std::sync::OnceLock;
 
@@ -17,24 +17,22 @@ pub struct HealthCheckServer {
     tcp_server: TcpServer,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct CombinedHealthCheckLog {
-    control_plane: HealthCheckLog,
-    data_plane: HealthCheckVersion,
+    control_plane: ControlPlaneState,
+    data_plane: DataPlaneHealthCheck,
 }
 
-async fn run_ecs_health_check_service(
-    skip_deep_healthcheck: bool,
+pub async fn run_ecs_health_check_service(
     is_draining: bool,
 ) -> std::result::Result<Response<Body>, ServerError> {
     if is_draining {
-        let draining_log =
-            HealthCheckLog::new(HealthCheckStatus::Err, Some("Enclave is draining".into()));
-
         let combined_log = CombinedHealthCheckLog {
-            control_plane: draining_log.clone(),
-            data_plane: HealthCheckVersion::V1(draining_log),
+            control_plane: ControlPlaneState::Draining,
+            data_plane: DataPlaneHealthCheck::Ok(DataPlaneState::Unknown(
+                "Enclave is draining, data-plane health will not be checked".into(),
+            )),
         };
 
         let combined_log_json = serde_json::to_string(&combined_log)?;
@@ -45,32 +43,14 @@ async fn run_ecs_health_check_service(
             .body(Body::from(combined_log_json))?);
     };
 
-    let control_plane = HealthCheckLog::new(
-        HealthCheckStatus::Ok,
-        Some("Control plane is running".into()),
-    );
-
-    let data_plane = if skip_deep_healthcheck {
-        HealthCheckVersion::V1(HealthCheckLog::new(HealthCheckStatus::Ignored, None))
-    } else {
-        match health_check_data_plane().await {
-            Ok(v) => v,
-            Err(e) => HealthCheckVersion::V1(HealthCheckLog::new(
-                HealthCheckStatus::Err,
-                Some(e.to_string()),
-            )),
-        }
-    };
+    let control_plane = ControlPlaneState::Ok;
+    let data_plane = health_check_data_plane().await;
 
     let data_plane_log = match &data_plane {
         HealthCheckVersion::V0(log) | HealthCheckVersion::V1(log) => log,
     };
 
-    let status_to_return = [control_plane.status.clone(), data_plane_log.status.clone()]
-        .iter()
-        .max()
-        .unwrap()
-        .clone();
+    let status_to_return = std::cmp::max(control_plane.status_code(), data_plane.status_code());
 
     let combined_log = CombinedHealthCheckLog {
         control_plane,
@@ -79,16 +59,20 @@ async fn run_ecs_health_check_service(
     let combined_log_json = serde_json::to_string(&combined_log).unwrap();
 
     Response::builder()
-        .status(status_to_return.status_code())
+        .status(status_to_return)
         .header("Content-Type", "application/json")
         .body(Body::from(combined_log_json))
         .map_err(ServerError::from)
 }
 
-async fn health_check_data_plane() -> Result<HealthCheckVersion, ServerError> {
-    let stream = get_connection_to_enclave(ENCLAVE_HEALTH_CHECK_PORT).await?;
+async fn health_check_data_plane() -> DataPlaneHealthCheck {
+    let stream = get_connection_to_enclave(ENCLAVE_HEALTH_CHECK_PORT)
+        .await
+        .map_err(|e| format!("Error connecting to enclave for healthcheck ({e})"))?;
 
-    let (mut sender, connection) = hyper::client::conn::handshake(stream).await?;
+    let (mut sender, connection) = hyper::client::conn::handshake(stream)
+        .await
+        .map_err(|e| format!("Error performing handshake with enclave for healthcheck ({e})"))?;
 
     tokio::spawn(connection);
     let request = Request::builder()
@@ -131,9 +115,6 @@ impl HealthCheckServer {
             "Control plane health-check server running on port {CONTROL_PLANE_HEALTH_CHECK_PORT}"
         );
 
-        // Perform deep healthchecks into the enclave *unless* `DISABLE_DEEP_HEALTH_CHECKS` is set to "true"
-        let skip_deep_healthcheck = env_var_present_and_true!("DISABLE_DEEP_HEALTH_CHECKS");
-
         loop {
             let stream = self.tcp_server.accept().await?;
             let service = hyper::service::service_fn(move |request: Request<Body>| async move {
@@ -144,7 +125,7 @@ impl HealthCheckServer {
                 {
                     Some(b"ECS-HealthCheck") => {
                         let is_draining = IS_DRAINING.get().is_some();
-                        run_ecs_health_check_service(skip_deep_healthcheck, is_draining).await
+                        run_ecs_health_check_service(is_draining).await
                     }
                     _ => Response::builder()
                         .status(400)
@@ -176,7 +157,7 @@ mod health_check_tests {
     #[tokio::test]
     async fn test_enclave_health_check_service() {
         // the data-plane status should error, as its not running
-        let response = run_ecs_health_check_service(false, false).await.unwrap();
+        let response = run_ecs_health_check_service(false).await.unwrap();
         assert_eq!(response.status(), 500);
         println!("deep response: {response:?}");
         let health_check_log = response_to_health_check_log(response).await;
