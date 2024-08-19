@@ -62,12 +62,15 @@ async fn run_ecs_health_check_service(
         }
     };
 
-    let data_plane_status = match &data_plane {
+    let data_plane_log = match &data_plane {
         HealthCheckVersion::V0(log) | HealthCheckVersion::V1(log) => log,
     };
 
-    let status_to_return =
-        std::cmp::max(control_plane.status_code(), data_plane_status.status_code());
+    let status_to_return = [control_plane.status.clone(), data_plane_log.status.clone()]
+        .iter()
+        .max()
+        .unwrap()
+        .clone();
 
     let combined_log = CombinedHealthCheckLog {
         control_plane,
