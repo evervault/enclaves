@@ -7,7 +7,6 @@ on:
       - shared/**
       - .github/workflows/vsock-proxy.yml
       - Cargo.lock
-      - test-actions
 name: vsock-proxy
 jobs:
   check-proxy:

@@ -6,7 +6,6 @@ on:
       - shared/**
       - acme-server
       - .github/workflows/lint.yml
-      - test-actions
 name: Lint
 jobs:
   clippy_check:
