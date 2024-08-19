@@ -13,8 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: dtolnay/rust-toolchain@1.79.0
-        with:
-          target: x86_64-unknown-linux-musl
+        targets: x86_64-unknown-linux-musl
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: "standard-cache"
