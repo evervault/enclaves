@@ -38,7 +38,6 @@ const ENCLAVE_CLOCK_SYNC_INTERVAL: Duration = Duration::from_secs(300);
 fn main() {
     shared::logging::init_env_logger();
     print_version!("Data Plane");
-    println!("test actions!");
 
     #[cfg(feature = "enclave")]
     try_update_fd_limit(ENCLAVE_NOFILE_SOFT_LIMIT, ENCLAVE_NOFILE_HARD_LIMIT);

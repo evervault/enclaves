@@ -5,7 +5,6 @@ mod net;
 use net::{Address, Error, Listener};
 
 fn main() {
-    println!("test actions!");
     let matches = Command::new("vsock-proxy")
         .about("A simple proxy to pipe traffic to/from a vsock connection")
         .arg(

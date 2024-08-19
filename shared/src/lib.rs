@@ -21,7 +21,6 @@ pub const ENCLAVE_IP: &str = "172.20.0.7";
 #[cfg(not(feature = "enclave"))]
 pub const PARENT_IP: &str = "172.20.0.8";
 
-println!("test actions!");
 pub mod acme;
 pub mod logging;
 pub mod rpc;

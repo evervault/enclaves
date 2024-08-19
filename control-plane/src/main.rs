@@ -27,7 +27,6 @@ const CONTROL_PLANE_PORT: u16 = 3031;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    println!("test actions!");
     shared::logging::init_env_logger();
     print_version!("Control Plane");
     log::debug!("Starting control plane on {CONTROL_PLANE_PORT}");

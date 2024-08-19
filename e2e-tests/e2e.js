@@ -1,7 +1,6 @@
-console.log("test actions!");
-const { expect } = require("chai");
-const axios = require("axios").default;
-const https = require("https");
+const { expect } = require('chai');
+const axios = require('axios').default;
+const https = require('https');
 const net = require("net");
 const CBOR = require("cbor-sync");
 
@@ -17,7 +16,7 @@ describe("POST data to enclave", () => {
       .post(
         "https://enclave.localhost:443/hello",
         { secret: "ev:123" },
-        { headers: { "api-key": "placeholder" } },
+        { headers: { "api-key": "placeholder" } }
       )
       .then((result) => {
         console.log("Post request sent to the enclave");
@@ -64,7 +63,7 @@ describe("POST data to enclave", () => {
       })
       .catch((err) => {
         expect(err.response.data.message).to.deep.equal(
-          "getaddrinfo EAI_AGAIN evervault.com",
+          "getaddrinfo EAI_AGAIN evervault.com"
         );
       });
   });
@@ -92,24 +91,21 @@ describe("POST data to enclave", () => {
     const encryptResult = await allowAllCerts.post(
       "https://enclave.localhost:443/encrypt",
       data,
-      { headers: { "api-key": "placeholder" } },
+      { headers: { "api-key": "placeholder" } }
     );
     const decryptResult = await allowAllCerts.post(
       "https://enclave.localhost:443/hello",
       encryptResult.data,
-      { headers: { "api-key": "placeholder" } },
+      { headers: { "api-key": "placeholder" } }
     );
     const { response, ...echoPayload } = decryptResult.data;
     expect(echoPayload).to.deep.equal(data);
   });
 
   it("returns the injected environment", async () => {
-    const result = await allowAllCerts.get(
-      "https://enclave.localhost:443/env",
-      {
-        headers: { "api-key": "placeholder" },
-      },
-    );
+    const result = await allowAllCerts.get("https://enclave.localhost:443/env", {
+      headers: { "api-key": "placeholder" },
+    });
     expect("123").to.deep.equal(result.data.ANOTHER_ENV_VAR);
   });
 
@@ -118,7 +114,7 @@ describe("POST data to enclave", () => {
       .post(
         "https://enclave.localhost:443/attestation-doc",
         {},
-        { headers: { "api-key": "placeholder" }, responseType: "arraybuffer" },
+        { headers: { "api-key": "placeholder" }, responseType: "arraybuffer" }
       )
       .catch((err) => {
         console.error(err);
@@ -126,10 +122,10 @@ describe("POST data to enclave", () => {
       });
     const result = CBOR.decode(doc.data);
     expect(result).to.deep.equal({
-      pcr0: "000",
-      pcr1: "000",
-      pcr2: "000",
-      pcr8: "000",
+        pcr0: "000",
+        pcr1: "000",
+        pcr2: "000",
+        pcr8: "000",
     });
   });
 
@@ -138,7 +134,7 @@ describe("POST data to enclave", () => {
       .post(
         "https://enclave.localhost:443/chunked",
         { secret: "ev:123" },
-        { headers: { "api-key": "placeholder" } },
+        { headers: { "api-key": "placeholder" } }
       )
       .then((result) => {
         console.log("Post request sent to the enclave");
@@ -147,7 +143,7 @@ describe("POST data to enclave", () => {
           secret: "ev:123",
         });
         //check transfer-encoding is not set
-        expect(result.headers["transfer-encoding"]).to.be.undefined;
+        expect(result.headers['transfer-encoding']).to.be.undefined;
       })
       .catch((err) => {
         console.error(err);
@@ -171,16 +167,16 @@ describe("Enclave is runnning", () => {
         const stats = JSON.parse(result);
         const keys = Object.keys(stats);
         expect(keys).to.include(
-          "evervault.enclaves.memory.total;enclave_uuid=enclave_123;app_uuid=app_12345678",
+          "evervault.enclaves.memory.total;enclave_uuid=enclave_123;app_uuid=app_12345678"
         );
         expect(keys).to.include(
-          "evervault.enclaves.memory.avail;enclave_uuid=enclave_123;app_uuid=app_12345678",
+          "evervault.enclaves.memory.avail;enclave_uuid=enclave_123;app_uuid=app_12345678"
         );
         expect(keys).to.include(
-          "evervault.enclaves.cpu.one;enclave_uuid=enclave_123;app_uuid=app_12345678",
+          "evervault.enclaves.cpu.one;enclave_uuid=enclave_123;app_uuid=app_12345678"
         );
         expect(keys).to.include(
-          "evervault.enclaves.cpu.cores;enclave_uuid=enclave_123;app_uuid=app_12345678",
+          "evervault.enclaves.cpu.cores;enclave_uuid=enclave_123;app_uuid=app_12345678"
         );
       } finally {
         sysClient.destroy();
@@ -203,7 +199,7 @@ describe("Enclave is runnning", () => {
         const keys = Object.keys(stats);
 
         expect(keys).to.include(
-          "evervault.enclaves.decrypt.count;enclave_uuid=enclave_123;app_uuid=app_12345678",
+          "evervault.enclaves.decrypt.count;enclave_uuid=enclave_123;app_uuid=app_12345678"
         );
       } finally {
         prodClient.destroy();
@@ -212,4 +208,3 @@ describe("Enclave is runnning", () => {
     });
   });
 });
-
