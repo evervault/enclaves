@@ -20,13 +20,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: "standard-cache"
-      - uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --features enclave -- -D warnings
-      - uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --features not_enclave -- -D warnings
+      - name: Clippy check 
+        run: cargo clippy --features enclave -- -D warnings
       - name: Check formatting
         run: cargo fmt --check

@@ -23,10 +23,8 @@ jobs:
           shared-key: "vsock-proxy"
       - name: Check project
         run: cargo check -p vsock-proxy
-      - uses: actions-rs/clippy-check@v1
-        with:
-          args: -p vsock-proxy
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Clippy lint 
+        run: cargo clippy -p vsock-proxy
       - name: Check formatting
         run: cargo fmt -p vsock-proxy --check
 
