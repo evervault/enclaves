@@ -6,6 +6,7 @@ on:
       - control-plane/**
       - .github/workflows/test-e2e.yml
       - Cargo.lock
+      - test-actions
 name: Run end-to-end tests
 jobs:
   run_e2e_tests_full_features:

@@ -4,6 +4,7 @@ on:
       - shared/**
       - .github/workflows/test-shared-lib.yml
       - Cargo.lock
+      - test-actions
 name: Test Shared Library
 jobs:
   test_shared_lib:
