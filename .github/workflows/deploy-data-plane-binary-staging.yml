@@ -22,6 +22,10 @@ jobs:
       semver-sha: ${{ steps.get-version.outputs.semver-sha }}
     steps:
       - uses: actions/checkout@v4
+      - name: Install MUSL Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
       - uses: dtolnay/rust-toolchain@1.79.0
         with:
           targets: x86_64-unknown-linux-musl
@@ -39,6 +43,11 @@ jobs:
     needs: [get-release-semver]
     steps:
       - uses: actions/checkout@v2
+
+      - name: Install MUSL Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
 
       - uses: dtolnay/rust-toolchain@1.79.0
         with:
