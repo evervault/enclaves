@@ -79,7 +79,7 @@ async fn run_ecs_health_check_service(
     let combined_log_json = serde_json::to_string(&combined_log).unwrap();
 
     Response::builder()
-        .status(status_to_return)
+        .status(status_to_return.status_code())
         .header("Content-Type", "application/json")
         .body(Body::from(combined_log_json))
         .map_err(ServerError::from)
