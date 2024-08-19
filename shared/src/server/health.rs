@@ -1,4 +1,11 @@
 use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum HealthCheckVersion {
+    V0(HealthCheckLog),
+    V1(HealthCheckLog),
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HealthCheckLog {
     pub status: HealthCheckStatus,
