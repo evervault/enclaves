@@ -57,11 +57,11 @@ async fn run_ecs_health_check_service(
     };
 
     let data_plane_status = match &data_plane {
-        HealthCheckVersion::V0(log) => log.status_code(),
-        HealthCheckVersion::V1(log) => log.status_code(),
+        HealthCheckVersion::V0(log) | HealthCheckVersion::V1(log) => log,
     };
 
-    let status_to_return = std::cmp::max(control_plane.status_code(), data_plane_status);
+    let status_to_return =
+        std::cmp::max(control_plane.status_code(), data_plane_status.status_code());
 
     let combined_log = CombinedHealthCheckLog {
         control_plane,
@@ -173,8 +173,7 @@ mod health_check_tests {
         let health_check_log = response_to_health_check_log(response).await;
 
         let dp_status = match health_check_log.data_plane {
-            HealthCheckVersion::V0(log) => log.status,
-            HealthCheckVersion::V1(log) => log.status,
+            HealthCheckVersion::V0(log) | HealthCheckVersion::V1(log) => log.status,
         };
 
         assert!(matches!(dp_status, HealthCheckStatus::Err));
@@ -189,8 +188,7 @@ mod health_check_tests {
         let health_check_log = response_to_health_check_log(response).await;
 
         let dp_status = match health_check_log.data_plane {
-            HealthCheckVersion::V0(log) => log.status,
-            HealthCheckVersion::V1(log) => log.status,
+            HealthCheckVersion::V0(log) | HealthCheckVersion::V1(log) => log.status,
         };
 
         assert!(matches!(dp_status, HealthCheckStatus::Ignored));
@@ -206,8 +204,7 @@ mod health_check_tests {
         let health_check_log = response_to_health_check_log(response).await;
 
         let dp_status = match health_check_log.data_plane {
-            HealthCheckVersion::V0(log) => log.status,
-            HealthCheckVersion::V1(log) => log.status,
+            HealthCheckVersion::V0(log) | HealthCheckVersion::V1(log) => log.status,
         };
 
         assert!(matches!(dp_status, HealthCheckStatus::Err));
