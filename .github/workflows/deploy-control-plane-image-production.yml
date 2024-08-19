@@ -23,11 +23,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: 1.79.0
-          components: rustfmt
-          override: true
+      - uses: dtolnay/rust-toolchain@1.79.0
+        targets: x86_64-unknown-linux-musl
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: "standard-cache"
@@ -41,10 +38,10 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@1.79.0
+        targets: x86_64-unknown-linux-musl
       - name: Build control plane
-        uses: evervault/cargo-static-build@v1.73.0-stable
-        with:
-          cmd: cargo build -p control-plane --features enclave,network_egress,release_logging --release --target ${{ env.LINUX_TARGET }}
+        run: cargo build -p control-plane --features enclave,network_egress,release_logging --release --target ${{ env.LINUX_TARGET }}
       - name: Move control-plane binary to root
         run: cp ./target/${{ env.LINUX_TARGET }}/release/control-plane ./control-plane
       - name: Configure Production AWS Credentials
@@ -80,10 +77,10 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@1.79.0
+        targets: x86_64-unknown-linux-musl
       - name: Build control plane
-        uses: evervault/cargo-static-build@v1.73.0-stable
-        with:
-          cmd: cargo build -p control-plane --features enclave,release_logging --release --target ${{ env.LINUX_TARGET }}
+        run: cargo build -p control-plane --features enclave,release_logging --release --target ${{ env.LINUX_TARGET }}
       - name: Move control-plane binary to root
         run: cp ./target/${{ env.LINUX_TARGET }}/release/control-plane ./control-plane
       - name: Configure Production AWS Credentials

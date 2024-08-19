@@ -13,14 +13,12 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@1.79.0
+        targets: x86_64-unknown-linux-musl
       - name: Build Cages Project
-        uses: evervault/cargo-static-build@v1.73.0-stable
-        with:
-          cmd: cargo build --features network_egress --release --target x86_64-unknown-linux-musl --workspace --exclude vsock-proxy
+        run: cargo build --features network_egress --release --workspace --exclude vsock-proxy
       - name: Build mock crypto API
-        uses: evervault/cargo-static-build@v1.73.0-stable
-        with:
-          cmd: cd e2e-tests/mock-crypto ; cargo build --release --target x86_64-unknown-linux-musl
+        run: cd e2e-tests/mock-crypto ; cargo build --release
         env:
           CARGO_REGISTRIES_EVERVAULT_RUST_LIBRARIES_INDEX: ${{ secrets.RUST_CRYPTO_REGISTRY }}
       - uses: actions-hub/docker/cli@f5fdbfc3f9d2a9265ead8962c1314108a7b7ec5d
@@ -41,14 +39,12 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@1.79.0
+        targets: x86_64-unknown-linux-musl
       - name: Build Cages Project
-        uses: evervault/cargo-static-build@v1.73.0-stable
-        with:
-          cmd: cargo build --release --target x86_64-unknown-linux-musl --features not_enclave --no-default-features --workspace --exclude vsock-proxy
+        run: cargo build --release --features not_enclave --no-default-features --workspace --exclude vsock-proxy
       - name: Build mock crypto API
-        uses: evervault/cargo-static-build@v1.73.0-stable
-        with:
-          cmd: cd e2e-tests/mock-crypto ; cargo build --release --target x86_64-unknown-linux-musl
+        run: cd e2e-tests/mock-crypto ; cargo build --release --target x86_64-unknown-linux-musl
         env:
           CARGO_REGISTRIES_EVERVAULT_RUST_LIBRARIES_INDEX: ${{ secrets.RUST_CRYPTO_REGISTRY }}
       - uses: actions-hub/docker/cli@f5fdbfc3f9d2a9265ead8962c1314108a7b7ec5d
