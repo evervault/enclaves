@@ -53,7 +53,13 @@ async fn run_ecs_health_check_service(
     let data_plane = if skip_deep_healthcheck {
         HealthCheckVersion::V1(HealthCheckLog::new(HealthCheckStatus::Ignored, None))
     } else {
-        health_check_data_plane().await?
+        match health_check_data_plane().await {
+            Ok(v) => v,
+            Err(e) => HealthCheckVersion::V1(HealthCheckLog::new(
+                HealthCheckStatus::Err,
+                Some(e.to_string()),
+            )),
+        }
     };
 
     let data_plane_status = match &data_plane {
