@@ -23,7 +23,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.79.0
-        targets: x86_64-unknown-linux-musl
+        with:
+          targets: x86_64-unknown-linux-musl
       - name: Parse semver from cargo.toml
         id: get-version
         run: |
@@ -40,7 +41,8 @@ jobs:
       - uses: actions/checkout@v2
 
       - uses: dtolnay/rust-toolchain@1.79.0
-        targets: x86_64-unknown-linux-musl
+        with:
+          targets: x86_64-unknown-linux-musl
 
       - name: Configure Staging AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1

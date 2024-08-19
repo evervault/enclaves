@@ -24,7 +24,8 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: dtolnay/rust-toolchain@1.79.0
-        targets: x86_64-unknown-linux-musl
+        with:
+          targets: x86_64-unknown-linux-musl
         components: rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
@@ -40,7 +41,8 @@ jobs:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v2
       - uses: dtolnay/rust-toolchain@1.79.0
-        targets: x86_64-unknown-linux-musl
+        with:
+          targets: x86_64-unknown-linux-musl
       - name: Build control plane
         run: cargo build -p control-plane --features enclave,network_egress,release_logging --release --target ${{ env.LINUX_TARGET }}
       - name: Move control-plane binary to root
@@ -79,7 +81,8 @@ jobs:
       - uses: actions/checkout@v2
       - uses: Swatinem/rust-cache@v2
       - uses: dtolnay/rust-toolchain@1.79.0
-        targets: x86_64-unknown-linux-musl
+        with:
+          targets: x86_64-unknown-linux-musl
       - name: Build control plane
         run: cargo build -p control-plane --features enclave,release_logging --release --target ${{ env.LINUX_TARGET }}
       - name: Move control-plane binary to root
