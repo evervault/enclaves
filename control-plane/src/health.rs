@@ -182,7 +182,8 @@ mod health_check_tests {
         let health_check_log = response_to_health_check_log(response).await;
 
         let dp_status = match health_check_log.data_plane {
-            HealthCheckVersion::V0(log) | HealthCheckVersion::V1(log) => log.status,
+            HealthCheckVersion::V0(log) => panic!("Expected V1 Version"),
+            HealthCheckVersion::V1(log) => log.status,
         };
 
         assert!(matches!(dp_status, HealthCheckStatus::Err));
@@ -197,7 +198,8 @@ mod health_check_tests {
         let health_check_log = response_to_health_check_log(response).await;
 
         let dp_status = match health_check_log.data_plane {
-            HealthCheckVersion::V0(log) | HealthCheckVersion::V1(log) => log.status,
+            HealthCheckVersion::V0(log) => panic!("Expected V1 Version"),
+            HealthCheckVersion::V1(log) => log.status,
         };
 
         assert!(matches!(dp_status, HealthCheckStatus::Ignored));
@@ -213,7 +215,8 @@ mod health_check_tests {
         let health_check_log = response_to_health_check_log(response).await;
 
         let dp_status = match health_check_log.data_plane {
-            HealthCheckVersion::V0(log) | HealthCheckVersion::V1(log) => log.status,
+            HealthCheckVersion::V0(log) => panic!("Expected V1 Version"),
+            HealthCheckVersion::V1(log) => log.status,
         };
 
         assert!(matches!(dp_status, HealthCheckStatus::Err));
