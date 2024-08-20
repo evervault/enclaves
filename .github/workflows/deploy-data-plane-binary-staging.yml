@@ -22,10 +22,13 @@ jobs:
       semver-sha: ${{ steps.get-version.outputs.semver-sha }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
+      - name: Install MUSL Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+      - uses: dtolnay/rust-toolchain@1.79.0
         with:
-          toolchain: 1.79.0
-          override: true
+          targets: x86_64-unknown-linux-musl
       - name: Parse semver from cargo.toml
         id: get-version
         run: |
@@ -41,6 +44,15 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - name: Install MUSL Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - uses: dtolnay/rust-toolchain@1.79.0
+        with:
+          targets: x86_64-unknown-linux-musl
+
       - name: Configure Staging AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -54,9 +66,7 @@ jobs:
 
       # Egress Enabled, TLS Termination Disabled
       - name: Build data-plane (egress enabled, tls termination disabled)
-        uses: evervault/cargo-static-build@v1.73.0-stable
-        with:
-          cmd: cargo build -p data-plane --no-default-features --features enclave,network_egress,release_logging --release --target ${{ env.LINUX_TARGET }}
+        run: cargo build -p data-plane --no-default-features --features enclave,network_egress,release_logging --release --target ${{ env.LINUX_TARGET }}
         env:
           RUSTFLAGS: "--cfg staging"
 
@@ -70,9 +80,7 @@ jobs:
 
       # Egress Enabled, TLS Termination Enabled
       - name: Build data-plane (egress enabled, tls termination enabled)
-        uses: evervault/cargo-static-build@v1.73.0-stable
-        with:
-          cmd: cargo build -p data-plane --features enclave,network_egress,release_logging --release --target ${{ env.LINUX_TARGET }}
+        run: cargo build -p data-plane --features enclave,network_egress,release_logging --release --target ${{ env.LINUX_TARGET }}
         env:
           RUSTFLAGS: "--cfg staging"
 
@@ -86,9 +94,7 @@ jobs:
 
       # Egress Disabled, TLS Termination Disabled
       - name: Build data-plane (egress disabled, tls termination disabled)
-        uses: evervault/cargo-static-build@v1.73.0-stable
-        with:
-          cmd: cargo build -p data-plane --no-default-features --features enclave,release_logging --release --target ${{ env.LINUX_TARGET }}
+        run: cargo build -p data-plane --no-default-features --features enclave,release_logging --release --target ${{ env.LINUX_TARGET }}
         env:
           RUSTFLAGS: "--cfg staging"
 
@@ -102,9 +108,7 @@ jobs:
 
       # Egress Disabled, TLS Termination Enabled
       - name: Build data-plane (egress disabled, tls termination enabled)
-        uses: evervault/cargo-static-build@v1.73.0-stable
-        with:
-          cmd: cargo build -p data-plane --features enclave,release_logging --release --target ${{ env.LINUX_TARGET }}
+        run: cargo build -p data-plane --features enclave,release_logging --release --target ${{ env.LINUX_TARGET }}
         env:
           RUSTFLAGS: "--cfg staging"
 
