@@ -207,7 +207,7 @@ mod test {
                     StatusCode::from_u16(401).unwrap(),
                 ))
             });
-
+        
         let context = EnclaveContext::new(
             "team_uuid".into(),
             "app_uuid".into(),

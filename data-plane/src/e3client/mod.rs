@@ -246,7 +246,7 @@ impl EncryptedDataEntry {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct DecryptRequest {
     body_data: Vec<EncryptedDataEntry>,
     header_data: Vec<Value>,
@@ -255,6 +255,14 @@ pub struct DecryptRequest {
 impl E3Payload for DecryptRequest {}
 
 impl DecryptRequest {
+
+    pub fn new(body_data: Vec<EncryptedDataEntry>, header_data: Vec<Value>) -> DecryptRequest {
+        DecryptRequest {
+            body_data,
+            header_data,
+        }
+    }
+
     pub fn body_data(&self) -> &Vec<EncryptedDataEntry> {
         &self.body_data
     }
