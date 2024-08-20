@@ -23,9 +23,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: "standard-cache"
-      - name: Clippy check 
-        run: cargo clippy --features enclave -- -D warnings
-      - name: Clippy check not enclave
-        run: cargo clippy --features not_enclave -- -D warnings
       - name: Check formatting
         run: cargo fmt --check
+      - name: Clippy
+        uses: clechasseur/rs-clippy-check@v3
+        with:
+          args: --features enclave -- -D warnings
+      - name: Clippy check not enclave
+        uses: clechasseur/rs-clippy-check@v3
+        with:
+          args: --features not_enclave -- -D warnings

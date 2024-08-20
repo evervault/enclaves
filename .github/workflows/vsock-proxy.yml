@@ -27,10 +27,12 @@ jobs:
           shared-key: "vsock-proxy"
       - name: Check project
         run: cargo check -p vsock-proxy
-      - name: Clippy lint 
-        run: cargo clippy -p vsock-proxy -- -D warnings
       - name: Check formatting
-        run: cargo fmt -p vsock-proxy --check
+        run: cargo fmt --check
+      - name: Clippy
+        uses: clechasseur/rs-clippy-check@v3
+        with:
+          args: -p vsock-proxy -- -D warnings
 
   test-proxy:
     runs-on: ubuntu-latest
