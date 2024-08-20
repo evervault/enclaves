@@ -34,9 +34,10 @@ pub async fn run_ecs_health_check_service(
     if is_draining {
         let combined_log = CombinedHealthCheckLog {
             control_plane: ControlPlaneState::Draining,
-            data_plane: HealthCheckVersion::V1(DataPlaneState::Unknown(
+            data_plane: DataPlaneState::Unknown(
                 "Enclave is draining, data-plane health will not be checked".into(),
-            )),
+            )
+            .into(),
         };
 
         let combined_log_json = serde_json::to_string(&combined_log)?;
@@ -48,20 +49,11 @@ pub async fn run_ecs_health_check_service(
     };
 
     let control_plane = ControlPlaneState::Ok;
+    let data_plane = health_check_data_plane().await.unwrap_or_else(|e| {
+        DataPlaneState::Unknown(format!("Failed to contact data-plane for healthcheck: {e}")).into()
+    });
 
-    let data_plane = match health_check_data_plane().await {
-        Ok(state) => state,
-        Err(e) => HealthCheckVersion::V1(DataPlaneState::Unknown(format!(
-            "Failed to contact data-plane for healthcheck: {e}"
-        ))),
-    };
-
-    let data_plane_status_code = match &data_plane {
-        HealthCheckVersion::V0(log) => log.status_code(),
-        HealthCheckVersion::V1(data_plane_state) => data_plane_state.status_code(),
-    };
-
-    let status_to_return = std::cmp::max(control_plane.status_code(), data_plane_status_code);
+    let status_to_return = std::cmp::max(control_plane.status_code(), data_plane.status_code());
 
     let combined_log = CombinedHealthCheckLog {
         control_plane,

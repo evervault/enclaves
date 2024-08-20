@@ -7,6 +7,21 @@ pub enum HealthCheckVersion {
     V1(DataPlaneState),
 }
 
+impl HealthCheckVersion {
+    pub fn status_code(&self) -> u16 {
+        match self {
+            HealthCheckVersion::V0(log) => log.status_code(),
+            HealthCheckVersion::V1(dp_state) => dp_state.status_code(),
+        }
+    }
+}
+
+impl From<DataPlaneState> for HealthCheckVersion {
+    fn from(state: DataPlaneState) -> Self {
+        HealthCheckVersion::V1(state)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HealthCheckLog {
     pub status: HealthCheckStatus,
@@ -18,6 +33,7 @@ impl HealthCheckLog {
         HealthCheckLog { status, message }
     }
 
+    // we cannot remove this or it will break serialization with old data-planes
     pub fn status_code(&self) -> u16 {
         self.status.status_code()
     }
