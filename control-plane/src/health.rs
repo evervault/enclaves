@@ -5,7 +5,7 @@ use hyper::{Body, Request, Response};
 use serde::{Deserialize, Serialize};
 use shared::server::{
     error::ServerResult,
-    health::{ControlPlaneState, DataPlaneState, HealthCheck},
+    health::{ControlPlaneState, DataPlaneState, HealthCheck, HealthCheckLog, HealthCheckVersion},
     tcp::TcpServer,
     Listener,
 };
@@ -25,7 +25,7 @@ pub struct HealthCheckServer {
 #[serde(rename_all = "camelCase")]
 struct CombinedHealthCheckLog {
     control_plane: ControlPlaneState,
-    data_plane: DataPlaneState,
+    data_plane: HealthCheckVersion,
 }
 
 pub async fn run_ecs_health_check_service(
@@ -34,9 +34,9 @@ pub async fn run_ecs_health_check_service(
     if is_draining {
         let combined_log = CombinedHealthCheckLog {
             control_plane: ControlPlaneState::Draining,
-            data_plane: DataPlaneState::Unknown(
+            data_plane: HealthCheckVersion::V1(DataPlaneState::Unknown(
                 "Enclave is draining, data-plane health will not be checked".into(),
-            ),
+            )),
         };
 
         let combined_log_json = serde_json::to_string(&combined_log)?;
@@ -48,18 +48,20 @@ pub async fn run_ecs_health_check_service(
     };
 
     let control_plane = ControlPlaneState::Ok;
+
     let data_plane = match health_check_data_plane().await {
         Ok(state) => state,
-        Err(e) => {
-            DataPlaneState::Unknown(format!("Failed to contact data-plane for healthcheck: {e}"))
-        }
+        Err(e) => HealthCheckVersion::V1(DataPlaneState::Unknown(format!(
+            "Failed to contact data-plane for healthcheck: {e}"
+        ))),
     };
 
-    let data_plane_log = match &data_plane {
-        HealthCheckVersion::V0(log) | HealthCheckVersion::V1(log) => log,
+    let data_plane_status_code = match &data_plane {
+        HealthCheckVersion::V0(log) => log.status_code(),
+        HealthCheckVersion::V1(data_plane_state) => data_plane_state.status_code(),
     };
 
-    let status_to_return = std::cmp::max(control_plane.status_code(), data_plane.status_code());
+    let status_to_return = std::cmp::max(control_plane.status_code(), data_plane_status_code);
 
     let combined_log = CombinedHealthCheckLog {
         control_plane,
@@ -74,7 +76,7 @@ pub async fn run_ecs_health_check_service(
         .map_err(ServerError::from)
 }
 
-type EcsHealthCheckResult = Result<DataPlaneState, ServerError>;
+type EcsHealthCheckResult = Result<HealthCheckVersion, ServerError>;
 
 async fn health_check_data_plane() -> EcsHealthCheckResult {
     let stream = get_connection_to_enclave(ENCLAVE_HEALTH_CHECK_PORT).await?;
@@ -101,7 +103,7 @@ async fn health_check_data_plane() -> EcsHealthCheckResult {
 
     Ok(match content_type {
         Some("application/json;version=1") => {
-            HealthCheckVersion::V1(serde_json::from_slice::<HealthCheckLog>(bytes)?)
+            HealthCheckVersion::V1(serde_json::from_slice::<DataPlaneState>(bytes)?)
         }
         _ => HealthCheckVersion::V0(serde_json::from_slice::<HealthCheckLog>(bytes)?),
     })
@@ -169,29 +171,12 @@ mod health_check_tests {
         println!("deep response: {response:?}");
         let health_check_log = response_to_health_check_log(response).await;
 
-        let dp_status = match health_check_log.data_plane {
-            HealthCheckVersion::V0(log) | HealthCheckVersion::V1(log) => log.status,
+        let dp_state = match health_check_log.data_plane {
+            HealthCheckVersion::V1(log) => log,
+            _ => panic!("Expected V1 log"),
         };
 
-        assert!(matches!(dp_status, HealthCheckStatus::Err));
-    }
-
-    #[tokio::test]
-    async fn test_enclave_health_check_service_with_skip_deep_set_to_true() {
-        // the data-plane status should error, as its not running
-        let response = run_ecs_health_check_service(true, false).await.unwrap();
-        assert_eq!(response.status(), 200);
-        println!("deep response: {response:?}");
-        let health_check_log = response_to_health_check_log(response).await;
-
-        let dp_status = match health_check_log.data_plane {
-            HealthCheckVersion::V0(log) | HealthCheckVersion::V1(log) => log.status,
-        };
-
-        assert!(matches!(
-            dp_status,
-            DataPlaneState::Unknown(_)
-        ));
+        assert!(matches!(dp_state, DataPlaneState::Unknown(_)));
     }
 
     #[tokio::test]
@@ -203,14 +188,12 @@ mod health_check_tests {
         println!("deep response: {response:?}");
         let health_check_log = response_to_health_check_log(response).await;
 
-        let dp_status = match health_check_log.data_plane {
-            HealthCheckVersion::V0(log) | HealthCheckVersion::V1(log) => log.status,
+        let dp_state = match health_check_log.data_plane {
+            HealthCheckVersion::V1(log) => log,
+            _ => panic!("Expected V1 log"),
         };
 
-        assert!(matches!(
-            health_check_log.data_plane,
-            DataPlaneState::Unknown(_)
-        ));
+        assert!(matches!(dp_state, DataPlaneState::Unknown(_)));
         assert!(matches!(
             health_check_log.control_plane,
             ControlPlaneState::Draining

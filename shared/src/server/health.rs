@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(untagged)]
 pub enum HealthCheckVersion {
     V0(HealthCheckLog),
-    V1(HealthCheckLog),
+    V1(DataPlaneState),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -81,7 +82,7 @@ impl HealthCheck for DataPlaneState {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum DataPlaneState {
     Unknown(String),
     Provisioning,
@@ -90,13 +91,13 @@ pub enum DataPlaneState {
     Initialized(DataPlaneDiagnostic),
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DataPlaneDiagnostic {
     pub is_healthy: bool,
     pub customer_process: CustomerProcessHealth,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CustomerProcessHealth {
     pub status_code: u16,
     pub response: Option<serde_json::Value>,
