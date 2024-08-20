@@ -23,7 +23,8 @@ jobs:
       - name: Build Cages Project
         run: cargo build --features network_egress --release --workspace --exclude vsock-proxy
       - name: Build mock crypto API
-        run: cd e2e-tests/mock-crypto ; cargo build --release
+        working-directory: e2e-tests/mock-crypto
+        run: cargo build --release
         env:
           CARGO_REGISTRIES_EVERVAULT_RUST_LIBRARIES_INDEX: ${{ secrets.RUST_CRYPTO_REGISTRY }}
       - uses: actions-hub/docker/cli@f5fdbfc3f9d2a9265ead8962c1314108a7b7ec5d
@@ -54,7 +55,8 @@ jobs:
       - name: Build Cages Project
         run: cargo build --release --features not_enclave --no-default-features --workspace --exclude vsock-proxy
       - name: Build mock crypto API
-        run: cd e2e-tests/mock-crypto ; cargo build --release --target x86_64-unknown-linux-musl
+        working-directory: e2e-tests/mock-crypto
+        run: cargo build --release --target x86_64-unknown-linux-musl
         env:
           CARGO_REGISTRIES_EVERVAULT_RUST_LIBRARIES_INDEX: ${{ secrets.RUST_CRYPTO_REGISTRY }}
       - uses: actions-hub/docker/cli@f5fdbfc3f9d2a9265ead8962c1314108a7b7ec5d
