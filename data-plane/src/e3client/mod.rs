@@ -248,33 +248,43 @@ impl EncryptedDataEntry {
 
 #[derive(Serialize, Deserialize)]
 pub struct DecryptRequest {
-    data: Vec<EncryptedDataEntry>,
+    body_data: Vec<EncryptedDataEntry>,
+    header_data: Vec<Value>,
 }
 
 impl E3Payload for DecryptRequest {}
 
 impl DecryptRequest {
-    pub fn data(&self) -> &Vec<EncryptedDataEntry> {
-        &self.data
+    pub fn body_data(&self) -> &Vec<EncryptedDataEntry> {
+        &self.body_data
+    }
+    pub fn header_data(&self) -> &Vec<Value> {
+        &self.header_data
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CryptoRequest {
-    pub data: Value,
+    pub body_data: Value,
+    pub header_data: Option<Value>,
 }
 
 impl CryptoRequest {
-    pub fn new(data: Value) -> CryptoRequest {
-        CryptoRequest { data }
+    pub fn new(body_data: Value, header_data: Option<Value>) -> CryptoRequest {
+        CryptoRequest { body_data, header_data }
     }
 }
 
 impl E3Payload for CryptoRequest {}
 impl CryptoRequest {
-    pub fn data(&self) -> &Value {
-        &self.data
+    pub fn body_data(&self) -> &Value {
+        &self.body_data
     }
+
+    pub fn header_data(&self) -> &Option<Value> {
+        &self.header_data
+    }
+
     pub fn to_vec(&self) -> Vec<u8> {
         serde_json::to_vec(self).unwrap()
     }

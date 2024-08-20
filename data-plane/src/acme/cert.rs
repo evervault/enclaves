@@ -478,7 +478,8 @@ impl AcmeCertificateRetreiver {
     ) -> Result<RawAcmeCertificate, AcmeError> {
         let e3_response: CryptoResponse = e3_client
             .decrypt(CryptoRequest {
-                data: json!(encrypted_raw_acme_certificate),
+                body_data: json!(encrypted_raw_acme_certificate),
+                header_data: None,
             })
             .await?;
 
@@ -494,7 +495,8 @@ impl AcmeCertificateRetreiver {
         let e3_response: CryptoResponse = e3_client
             .encrypt(
                 CryptoRequest {
-                    data: json!(raw_acme_certificate),
+                    body_data: json!(raw_acme_certificate),
+                    header_data: None,
                 },
                 None,
             )

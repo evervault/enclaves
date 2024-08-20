@@ -116,7 +116,7 @@ impl CryptoApi {
         let body_bytes = hyper::body::to_bytes(body).await?;
         let body: Value =
             serde_json::from_slice(&body_bytes).map_err(|_| CryptoApiError::SerializationError)?;
-        let payload = CryptoRequest::new(body);
+        let payload = CryptoRequest::new(body, None);
         Ok(payload)
     }
 
