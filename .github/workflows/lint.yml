@@ -24,8 +24,8 @@ jobs:
         with:
           shared-key: "standard-cache"
       - name: Clippy check 
-        run: cargo clippy --features enclave
+        run: cargo clippy --features enclave -- -D warnings
       - name: Clippy check not enclave
-        run: cargo clippy --features not_enclave
+        run: cargo clippy --features not_enclave -- -D warnings
       - name: Check formatting
         run: cargo fmt --check
