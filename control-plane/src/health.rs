@@ -163,12 +163,12 @@ mod health_check_tests {
         println!("deep response: {response:?}");
         let health_check_log = response_to_health_check_log(response).await;
 
-        let dp_status = match health_check_log.data_plane {
-            HealthCheckVersion::V0(log) => panic!("Expected V1 Version"),
-            HealthCheckVersion::V1(log) => log.status,
+        let dp_state = match health_check_log.data_plane {
+            HealthCheckVersion::V0(_) => panic!("Expected V1 Version"),
+            HealthCheckVersion::V1(state) => state,
         };
 
-        assert!(matches!(dp_status, HealthCheckStatus::Err));
+        assert!(matches!(dp_state, DataPlaneState::Unknown(_)));
     }
 
     #[tokio::test]
@@ -180,15 +180,15 @@ mod health_check_tests {
         println!("deep response: {response:?}");
         let health_check_log = response_to_health_check_log(response).await;
 
-        let dp_status = match health_check_log.data_plane {
-            HealthCheckVersion::V0(log) => panic!("Expected V1 Version"),
-            HealthCheckVersion::V1(log) => log.status,
+        let dp_state = match health_check_log.data_plane {
+            HealthCheckVersion::V0(_) => panic!("Expected V1 Version"),
+            HealthCheckVersion::V1(state) => state,
         };
 
-        assert!(matches!(dp_status, HealthCheckStatus::Err));
+        assert!(matches!(dp_state, DataPlaneState::Unknown(_)));
         assert!(matches!(
-            health_check_log.control_plane.status,
-            HealthCheckStatus::Err
+            health_check_log.control_plane,
+            ControlPlaneState::Draining
         ));
     }
 }
