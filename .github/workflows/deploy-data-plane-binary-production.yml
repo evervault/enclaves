@@ -39,11 +39,16 @@ jobs:
           aws-region: us-east-1
 
       - uses: Swatinem/rust-cache@v2
+      - name: Install MUSL Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+      - uses: dtolnay/rust-toolchain@1.79.0
+        with:
+          targets: x86_64-unknown-linux-musl
 
       - name: Build data-plane (egress enabled, tls termination enabled)
-        uses: evervault/cargo-static-build@v1.73.0-stable
-        with:
-          cmd: cargo build -p data-plane --features enclave,network_egress,release_logging --release --target ${{ env.LINUX_TARGET }}
+        run: cargo build -p data-plane --features enclave,network_egress,release_logging --release --target ${{ env.LINUX_TARGET }}
 
       - name: Upload data-plane to S3 (egress enabled, tls termination enabled)
         env:
@@ -53,9 +58,7 @@ jobs:
           aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
 
       - name: Build data-plane (egress enabled, tls termination disabled)
-        uses: evervault/cargo-static-build@v1.73.0-stable
-        with:
-          cmd: cargo build -p data-plane --no-default-features --features enclave,network_egress,release_logging --release --target ${{ env.LINUX_TARGET }}
+        run: cargo build -p data-plane --no-default-features --features enclave,network_egress,release_logging --release --target ${{ env.LINUX_TARGET }}
 
       - name: Upload data-plane to S3 (egress enabled, tls termination disabled)
         env:
@@ -65,9 +68,7 @@ jobs:
           aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
 
       - name: Build data-plane (egress disabled, tls termination enabled)
-        uses: evervault/cargo-static-build@v1.73.0-stable
-        with:
-          cmd: cargo build -p data-plane --features enclave,release_logging --release --target ${{ env.LINUX_TARGET }}
+        run: cargo build -p data-plane --features enclave,release_logging --release --target ${{ env.LINUX_TARGET }}
 
       - name: Upload data-plane to S3 (egress disabled, tls termination enabled)
         env:
@@ -77,9 +78,7 @@ jobs:
           aws s3 cp ./target/${{ env.LINUX_TARGET }}/release/data-plane s3://cage-build-assets-${{ env.STAGE }}/runtime/${{ env.VERSION_TAG }}/data-plane/${{ env.FEATURE_LABEL }}
 
       - name: Build data-plane (egress disabled, tls termination disabled)
-        uses: evervault/cargo-static-build@v1.73.0-stable
-        with:
-          cmd: cargo build -p data-plane --no-default-features --features enclave,release_logging --release --target ${{ env.LINUX_TARGET }}
+        run: cargo build -p data-plane --no-default-features --features enclave,release_logging --release --target ${{ env.LINUX_TARGET }}
 
       - name: Upload data-plane to S3 (egress disabled, tls termination disabled)
         env:
