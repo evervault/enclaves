@@ -68,9 +68,7 @@ pub async fn run_ecs_health_check_service(
         .map_err(ServerError::from)
 }
 
-type EcsHealthCheckResult = Result<HealthCheckVersion, ServerError>;
-
-async fn health_check_data_plane() -> EcsHealthCheckResult {
+async fn health_check_data_plane() -> Result<HealthCheckVersion, ServerError> {
     let stream = get_connection_to_enclave(ENCLAVE_HEALTH_CHECK_PORT).await?;
 
     let (mut sender, connection) = hyper::client::conn::handshake(stream).await?;
@@ -93,12 +91,14 @@ async fn health_check_data_plane() -> EcsHealthCheckResult {
 
     let bytes = &hyper::body::to_bytes(response).await?;
 
-    Ok(match content_type {
+    let hc = match content_type {
         Some("application/json;version=1") => {
             HealthCheckVersion::V1(serde_json::from_slice::<DataPlaneState>(bytes)?)
         }
         _ => HealthCheckVersion::V0(serde_json::from_slice::<HealthCheckLog>(bytes)?),
-    })
+    };
+
+    Ok(hc)
 }
 
 impl HealthCheckServer {
@@ -163,12 +163,12 @@ mod health_check_tests {
         println!("deep response: {response:?}");
         let health_check_log = response_to_health_check_log(response).await;
 
-        let dp_state = match health_check_log.data_plane {
-            HealthCheckVersion::V1(log) => log,
-            _ => panic!("Expected V1 log"),
+        let dp_status = match health_check_log.data_plane {
+            HealthCheckVersion::V0(log) => panic!("Expected V1 Version"),
+            HealthCheckVersion::V1(log) => log.status,
         };
 
-        assert!(matches!(dp_state, DataPlaneState::Unknown(_)));
+        assert!(matches!(dp_status, HealthCheckStatus::Err));
     }
 
     #[tokio::test]
@@ -180,15 +180,15 @@ mod health_check_tests {
         println!("deep response: {response:?}");
         let health_check_log = response_to_health_check_log(response).await;
 
-        let dp_state = match health_check_log.data_plane {
-            HealthCheckVersion::V1(log) => log,
-            _ => panic!("Expected V1 log"),
+        let dp_status = match health_check_log.data_plane {
+            HealthCheckVersion::V0(log) => panic!("Expected V1 Version"),
+            HealthCheckVersion::V1(log) => log.status,
         };
 
-        assert!(matches!(dp_state, DataPlaneState::Unknown(_)));
+        assert!(matches!(dp_status, HealthCheckStatus::Err));
         assert!(matches!(
-            health_check_log.control_plane,
-            ControlPlaneState::Draining
+            health_check_log.control_plane.status,
+            HealthCheckStatus::Err
         ));
     }
 }
