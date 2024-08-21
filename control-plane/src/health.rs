@@ -108,12 +108,14 @@ async fn health_check_data_plane() -> Result<HealthCheckVersion, ServerError> {
 
     let bytes = &hyper::body::to_bytes(response).await?;
 
-    Ok(match content_type {
+    let json = match content_type {
         Some("application/json;version=1") => {
             HealthCheckVersion::V1(serde_json::from_slice::<HealthCheckLog>(bytes)?)
         }
         _ => HealthCheckVersion::V0(serde_json::from_slice::<HealthCheckLog>(bytes)?),
-    })
+    };
+
+    Ok(json)
 }
 
 impl HealthCheckServer {

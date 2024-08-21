@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
 
+/// This is for representing healthcheck verions across the control-plane <-> data-plane http
+/// boundary. It's not tied to v0/v1 enclaves release. There are many v1 enclaves that will
+/// report v0 healthchecks until they are updated.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum HealthCheckVersion {
     V0(HealthCheckLog),
