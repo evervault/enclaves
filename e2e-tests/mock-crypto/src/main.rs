@@ -109,11 +109,11 @@ async fn encryption_handler(
 }
 
 async fn decryption_handler(
-  extract::Json(mut request_payload): extract::Json<RequestPayload>
-) -> Result<Json<RequestPayload>, Infallible> {
+  extract::Json(mut payload): extract::Json<Value>,
+) -> Result<impl IntoResponse, Infallible> {
   println!("[Mock Crypto API] - Recieved request to decrypt!");
-  decrypt(request_payload.data_mut());
-  Ok(Json(request_payload))
+  decrypt(&mut payload);
+  Ok(Json(payload))
 }
 
 async fn authentication_handler(headers: HeaderMap) -> impl IntoResponse {
