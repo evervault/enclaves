@@ -33,7 +33,6 @@ impl HealthCheckLog {
         HealthCheckLog { status, message }
     }
 
-    // we cannot remove this or it will break serialization with old data-planes
     pub fn status_code(&self) -> u16 {
         self.status.status_code()
     }
@@ -95,6 +94,12 @@ impl HealthCheck for DataPlaneState {
             DataPlaneState::Initialized(diagnostic) if diagnostic.is_healthy => 200,
             _ => 500,
         }
+    }
+}
+
+impl HealthCheck for HealthCheckLog {
+    fn status_code(&self) -> u16 {
+        self.status_code()
     }
 }
 
