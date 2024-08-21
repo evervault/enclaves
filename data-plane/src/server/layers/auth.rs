@@ -207,7 +207,7 @@ mod test {
                     StatusCode::from_u16(401).unwrap(),
                 ))
             });
-        
+
         let context = EnclaveContext::new(
             "team_uuid".into(),
             "app_uuid".into(),
@@ -243,12 +243,12 @@ mod test {
 
         let result = auth_request(&api_key, &context, Arc::new(e3_test_client)).await;
         assert!(result.is_err());
-        let returned_err = result.unwrap_err();
+        let _returned_err = result.unwrap_err();
         assert!(matches!(
             AuthError::InternalError(ClientError::FailedRequest(
                 StatusCode::from_u16(500).unwrap()
             )),
-            returned_err
+            _returned_err
         ));
     }
 }

@@ -67,8 +67,7 @@ impl Environment {
             let e3_response: CryptoResponse = self
                 .e3_client
                 .decrypt(CryptoRequest {
-                    body_data: json!(encrypted_env.clone()),
-                    header_data: None,
+                    data: json!(encrypted_env.clone()),
                 })
                 .await?;
             let mut decrypted_env: Vec<Secret> = serde_json::from_value(e3_response.data)?;

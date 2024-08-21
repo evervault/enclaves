@@ -1,19 +1,19 @@
 use futures::StreamExt;
+use hyper::header::HeaderName;
+use hyper::header::HeaderValue;
 use hyper::http::{Request, Response};
 use hyper::Body;
-use serde_json::Map;
-use serde_json::Value;
-use shared::logging::TrxContextBuilder;
-use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use thiserror::Error;
 use tower::{Layer, Service};
-use futures::future;
 
 use crate::base_tls_client::ClientError;
-use crate::e3client::{CryptoRequest, DecryptRequest, E3Api, E3Client};
+use crate::e3client::EncryptedDataEntry;
+use crate::e3client::EncryptedHeader;
+use crate::e3client::{AutoDecryptRequest, E3Api};
+use shared::logging::TrxContextBuilder;
 
 #[derive(Debug, Error)]
 pub enum DecryptError {
@@ -110,20 +110,17 @@ where
                 .remove::<TrxContextBuilder>()
                 .expect("No context set on received request");
             let (mut req_info, req_body) = req.into_parts();
-            let encrypted_headers: Vec<Value> = req_info
+            let encrypted_headers: Vec<EncryptedHeader> = req_info
                 .headers
                 .clone()
                 .into_iter()
                 .filter_map(|(header_name, header_value)| {
-                    let header_val = header_value.to_str().unwrap();
+                    let header_val = header_value.to_str().ok()?;
                     if header_val.starts_with("ev:") {
-                        let mut test: Map<String, Value> = Map::new();
-                        test.insert(
-                            header_name.clone().unwrap().to_string(),
-                            serde_json::Value::String(header_val.to_string()),
-                        );
-                        println!("test {:?}", test);
-                        Some(serde_json::Value::Object(test))
+                        Some(EncryptedHeader::new(
+                            header_name?.to_string(),
+                            header_val.to_string(),
+                        ))
                     } else {
                         None
                     }
@@ -158,12 +155,9 @@ where
 
             let mut bytes_vec = request_bytes.to_vec();
             if !decryption_payload.is_empty() || !encrypted_headers.is_empty() {
-                let request_payload = CryptoRequest::new(
-                    serde_json::Value::Array(decryption_payload),
-                    Some(serde_json::Value::Array(encrypted_headers)),
-                );
-                println!("About to decrypt");
-                let decrypted: DecryptRequest =
+                let request_payload =
+                    AutoDecryptRequest::new(decryption_payload, encrypted_headers);
+                let decrypted: AutoDecryptRequest =
                     match e3_client.decrypt_with_retries(2, request_payload).await {
                         Ok(decrypted) => decrypted,
                         Err(e) => {
@@ -179,7 +173,14 @@ where
                 req_info
                     .headers
                     .insert("content-length", bytes_vec.len().into());
+                decrypted.header_data().iter().for_each(|header| {
+                    req_info.headers.insert(
+                        HeaderName::try_from(header.key().clone()).unwrap(),
+                        HeaderValue::from_str(&header.value()).unwrap(),
+                    );
+                });
             }
+
             let mut decrypted_request = hyper::Request::from_parts(req_info, Body::from(bytes_vec));
             context.n_decrypted_fields(n_decrypts);
             decrypted_request.extensions_mut().insert(context);
@@ -188,23 +189,8 @@ where
     }
 }
 
-fn swap_encrypted_headers(
-    req: &mut Request<Body>,
-    encrypted_headers: Vec<(
-        Option<hyper::header::HeaderName>,
-        hyper::header::HeaderValue,
-    )>,
-) {
-    encrypted_headers
-        .iter()
-        .for_each(|(header_name, header_value)| {
-            req.headers_mut()
-                .insert(header_name.clone().unwrap(), header_value.clone());
-        });
-}
-
 fn inject_decrypted_values_into_request_vec(
-    decrypted_values: &DecryptRequest,
+    decrypted_values: &AutoDecryptRequest,
     request_bytes: &mut Vec<u8>,
 ) {
     decrypted_values.body_data().iter().rev().for_each(|entry| {
@@ -223,7 +209,7 @@ fn inject_decrypted_values_into_request_vec(
 
 async fn extract_ciphertexts_from_payload(
     incoming_payload: &[u8],
-) -> Result<Vec<serde_json::Value>, DecryptError> {
+) -> Result<Vec<EncryptedDataEntry>, DecryptError> {
     let mut stream_reader =
         crate::crypto::stream::IncomingStreamDecoder::create_reader(incoming_payload);
 
@@ -234,69 +220,153 @@ async fn extract_ciphertexts_from_payload(
             _ => continue,
         };
 
-        let ciphertext_item = serde_json::json!({
-            "range": range,
-            "value": ciphertext.to_string()
-        });
-        decryption_payload.push(ciphertext_item);
+        let encrypted_data = EncryptedDataEntry::new(range, ciphertext.to_string());
+        decryption_payload.push(encrypted_data);
     }
     Ok(decryption_payload)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::e3client::{mock::MockE3TestClient, E3Payload};
+    use crate::e3client::{mock::MockE3TestClient, EncryptedHeader};
 
     use super::*;
+    use hyper::body::to_bytes;
     use hyper::{header::HeaderValue, Body, Response};
+    use serde_json::json;
+    use serde_json::Value;
     use shared::logging::RequestType;
-    use tower::{service_fn, ServiceExt};
+    use shared::logging::TrxContextBuilder;
+    use tower::service_fn;
 
     #[tokio::test]
-    async fn test_decrypt_service() {
+    async fn test_decrypt_header_and_body() {
         let mut e3_test_client = MockE3TestClient::new();
-        let response_payload = CryptoRequest::new(Value::Null, Some(Value::Null));
-        let response_payload2 = CryptoRequest::new(Value::Null, Some(Value::Null));
-
-        // let con = Ok(CryptoRequest::new(Value::Null, Some(Value::Null))); 
-        // e3_test_client
-        //     .expect_decrypt_with_retries()
-        //     .return_const(*&con);
-
-        e3_test_client
-            .expect_decrypt_with_retries()
-            .returning(move |_, _: CryptoRequest| Ok(response_payload2.clone()));
+        let response_payload = AutoDecryptRequest::new(
+            vec![EncryptedDataEntry::new((8, 117), "Hello, World!".to_string())],
+            vec![EncryptedHeader::new(
+                "Test".to_string(),
+                "Hello, World!".to_string(),
+            )],
+        );
+        let encrypted_header_key = "Test";
 
         e3_test_client
-            .expect_decrypt()
-            .returning(move |_: CryptoRequest| Ok(response_payload.clone()));
+            .expect_decrypt_with_retries::<AutoDecryptRequest, AutoDecryptRequest>()
+            .times(1)
+            .returning(move |_, _: AutoDecryptRequest| Ok(response_payload.clone()));
 
-
-        let echo_service = service_fn(|req: Request<Body>| async {
+        let mock_service = service_fn(|req: Request<Body>| async {
             let (parts, body) = req.into_parts();
-            let body = hyper::body::to_bytes(body).await?;
-            Ok::<_, hyper::Error>(Response::new(Body::from(body)))
+            let mut response = Response::new(Body::from(body));
+            parts.headers.iter().for_each(|(key, val)| {
+                response.headers_mut().insert(key, val.clone());
+            });
+
+            Ok::<_, hyper::Error>(response)
         });
 
         let mut service = DecryptService {
             e3_client: Arc::new(e3_test_client),
-            inner: echo_service,
+            inner: mock_service,
         };
-        let mut trx_ctx = TrxContextBuilder::init_trx_context_with_enclave_details(
+
+        let mut headers = hyper::HeaderMap::new();
+        headers.append(
+            encrypted_header_key,
+            HeaderValue::from_str("ev:encrypted").unwrap(),
+        );
+        let mut request = Request::new(Body::from(
+            json!({
+                "test": "ev:Tk9D:boolean:YGJVktHhdj3ds3wC:A6rkaTU8lez7NSBT8nTqbhBIu3tX4/lyH3aJVBUcGmLh:8hI5qEp32kWcVK367yaC09bDRbk:$"
+            })
+            .to_string(),
+        ));
+
+        request.extensions_mut().insert(get_test_trx());
+        request.headers_mut().extend(headers);
+
+        let response = service.call(request).await.unwrap();
+        let (parts, body) = response.into_parts();
+        let bytes = to_bytes(body).await.unwrap();
+        let json: Value = serde_json::from_slice(&bytes).unwrap();
+
+        assert_eq!(
+            parts
+                .headers
+                .get(encrypted_header_key)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "Hello, World!"
+        );
+        assert_eq!(
+            json!({
+                "test": "Hello, World!"
+            }),
+            json
+        );
+    }
+
+    #[tokio::test]
+    async fn test_noop_with_plaintext_header() {
+        let mut e3_test_client = MockE3TestClient::new();
+        let header_key = "Test";
+
+        e3_test_client
+            .expect_decrypt_with_retries::<AutoDecryptRequest, AutoDecryptRequest>()
+            .times(0);
+
+        let mock_service = service_fn(|req: Request<Body>| async {
+            let (parts, body) = req.into_parts();
+            let mut response = Response::new(Body::from(body));
+            parts.headers.iter().for_each(|(key, val)| {
+                response.headers_mut().insert(key, val.clone());
+            });
+
+            Ok::<_, hyper::Error>(response)
+        });
+
+        let mut service = DecryptService {
+            e3_client: Arc::new(e3_test_client),
+            inner: mock_service,
+        };
+
+        let mut headers = hyper::HeaderMap::new();
+        headers.append(header_key, HeaderValue::from_str("plaintext").unwrap());
+        let mut request = Request::new(Body::from(
+            json!({
+                "test": "test"
+            })
+            .to_string(),
+        ));
+
+        request.extensions_mut().insert(get_test_trx());
+        request.headers_mut().extend(headers);
+
+        let response = service.call(request).await.unwrap();
+
+        assert_eq!(
+            response
+                .headers()
+                .get(header_key)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "plaintext"
+        );
+    }
+
+    fn get_test_trx() -> TrxContextBuilder {
+        TrxContextBuilder::init_trx_context_with_enclave_details(
             "uuid",
             "name",
             "team_uuid",
             "app_uuid",
             RequestType::HTTP,
-        );
-        let mut headers = hyper::HeaderMap::new();
-        headers.append("Test", HeaderValue::from_str("ev:encrypted").unwrap());
-        let mut request = Request::new(Body::from("Hello, World!"));
-        request.extensions_mut().insert(trx_ctx);
-        request.headers_mut().extend(headers);
-        let response = service.call(request).await.unwrap();
-        let body_bytes = hyper::body::to_bytes(response.into_body()).await.unwrap();
-
-        assert_eq!(&body_bytes[..], b"Hello, World!");
+        )
+        .uri(Some("test".to_string()))
+        .request_method(Some("GET".to_string()))
+        .clone()
     }
 }

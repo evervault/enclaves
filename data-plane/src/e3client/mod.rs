@@ -229,7 +229,7 @@ impl<C: Deref<Target = crate::EnclaveContext>> std::convert::From<C> for AuthReq
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EncryptedDataEntry {
     range: (usize, usize),
-    value: Value,
+    value: String,
 }
 
 impl EncryptedDataEntry {
@@ -237,27 +237,29 @@ impl EncryptedDataEntry {
         self.range
     }
 
-    pub fn value(&self) -> &Value {
+    pub fn value(&self) -> &String {
         &self.value
     }
 
-    pub fn new(range: (usize, usize), value: Value) -> Self {
+    pub fn new(range: (usize, usize), value: String) -> Self {
         Self { range, value }
     }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct DecryptRequest {
+pub struct AutoDecryptRequest {
     body_data: Vec<EncryptedDataEntry>,
-    header_data: Vec<Value>,
+    header_data: Vec<EncryptedHeader>,
 }
 
-impl E3Payload for DecryptRequest {}
+impl E3Payload for AutoDecryptRequest {}
 
-impl DecryptRequest {
-
-    pub fn new(body_data: Vec<EncryptedDataEntry>, header_data: Vec<Value>) -> DecryptRequest {
-        DecryptRequest {
+impl AutoDecryptRequest {
+    pub fn new(
+        body_data: Vec<EncryptedDataEntry>,
+        header_data: Vec<EncryptedHeader>,
+    ) -> AutoDecryptRequest {
+        AutoDecryptRequest {
             body_data,
             header_data,
         }
@@ -266,31 +268,46 @@ impl DecryptRequest {
     pub fn body_data(&self) -> &Vec<EncryptedDataEntry> {
         &self.body_data
     }
-    pub fn header_data(&self) -> &Vec<Value> {
+    pub fn header_data(&self) -> &Vec<EncryptedHeader> {
         &self.header_data
     }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct EncryptedHeader {
+    key: String,
+    value: String,
+}
+
+impl EncryptedHeader {
+    pub fn key(&self) -> &String {
+        &self.key
+    }
+
+    pub fn value(&self) -> &String {
+        &self.value
+    }
+
+    pub fn new(key: String, value: String) -> Self {
+        Self { key, value }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CryptoRequest {
-    pub body_data: Value,
-    pub header_data: Option<Value>,
+    pub data: Value,
 }
 
 impl CryptoRequest {
-    pub fn new(body_data: Value, header_data: Option<Value>) -> CryptoRequest {
-        CryptoRequest { body_data, header_data }
+    pub fn new(data: Value) -> CryptoRequest {
+        CryptoRequest { data }
     }
 }
 
 impl E3Payload for CryptoRequest {}
 impl CryptoRequest {
-    pub fn body_data(&self) -> &Value {
-        &self.body_data
-    }
-
-    pub fn header_data(&self) -> &Option<Value> {
-        &self.header_data
+    pub fn data(&self) -> &Value {
+        &self.data
     }
 
     pub fn to_vec(&self) -> Vec<u8> {
