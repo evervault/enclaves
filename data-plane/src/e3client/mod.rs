@@ -229,7 +229,7 @@ impl<C: Deref<Target = crate::EnclaveContext>> std::convert::From<C> for AuthReq
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EncryptedDataEntry {
     range: (usize, usize),
-    value: String,
+    value: Value,
 }
 
 impl EncryptedDataEntry {
@@ -237,11 +237,11 @@ impl EncryptedDataEntry {
         self.range
     }
 
-    pub fn value(&self) -> &String {
+    pub fn value(&self) -> &Value {
         &self.value
     }
 
-    pub fn new(range: (usize, usize), value: String) -> Self {
+    pub fn new(range: (usize, usize), value: Value) -> Self {
         Self { range, value }
     }
 }

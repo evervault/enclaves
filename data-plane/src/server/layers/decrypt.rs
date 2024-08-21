@@ -3,6 +3,9 @@ use hyper::header::HeaderName;
 use hyper::header::HeaderValue;
 use hyper::http::{Request, Response};
 use hyper::Body;
+use lazy_static::lazy_static;
+use regex::Regex;
+use serde_json::Value;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -47,6 +50,10 @@ impl std::convert::From<DecryptError> for Response<Body> {
             .body(body.into())
             .expect("Failed to build auth error to response")
     }
+}
+
+lazy_static! {
+    static ref CIPHERTEXT_VERSION_REGEX: regex::Regex = get_ciphertext_regex();
 }
 
 #[derive(Clone)]
@@ -116,7 +123,7 @@ where
                 .into_iter()
                 .filter_map(|(header_name, header_value)| {
                     let header_val = header_value.to_str().ok()?;
-                    if header_val.starts_with("ev:") {
+                    if CIPHERTEXT_VERSION_REGEX.is_match(header_val) {
                         Some(EncryptedHeader::new(
                             header_name?.to_string(),
                             header_val.to_string(),
@@ -126,6 +133,7 @@ where
                     }
                 })
                 .collect();
+
             let request_bytes = match hyper::body::to_bytes(req_body).await {
                 Ok(body_bytes) => body_bytes,
                 Err(e) => {
@@ -176,7 +184,7 @@ where
                 decrypted.header_data().iter().for_each(|header| {
                     req_info.headers.insert(
                         HeaderName::try_from(header.key().clone()).unwrap(),
-                        HeaderValue::from_str(&header.value()).unwrap(),
+                        HeaderValue::from_str(header.value()).unwrap(),
                     );
                 });
             }
@@ -220,10 +228,15 @@ async fn extract_ciphertexts_from_payload(
             _ => continue,
         };
 
-        let encrypted_data = EncryptedDataEntry::new(range, ciphertext.to_string());
+        let encrypted_data = EncryptedDataEntry::new(range, Value::from(ciphertext.to_string()));
         decryption_payload.push(encrypted_data);
     }
     Ok(decryption_payload)
+}
+
+fn get_ciphertext_regex() -> regex::Regex {
+    let pattern = r"^ev\:(RFVC|T1JL|Tk9D|TENZ|QlJV|QkTC|S0lS)\:.*";
+    Regex::new(pattern).expect("Failed to create regex")
 }
 
 #[cfg(test)]
@@ -240,14 +253,14 @@ mod tests {
     use tower::service_fn;
 
     #[tokio::test]
-    async fn test_decrypt_header_and_body() {
+    async fn test_decrypt_body() {
         let mut e3_test_client = MockE3TestClient::new();
         let response_payload = AutoDecryptRequest::new(
-            vec![EncryptedDataEntry::new((8, 117), "Hello, World!".to_string())],
-            vec![EncryptedHeader::new(
-                "Test".to_string(),
-                "Hello, World!".to_string(),
+            vec![EncryptedDataEntry::new(
+                (8, 116),
+                Value::String("plaintext".to_string()),
             )],
+            vec![],
         );
         let encrypted_header_key = "Test";
 
@@ -278,7 +291,7 @@ mod tests {
         );
         let mut request = Request::new(Body::from(
             json!({
-                "test": "ev:Tk9D:boolean:YGJVktHhdj3ds3wC:A6rkaTU8lez7NSBT8nTqbhBIu3tX4/lyH3aJVBUcGmLh:8hI5qEp32kWcVK367yaC09bDRbk:$"
+                "test": "ev:Tk9D:string:YGJVktHhdj3ds3wC:A6rkaTU8lez7NSBT8nTqbhBIu3tX4/lyH3aJVBUcGmLh:8hI5qEp32kWcVK367yaC09bDRbk:$"
             })
             .to_string(),
         ));
@@ -287,24 +300,66 @@ mod tests {
         request.headers_mut().extend(headers);
 
         let response = service.call(request).await.unwrap();
-        let (parts, body) = response.into_parts();
+        let (_, body) = response.into_parts();
         let bytes = to_bytes(body).await.unwrap();
         let json: Value = serde_json::from_slice(&bytes).unwrap();
 
         assert_eq!(
-            parts
-                .headers
-                .get(encrypted_header_key)
-                .unwrap()
-                .to_str()
-                .unwrap(),
-            "Hello, World!"
-        );
-        assert_eq!(
             json!({
-                "test": "Hello, World!"
+                "test": "plaintext"
             }),
             json
+        );
+    }
+
+    #[tokio::test]
+    async fn test_decrypt_header() {
+        let mut e3_test_client = MockE3TestClient::new();
+        let response_payload = AutoDecryptRequest::new(
+            vec![],
+            vec![EncryptedHeader::new(
+                "Test".to_string(),
+                "plaintext".to_string(),
+            )],
+        );
+        let encrypted_header_key = "Test";
+
+        e3_test_client
+            .expect_decrypt_with_retries::<AutoDecryptRequest, AutoDecryptRequest>()
+            .times(1)
+            .returning(move |_, _: AutoDecryptRequest| Ok(response_payload.clone()));
+
+        let mock_service = service_fn(|req: Request<Body>| async {
+            let (parts, body) = req.into_parts();
+            let mut response = Response::new(Body::from(body));
+            parts.headers.iter().for_each(|(key, val)| {
+                response.headers_mut().insert(key, val.clone());
+            });
+
+            Ok::<_, hyper::Error>(response)
+        });
+
+        let mut service = DecryptService {
+            e3_client: Arc::new(e3_test_client),
+            inner: mock_service,
+        };
+
+        let mut headers = hyper::HeaderMap::new();
+        headers.append(
+            encrypted_header_key,
+            HeaderValue::from_str("ev:Tk9D:boolean:YGJVktHhdj3ds3wC:A6rkaTU8lez7NSBT8nTqbhBIu3tX4/lyH3aJVBUcGmLh:8hI5qEp32kWcVK367yaC09bDRbk:$").unwrap(),
+        );
+        let mut request = Request::new(Body::empty());
+
+        request.extensions_mut().insert(get_test_trx());
+        request.headers_mut().extend(headers);
+
+        let response = service.call(request).await.unwrap();
+        let (parts, _) = response.into_parts();
+
+        assert_eq!(
+            parts.headers.get(encrypted_header_key).unwrap(),
+            "plaintext"
         );
     }
 
