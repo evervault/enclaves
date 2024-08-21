@@ -1,8 +1,9 @@
 use crate::enclave_connection::get_connection_to_enclave;
 use crate::error::ServerError;
+use axum::http::HeaderValue;
 use hyper::{Body, Request, Response};
 use serde::{Deserialize, Serialize};
-use shared::server::health::{HealthCheckLog, HealthCheckStatus};
+use shared::server::health::{HealthCheckLog, HealthCheckStatus, HealthCheckVersion};
 use shared::server::{error::ServerResult, tcp::TcpServer, Listener};
 use shared::{env_var_present_and_true, ENCLAVE_HEALTH_CHECK_PORT};
 use std::net::SocketAddr;
@@ -20,7 +21,7 @@ pub struct HealthCheckServer {
 #[serde(rename_all = "camelCase")]
 struct CombinedHealthCheckLog {
     control_plane: HealthCheckLog,
-    data_plane: HealthCheckLog,
+    data_plane: HealthCheckVersion,
 }
 
 async fn run_ecs_health_check_service(
@@ -33,7 +34,7 @@ async fn run_ecs_health_check_service(
 
         let combined_log = CombinedHealthCheckLog {
             control_plane: draining_log.clone(),
-            data_plane: draining_log,
+            data_plane: HealthCheckVersion::V1(draining_log),
         };
 
         let combined_log_json = serde_json::to_string(&combined_log)?;
@@ -50,11 +51,22 @@ async fn run_ecs_health_check_service(
     );
 
     let data_plane = if skip_deep_healthcheck {
-        HealthCheckLog::new(HealthCheckStatus::Ignored, None)
+        HealthCheckVersion::V1(HealthCheckLog::new(HealthCheckStatus::Ignored, None))
     } else {
-        health_check_data_plane().await
+        match health_check_data_plane().await {
+            Ok(v) => v,
+            Err(e) => HealthCheckVersion::V1(HealthCheckLog::new(
+                HealthCheckStatus::Err,
+                Some(e.to_string()),
+            )),
+        }
     };
-    let status_to_return = [control_plane.status.clone(), data_plane.status.clone()]
+
+    let data_plane_log = match &data_plane {
+        HealthCheckVersion::V0(log) | HealthCheckVersion::V1(log) => log,
+    };
+
+    let status_to_return = [control_plane.status.clone(), data_plane_log.status.clone()]
         .iter()
         .max()
         .unwrap()
@@ -73,32 +85,37 @@ async fn run_ecs_health_check_service(
         .map_err(ServerError::from)
 }
 
-macro_rules! unwrap_or_err {
-    ($result:expr) => {
-        match $result {
-            Ok(ok) => ok,
-            Err(error) => {
-                return HealthCheckLog::new(HealthCheckStatus::Err, Some(error.to_string()))
-            }
-        }
-    };
-}
+async fn health_check_data_plane() -> Result<HealthCheckVersion, ServerError> {
+    let stream = get_connection_to_enclave(ENCLAVE_HEALTH_CHECK_PORT).await?;
 
-async fn health_check_data_plane() -> HealthCheckLog {
-    let stream = unwrap_or_err!(get_connection_to_enclave(ENCLAVE_HEALTH_CHECK_PORT).await);
-    let (mut sender, connection) = unwrap_or_err!(hyper::client::conn::handshake(stream).await);
+    let (mut sender, connection) = hyper::client::conn::handshake(stream).await?;
+
     tokio::spawn(connection);
     let request = Request::builder()
         .method("GET")
         .header("User-Agent", "CageHealthChecker/0.0")
         .body(Body::empty())
         .expect("Cannot fail");
-    let response = unwrap_or_err!(sender.send_request(request).await);
-    unwrap_or_err!(serde_json::from_slice(
-        &hyper::body::to_bytes(response.into_parts().1)
-            .await
-            .unwrap()[..]
-    ))
+
+    let response = sender.send_request(request).await?;
+    let (parts, response) = response.into_parts();
+
+    let content_type = parts
+        .headers
+        .get("Content-Type")
+        .map(HeaderValue::to_str)
+        .and_then(Result::ok);
+
+    let bytes = &hyper::body::to_bytes(response).await?;
+
+    let hc = match content_type {
+        Some("application/json;version=1") => {
+            HealthCheckVersion::V1(serde_json::from_slice::<HealthCheckLog>(bytes)?)
+        }
+        _ => HealthCheckVersion::V0(serde_json::from_slice::<HealthCheckLog>(bytes)?),
+    };
+
+    Ok(hc)
 }
 
 impl HealthCheckServer {
@@ -165,10 +182,13 @@ mod health_check_tests {
         assert_eq!(response.status(), 500);
         println!("deep response: {response:?}");
         let health_check_log = response_to_health_check_log(response).await;
-        assert!(matches!(
-            health_check_log.data_plane.status,
-            HealthCheckStatus::Err
-        ));
+
+        let dp_status = match health_check_log.data_plane {
+            HealthCheckVersion::V0(log) => panic!("Expected V1 Version"),
+            HealthCheckVersion::V1(log) => log.status,
+        };
+
+        assert!(matches!(dp_status, HealthCheckStatus::Err));
     }
 
     #[tokio::test]
@@ -178,10 +198,13 @@ mod health_check_tests {
         assert_eq!(response.status(), 200);
         println!("deep response: {response:?}");
         let health_check_log = response_to_health_check_log(response).await;
-        assert!(matches!(
-            health_check_log.data_plane.status,
-            HealthCheckStatus::Ignored
-        ));
+
+        let dp_status = match health_check_log.data_plane {
+            HealthCheckVersion::V0(log) => panic!("Expected V1 Version"),
+            HealthCheckVersion::V1(log) => log.status,
+        };
+
+        assert!(matches!(dp_status, HealthCheckStatus::Ignored));
     }
 
     #[tokio::test]
@@ -192,10 +215,13 @@ mod health_check_tests {
         assert_eq!(response.status(), 500);
         println!("deep response: {response:?}");
         let health_check_log = response_to_health_check_log(response).await;
-        assert!(matches!(
-            health_check_log.data_plane.status,
-            HealthCheckStatus::Err
-        ));
+
+        let dp_status = match health_check_log.data_plane {
+            HealthCheckVersion::V0(log) => panic!("Expected V1 Version"),
+            HealthCheckVersion::V1(log) => log.status,
+        };
+
+        assert!(matches!(dp_status, HealthCheckStatus::Err));
         assert!(matches!(
             health_check_log.control_plane.status,
             HealthCheckStatus::Err
