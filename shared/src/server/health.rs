@@ -108,6 +108,7 @@ impl HealthCheck for HealthCheckLog {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum DataPlaneState {
+    Error(String),
     Unknown(String),
     Provisioning,
     Attesting,

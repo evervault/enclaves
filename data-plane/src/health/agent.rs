@@ -229,7 +229,7 @@ impl HealthcheckAgent {
 
                 let json = hyper::body::to_bytes(body)
                     .await
-                    .map(move |b| serde_json::from_slice::<Value>(&b).ok())
+                    .map(|b| serde_json::from_slice::<Value>(&b).ok())
                     .ok()
                     .flatten();
 

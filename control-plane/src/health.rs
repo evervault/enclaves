@@ -50,7 +50,7 @@ pub async fn run_ecs_health_check_service(
 
     let control_plane = ControlPlaneState::Ok;
     let data_plane = health_check_data_plane().await.unwrap_or_else(|e| {
-        DataPlaneState::Unknown(format!("Failed to contact data-plane for healthcheck: {e}")).into()
+        DataPlaneState::Error(format!("Failed to contact data-plane for healthcheck: {e}")).into()
     });
 
     let status_to_return = std::cmp::max(control_plane.status_code(), data_plane.status_code());
@@ -168,7 +168,7 @@ mod health_check_tests {
             HealthCheckVersion::V1(state) => state,
         };
 
-        assert!(matches!(dp_state, DataPlaneState::Unknown(_)));
+        assert!(matches!(dp_state, DataPlaneState::Error(_)));
     }
 
     #[tokio::test]
