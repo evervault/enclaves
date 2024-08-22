@@ -1,7 +1,6 @@
-use super::initialized::{EnclaveEnvInitialized, InitializedHealthcheck};
 use hyper::{client::HttpConnector, header, Body, Client, Method, Request};
 use serde_json::Value;
-use shared::server::health::{HealthCheckStatus, UserProcessHealth};
+use shared::server::health::UserProcessHealth;
 use std::collections::VecDeque;
 use thiserror::Error;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -35,29 +34,24 @@ impl HealthcheckStatusRequest {
 
 pub type UserProcessHealthcheckSender = UnboundedSender<HealthcheckStatusRequest>;
 
-pub struct HealthcheckAgent<T: InitializedHealthcheck> {
+pub struct HealthcheckAgent {
     customer_process_port: u16,
     healthcheck_path: Option<String>,
     buffer: VecDeque<UserProcessHealth>,
     interval: std::time::Duration,
     state: HealthcheckAgentState,
     recv: UnboundedReceiver<HealthcheckStatusRequest>,
-    initialized_check: T,
     buffer_size_limit: usize,
 }
 
 pub fn default_agent(
     customer_process_port: u16,
     healthcheck: Option<String>,
-) -> (
-    HealthcheckAgent<EnclaveEnvInitialized>,
-    UnboundedSender<HealthcheckStatusRequest>,
-) {
+) -> (HealthcheckAgent, UnboundedSender<HealthcheckStatusRequest>) {
     HealthcheckAgent::new(
         customer_process_port,
         std::time::Duration::from_secs(1),
         healthcheck,
-        EnclaveEnvInitialized,
     )
 }
 
@@ -71,14 +65,11 @@ enum UserProcessHealthCheckError {
     HealthcheckRequest(#[from] hyper::Error),
 }
 
-pub type UserProcessHealthCheck = Result<UserProcessHealth, UserProcessHealthCheckError>;
-
-impl<T: InitializedHealthcheck> HealthcheckAgent<T> {
+impl HealthcheckAgent {
     pub fn new(
         customer_process_port: u16,
         interval: std::time::Duration,
         healthcheck_path: Option<String>,
-        init_health_checker: T,
     ) -> (Self, UnboundedSender<HealthcheckStatusRequest>) {
         let (sender, recv) = unbounded_channel();
         let healthcheck_agent = Self {
@@ -88,7 +79,6 @@ impl<T: InitializedHealthcheck> HealthcheckAgent<T> {
             state: HealthcheckAgentState::default(),
             interval,
             recv,
-            initialized_check: init_health_checker,
             buffer_size_limit: DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT,
         };
         (healthcheck_agent, sender)
@@ -250,74 +240,80 @@ impl<T: InitializedHealthcheck> HealthcheckAgent<T> {
 
 #[cfg(test)]
 mod test {
-    use super::{default_agent, HealthCheckStatus, HealthcheckAgent, HealthcheckStatusRequest};
+    use super::{default_agent, HealthcheckAgent, HealthcheckStatusRequest};
+    use shared::server::health::UserProcessHealth;
     use yup_hyper_mock::mock_connector;
 
     #[test]
     fn validate_ok_returned_from_healthy_buffer() {
         let (mut agent, _sender) = default_agent(3000, None);
         for _ in 0..5 {
-            agent.buffer.push_back(HealthCheckStatus::Ok);
+            agent.buffer.push_back(UserProcessHealth::Response {
+                status_code: 200,
+                body: None,
+            });
         }
         let (req, mut receiver) = HealthcheckStatusRequest::new();
         agent.serve_healthcheck_request(req);
 
         let result = receiver.try_recv().unwrap();
-        assert_eq!(HealthCheckStatus::Ok, result);
+        assert!(matches!(
+            UserProcessHealth::Response {
+                status_code: 200,
+                body: None
+            },
+            result
+        ));
     }
 
     #[test]
     fn validate_unitialized_returned_from_otherwise_healthy_buffer() {
         let (mut agent, _sender) = default_agent(3000, None);
         for _ in 0..5 {
-            agent.buffer.push_back(HealthCheckStatus::Ok);
+            agent.buffer.push_back(UserProcessHealth::Response {
+                status_code: 200,
+                body: None,
+            });
         }
-        agent.buffer.push_back(HealthCheckStatus::Uninitialized);
+        agent.buffer.push_back(UserProcessHealth::Unknown(
+            "Enclave is not initialized yet".to_string(),
+        ));
         let (req, mut receiver) = HealthcheckStatusRequest::new();
         agent.serve_healthcheck_request(req);
 
         let result = receiver.try_recv().unwrap();
-        assert_eq!(HealthCheckStatus::Uninitialized, result);
-    }
-
-    pub struct TestInitialized(bool);
-
-    impl super::InitializedHealthcheck for TestInitialized {
-        type Error = std::convert::Infallible;
-
-        fn is_initialized(&self) -> Result<bool, Self::Error> {
-            Ok(self.0)
-        }
+        assert!(matches!(result, UserProcessHealth::Unknown(_)));
     }
 
     #[tokio::test]
     async fn validate_uninitialized_user_process_doesnt_return_errors() {
         let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) =
-            HealthcheckAgent::new(3000, duration, None, TestInitialized(false));
+        let (mut agent, _sender) = HealthcheckAgent::new(3000, duration, None);
 
         let client = hyper::Client::builder().build_http();
         agent.perform_healthcheck(client).await;
 
         let healthcheck_result = agent.buffer.iter().max().unwrap();
-        assert_eq!(
+        assert!(matches!(
             healthcheck_result.to_owned(),
-            HealthCheckStatus::Uninitialized
-        );
+            UserProcessHealth::Unknown(_)
+        ));
     }
 
     #[tokio::test]
     async fn validate_initialized_agent_with_no_healthcheck_path_returns_ok() {
         let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) =
-            HealthcheckAgent::new(3000, duration, None, TestInitialized(false));
+        let (mut agent, _sender) = HealthcheckAgent::new(3000, duration, None);
         agent.state = super::HealthcheckAgentState::Ready;
 
         let client = hyper::Client::builder().build_http();
         agent.perform_healthcheck(client).await;
 
         let healthcheck_result = agent.buffer.iter().max().unwrap();
-        assert_eq!(healthcheck_result.to_owned(), HealthCheckStatus::Ok);
+        assert!(matches!(
+            healthcheck_result.to_owned(),
+            UserProcessHealth::Unknown(_)
+        ))
     }
 
     #[cfg(feature = "tls_termination")]
@@ -327,19 +323,20 @@ mod test {
           "http://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n"
         });
         let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) = HealthcheckAgent::new(
-            3000,
-            duration,
-            Some("/healthz".into()),
-            TestInitialized(false),
-        );
+        let (mut agent, _sender) = HealthcheckAgent::new(3000, duration, Some("/healthz".into()));
         agent.state = super::HealthcheckAgentState::Ready;
 
         let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
         agent.perform_healthcheck(client).await;
 
         let healthcheck_result = agent.buffer.iter().max().unwrap();
-        assert_eq!(healthcheck_result.to_owned(), HealthCheckStatus::Ok);
+        assert_eq!(
+            healthcheck_result.to_owned(),
+            UserProcessHealth::Response {
+                status_code: 200,
+                body: None
+            }
+        );
     }
 
     #[cfg(not(feature = "tls_termination"))]
@@ -349,19 +346,20 @@ mod test {
           "https://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n"
         });
         let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) = HealthcheckAgent::new(
-            3000,
-            duration,
-            Some("/healthz".into()),
-            TestInitialized(false),
-        );
+        let (mut agent, _sender) = HealthcheckAgent::new(3000, duration, Some("/healthz".into()));
         agent.state = super::HealthcheckAgentState::Ready;
 
         let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
         agent.perform_healthcheck(client).await;
 
         let healthcheck_result = agent.buffer.iter().max().unwrap();
-        assert_eq!(healthcheck_result.to_owned(), HealthCheckStatus::Ok);
+        assert_eq!(
+            healthcheck_result.to_owned(),
+            UserProcessHealth::Response {
+                status_code: 200,
+                body: None
+            }
+        );
     }
 
     #[cfg(feature = "tls_termination")]
@@ -371,19 +369,21 @@ mod test {
           "http://127.0.0.1" => "HTTP/1.1 400 Bad Request\r\n\r\n"
         });
         let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) = HealthcheckAgent::new(
-            3001,
-            duration,
-            Some("/healthcheck".into()),
-            TestInitialized(false),
-        );
+        let (mut agent, _sender) =
+            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()));
         agent.state = super::HealthcheckAgentState::Ready;
 
         let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
         agent.perform_healthcheck(client).await;
 
         let healthcheck_result = agent.buffer.iter().max().unwrap();
-        assert_eq!(healthcheck_result.to_owned(), HealthCheckStatus::Err);
+        assert_eq!(
+            healthcheck_result.to_owned(),
+            UserProcessHealth::Response {
+                status_code: 400,
+                body: None
+            }
+        );
     }
 
     #[cfg(not(feature = "tls_termination"))]
@@ -393,18 +393,20 @@ mod test {
           "https://127.0.0.1" => "HTTP/1.1 400 Bad Request\r\n\r\n"
         });
         let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) = HealthcheckAgent::new(
-            3001,
-            duration,
-            Some("/healthcheck".into()),
-            TestInitialized(false),
-        );
+        let (mut agent, _sender) =
+            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()));
         agent.state = super::HealthcheckAgentState::Ready;
 
         let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
         agent.perform_healthcheck(client).await;
 
         let healthcheck_result = agent.buffer.iter().max().unwrap();
-        assert_eq!(healthcheck_result.to_owned(), HealthCheckStatus::Err);
+        assert_eq!(
+            healthcheck_result.to_owned(),
+            UserProcessHealth::Response {
+                status_code: 400,
+                body: None
+            }
+        );
     }
 }

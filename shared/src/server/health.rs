@@ -121,12 +121,34 @@ pub struct DataPlaneDiagnostic {
     pub user_process: Option<UserProcessHealth>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum UserProcessHealth {
     Error(String),
-    Unknown(String),
     Response {
         status_code: u16,
         body: Option<serde_json::Value>,
     },
+    Unknown(String),
+}
+
+impl UserProcessHealth {
+    pub fn rank(&self) -> u8 {
+        match self {
+            UserProcessHealth::Error(_) => 1,
+            UserProcessHealth::Unknown(_) => 2,
+            UserProcessHealth::Response { .. } => 3,
+        }
+    }
+}
+
+impl Ord for UserProcessHealth {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.rank().cmp(&other.rank())
+    }
+}
+
+impl PartialOrd for UserProcessHealth {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
