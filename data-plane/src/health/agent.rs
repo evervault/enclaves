@@ -253,7 +253,7 @@ mod test {
     use yup_hyper_mock::mock_connector;
 
     #[test]
-    fn validate_ok_returned_from_healthy_buffer() {
+    fn validate_response_returned_from_healthy_buffer() {
         let (mut agent, _sender) = default_agent(3000, None);
         for _ in 0..5 {
             agent.buffer.push_back(UserProcessHealth::Response {
@@ -275,7 +275,7 @@ mod test {
     }
 
     #[test]
-    fn validate_unitialized_returned_from_otherwise_healthy_buffer() {
+    fn validate_response_returned_from_buffer_with_unknown() {
         let (mut agent, _sender) = default_agent(3000, None);
         for _ in 0..5 {
             agent.buffer.push_back(UserProcessHealth::Response {
@@ -290,7 +290,6 @@ mod test {
         agent.serve_healthcheck_request(req);
 
         let result = receiver.try_recv().unwrap();
-        println!("{result:?}");
         assert!(matches!(
             result,
             UserProcessHealth::Response {
@@ -309,7 +308,6 @@ mod test {
         agent.perform_healthcheck(client).await;
 
         let healthcheck_result = agent.buffer.iter().max().unwrap();
-        println!("{healthcheck_result:?}");
         assert!(matches!(
             healthcheck_result.to_owned(),
             UserProcessHealth::Unknown(_)
@@ -317,7 +315,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn validate_initialized_agent_with_no_healthcheck_path_returns_ok() {
+    async fn validate_initialized_agent_with_no_healthcheck_path_returns_unknown() {
         let duration = std::time::Duration::from_secs(1);
         let (mut agent, _sender) = HealthcheckAgent::new(3000, duration, None);
         agent.state = super::HealthcheckAgentState::Ready;
@@ -334,7 +332,7 @@ mod test {
 
     #[cfg(feature = "tls_termination")]
     #[tokio::test]
-    async fn validate_initialized_agent_with_healthy_response_returns_healthy() {
+    async fn validate_initialized_agent_with_healthy_response_returns_response() {
         mock_connector!(MockHealthcheckEndpoint {
           "http://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n"
         });
@@ -357,7 +355,7 @@ mod test {
 
     #[cfg(not(feature = "tls_termination"))]
     #[tokio::test]
-    async fn validate_initialized_agent_with_healthy_response_returns_healthy() {
+    async fn validate_initialized_agent_with_healthy_response_returns_response() {
         mock_connector!(MockHealthcheckEndpoint {
           "https://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n"
         });
@@ -380,7 +378,8 @@ mod test {
 
     #[cfg(feature = "tls_termination")]
     #[tokio::test]
-    async fn validate_initialized_agent_with_unhealthy_response_returns_error() {
+    async fn validate_initialized_agent_with_unhealthy_response_returns_response_with_correct_status(
+    ) {
         mock_connector!(MockHealthcheckEndpoint {
           "http://127.0.0.1" => "HTTP/1.1 400 Bad Request\r\n\r\n"
         });
@@ -404,7 +403,8 @@ mod test {
 
     #[cfg(not(feature = "tls_termination"))]
     #[tokio::test]
-    async fn validate_initialized_agent_with_unhealthy_response_returns_error() {
+    async fn validate_initialized_agent_with_unhealthy_response_returns_response_with_correct_status(
+    ) {
         mock_connector!(MockHealthcheckEndpoint {
           "https://127.0.0.1" => "HTTP/1.1 400 Bad Request\r\n\r\n"
         });
