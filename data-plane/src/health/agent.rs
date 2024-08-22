@@ -291,7 +291,13 @@ mod test {
 
         let result = receiver.try_recv().unwrap();
         println!("{result:?}");
-        assert!(matches!(result, UserProcessHealth::Unknown(_)));
+        assert!(matches!(
+            result,
+            UserProcessHealth::Response {
+                status_code: 200,
+                body: None
+            }
+        ));
     }
 
     #[tokio::test]
