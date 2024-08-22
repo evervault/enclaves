@@ -123,20 +123,20 @@ pub struct DataPlaneDiagnostic {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub enum UserProcessHealth {
+    Unknown(String),
     Error(String),
     Response {
         status_code: u16,
         body: Option<serde_json::Value>,
     },
-    Unknown(String),
 }
 
 impl UserProcessHealth {
     pub fn rank(&self) -> u8 {
         match self {
-            UserProcessHealth::Error(_) => 1,
-            UserProcessHealth::Unknown(_) => 2,
-            UserProcessHealth::Response { .. } => 3,
+            UserProcessHealth::Response { .. } => 0,
+            UserProcessHealth::Unknown(_) => 1,
+            UserProcessHealth::Error(_) => 2,
         }
     }
 }
@@ -150,5 +150,43 @@ impl Ord for UserProcessHealth {
 impl PartialOrd for UserProcessHealth {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_max_of_enum() {
+        // used in run_ecs_health_check_service to ensure non-success codes have priority
+        let max = [
+            UserProcessHealth::Error("".to_string()),
+            UserProcessHealth::Response {
+                status_code: 200,
+                body: None,
+            },
+            UserProcessHealth::Unknown("".to_string()),
+        ]
+        .into_iter()
+        .max()
+        .unwrap();
+        assert!(matches!(
+            max,
+            UserProcessHealth::Response {
+                status_code: 200,
+                body: None
+            }
+        ));
+        let max = [
+            UserProcessHealth::Unknown("".to_string()),
+            UserProcessHealth::Unknown("".to_string()),
+            UserProcessHealth::Error("".to_string()),
+            UserProcessHealth::Unknown("".to_string()),
+        ]
+        .into_iter()
+        .max()
+        .unwrap();
+        assert!(matches!(max, UserProcessHealth::Error(_)));
     }
 }

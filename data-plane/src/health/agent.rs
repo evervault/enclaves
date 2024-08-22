@@ -258,11 +258,11 @@ mod test {
 
         let result = receiver.try_recv().unwrap();
         assert!(matches!(
+            result,
             UserProcessHealth::Response {
                 status_code: 200,
                 body: None
             },
-            result
         ));
     }
 
@@ -282,6 +282,7 @@ mod test {
         agent.serve_healthcheck_request(req);
 
         let result = receiver.try_recv().unwrap();
+        println!("{result:?}");
         assert!(matches!(result, UserProcessHealth::Unknown(_)));
     }
 
@@ -294,6 +295,7 @@ mod test {
         agent.perform_healthcheck(client).await;
 
         let healthcheck_result = agent.buffer.iter().max().unwrap();
+        println!("{healthcheck_result:?}");
         assert!(matches!(
             healthcheck_result.to_owned(),
             UserProcessHealth::Unknown(_)
