@@ -94,7 +94,7 @@ impl HealthCheck for ControlPlaneState {
 impl HealthCheck for DataPlaneState {
     fn status_code(&self) -> u16 {
         match self {
-            DataPlaneState::Initialized(diagnostic) if diagnostic.is_healthy => 200,
+            DataPlaneState::Initialized(diagnostic) if diagnostic.is_healthy() => 200,
             _ => 500,
         }
     }
@@ -117,8 +117,17 @@ pub enum DataPlaneState {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DataPlaneDiagnostic {
-    pub is_healthy: bool,
-    pub user_process: Option<UserProcessHealth>,
+    pub user_process: UserProcessHealth,
+}
+
+impl DataPlaneDiagnostic {
+    pub fn is_healthy(&self) -> bool {
+        match self.user_process {
+            UserProcessHealth::Unknown(_) => true,
+            UserProcessHealth::Error(_) => false,
+            UserProcessHealth::Response { status_code, .. } => status_code == 200,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -134,9 +143,9 @@ pub enum UserProcessHealth {
 impl UserProcessHealth {
     pub fn rank(&self) -> u8 {
         match self {
-            UserProcessHealth::Response { .. } => 0,
-            UserProcessHealth::Unknown(_) => 1,
-            UserProcessHealth::Error(_) => 2,
+            UserProcessHealth::Unknown(_) => 0,
+            UserProcessHealth::Error(_) => 1,
+            UserProcessHealth::Response { .. } => 2,
         }
     }
 }
@@ -175,7 +184,7 @@ mod test {
             max,
             UserProcessHealth::Response {
                 status_code: 200,
-                body: None
+                body: None,
             }
         ));
         let max = [

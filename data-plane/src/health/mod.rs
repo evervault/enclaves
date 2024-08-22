@@ -4,7 +4,9 @@ use agent::UserProcessHealthcheckSender;
 
 use hyper::{service::service_fn, Body, Response};
 use shared::server::get_vsock_server;
-use shared::server::health::UserProcessHealth;
+use shared::server::health::{
+    DataPlaneDiagnostic, DataPlaneState, HealthCheckVersion, UserProcessHealth,
+};
 use shared::server::CID::Enclave;
 use shared::{server::Listener, ENCLAVE_HEALTH_CHECK_PORT};
 
@@ -45,8 +47,13 @@ pub async fn start_health_check_server(customer_process_port: u16, healthcheck: 
             async move {
                 let user_process_health = check_user_process_health(&user_process_channel).await;
 
+                let result = DataPlaneState::Initialized(DataPlaneDiagnostic {
+                    user_process: user_process_health,
+                })
+                .into();
+
                 Response::builder().status(200).body(Body::from(
-                    serde_json::to_string(&user_process_health).unwrap(),
+                    serde_json::to_string::<HealthCheckVersion>(&result).unwrap(),
                 ))
             }
         });
