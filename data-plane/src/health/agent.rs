@@ -1,7 +1,9 @@
 use super::initialized::{EnclaveEnvInitialized, InitializedHealthcheck};
 use hyper::{client::HttpConnector, header, Body, Client, Method, Request};
-use shared::server::health::HealthCheckStatus;
+use serde_json::Value;
+use shared::server::health::{HealthCheckStatus, UserProcessHealth};
 use std::collections::VecDeque;
+use thiserror::Error;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::sync::oneshot::{
     channel as oneshot_channel, Receiver as OneshotReceiver, Sender as OneshotSender,
@@ -21,11 +23,11 @@ impl std::default::Default for HealthcheckAgentState {
 }
 
 pub struct HealthcheckStatusRequest {
-    sender: OneshotSender<HealthCheckStatus>,
+    sender: OneshotSender<UserProcessHealth>,
 }
 
 impl HealthcheckStatusRequest {
-    pub fn new() -> (Self, OneshotReceiver<HealthCheckStatus>) {
+    pub fn new() -> (Self, OneshotReceiver<UserProcessHealth>) {
         let (sender, receiver) = oneshot_channel();
         (Self { sender }, receiver)
     }
@@ -36,7 +38,7 @@ pub type UserProcessHealthcheckSender = UnboundedSender<HealthcheckStatusRequest
 pub struct HealthcheckAgent<T: InitializedHealthcheck> {
     customer_process_port: u16,
     healthcheck_path: Option<String>,
-    buffer: VecDeque<HealthCheckStatus>,
+    buffer: VecDeque<UserProcessHealth>,
     interval: std::time::Duration,
     state: HealthcheckAgentState,
     recv: UnboundedReceiver<HealthcheckStatusRequest>,
@@ -61,6 +63,16 @@ pub fn default_agent(
 
 const DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT: usize = 10;
 
+#[derive(Error, Debug)]
+enum UserProcessHealthCheckError {
+    #[error("There was an error checking the initialization state of the user process - {0}")]
+    InitializationCheck(#[from] ContextError),
+    #[error("There was an error sending the healthcheck request to the user process - {0}")]
+    HealthcheckRequest(#[from] hyper::Error),
+}
+
+pub type UserProcessHealthCheck = Result<UserProcessHealth, UserProcessHealthCheckError>;
+
 impl<T: InitializedHealthcheck> HealthcheckAgent<T> {
     pub fn new(
         customer_process_port: u16,
@@ -82,7 +94,7 @@ impl<T: InitializedHealthcheck> HealthcheckAgent<T> {
         (healthcheck_agent, sender)
     }
 
-    fn record_result(&mut self, healthcheck_status: HealthCheckStatus) {
+    fn record_result(&mut self, healthcheck_status: UserProcessHealth) {
         self.buffer.push_back(healthcheck_status);
         if self.buffer.len() >= self.buffer_size_limit {
             self.buffer.pop_front();
@@ -110,18 +122,16 @@ impl<T: InitializedHealthcheck> HealthcheckAgent<T> {
         Client::builder().build(https_connector)
     }
 
-    fn check_user_process_initialized(&mut self) -> Result<HealthCheckStatus, ContextError> {
-        let is_initialized = match self.initialized_check.is_initialized() {
-            Ok(is_initialized) => is_initialized,
-            Err(_) => return Ok(HealthCheckStatus::Err),
-        };
+    fn check_user_process_initialized(&mut self) -> Result<bool, ContextError> {
+        let contents = std::fs::read_to_string("/etc/customer-env")?;
+        let is_initialized = contents.contains("EV_INITIALIZED");
+
         if is_initialized {
             let _ = EnclaveContext::get()?;
             self.state = HealthcheckAgentState::Ready;
-            Ok(HealthCheckStatus::Ok)
-        } else {
-            Ok(HealthCheckStatus::Uninitialized)
         }
+
+        Ok(is_initialized)
     }
 
     async fn perform_healthcheck<
@@ -131,17 +141,23 @@ impl<T: InitializedHealthcheck> HealthcheckAgent<T> {
         client: Client<C, Body>,
     ) {
         let healthcheck_result = match self.state {
-            HealthcheckAgentState::Initializing => {
-                self.check_user_process_initialized().unwrap_or_else(|err| {
+            HealthcheckAgentState::Initializing => match self.check_user_process_initialized() {
+                Ok(_) => UserProcessHealth::Unknown("Enclave is not initialized yet".to_string()),
+                Err(err) => {
                     log::warn!("Error reading init state from user process env - {err:?}");
-                    HealthCheckStatus::Err
-                })
-            }
+
+                    UserProcessHealth::Error(format!(
+                        "Error reading init state from user process env - {err:?}"
+                    ))
+                }
+            },
             HealthcheckAgentState::Ready if self.healthcheck_path.is_some() => {
                 self.probe_user_process(client, self.healthcheck_path.as_deref().unwrap())
                     .await
             }
-            HealthcheckAgentState::Ready => HealthCheckStatus::Ok,
+            HealthcheckAgentState::Ready => {
+                UserProcessHealth::Unknown("No healthcheck path provided".to_string())
+            }
         };
 
         self.record_result(healthcheck_result);
@@ -149,7 +165,9 @@ impl<T: InitializedHealthcheck> HealthcheckAgent<T> {
 
     fn serve_healthcheck_request(&mut self, request: HealthcheckStatusRequest) {
         if self.buffer.is_empty() {
-            let _ = request.sender.send(HealthCheckStatus::Uninitialized);
+            let _ = request.sender.send(UserProcessHealth::Unknown(
+                "Enclave is not initialized yet".to_string(),
+            ));
             return;
         }
 
@@ -195,7 +213,7 @@ impl<T: InitializedHealthcheck> HealthcheckAgent<T> {
         &self,
         client: Client<C, Body>,
         healthcheck_path: &str,
-    ) -> HealthCheckStatus {
+    ) -> UserProcessHealth {
         let healthcheck_uri = self.build_healthcheck_uri(healthcheck_path);
         let req = Request::builder()
             .method(Method::GET)
@@ -205,17 +223,26 @@ impl<T: InitializedHealthcheck> HealthcheckAgent<T> {
             .expect("Failed to create user process healthcheck request");
         log::debug!("Probing user process from healthcheck agent - {healthcheck_uri}");
         match client.request(req).await {
-            Ok(res) if res.status().is_success() => HealthCheckStatus::Ok,
             Ok(res) => {
-                log::warn!(
-                    "Status code {} returned from user process healthcheck",
-                    res.status()
-                );
-                HealthCheckStatus::Err
+                let (parts, body) = res.into_parts();
+                if !parts.status.is_success() {
+                    log::warn!(
+                        "Status code {} returned from user process healthcheck",
+                        parts.status
+                    );
+                }
+
+                let bytes = hyper::body::to_bytes(body).await.unwrap();
+                let json = serde_json::from_slice::<Value>(&bytes).ok();
+
+                UserProcessHealth::Response {
+                    status_code: parts.status.as_u16(),
+                    body: json,
+                }
             }
             Err(e) => {
                 log::error!("Error sending healthcheck to user process - {e:?}");
-                HealthCheckStatus::Err
+                UserProcessHealth::Error(e.to_string())
             }
         }
     }

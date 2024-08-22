@@ -118,11 +118,15 @@ pub enum DataPlaneState {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DataPlaneDiagnostic {
     pub is_healthy: bool,
-    pub customer_process: CustomerProcessHealth,
+    pub user_process: Option<UserProcessHealth>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CustomerProcessHealth {
-    pub status_code: u16,
-    pub response: Option<serde_json::Value>,
+pub enum UserProcessHealth {
+    Error(String),
+    Unknown(String),
+    Response {
+        status_code: u16,
+        body: Option<serde_json::Value>,
+    },
 }
