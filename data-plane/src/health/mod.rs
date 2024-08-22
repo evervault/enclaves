@@ -49,12 +49,11 @@ pub async fn start_health_check_server(customer_process_port: u16, healthcheck: 
 
                 let result = DataPlaneState::Initialized(DataPlaneDiagnostic {
                     user_process: user_process_health,
-                })
-                .into();
+                });
 
-                Response::builder().status(200).body(Body::from(
-                    serde_json::to_string::<HealthCheckVersion>(&result).unwrap(),
-                ))
+                Response::builder()
+                    .status(200)
+                    .body(Body::from(serde_json::to_string(&result).unwrap()))
             }
         });
 

@@ -222,8 +222,11 @@ impl HealthcheckAgent {
                     );
                 }
 
-                let bytes = hyper::body::to_bytes(body).await.unwrap();
-                let json = serde_json::from_slice::<Value>(&bytes).ok();
+                let json = hyper::body::to_bytes(body)
+                    .await
+                    .map(move |b| serde_json::from_slice::<Value>(&b).ok())
+                    .ok()
+                    .flatten();
 
                 UserProcessHealth::Response {
                     status_code: parts.status.as_u16(),
