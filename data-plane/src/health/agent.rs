@@ -113,8 +113,13 @@ impl HealthcheckAgent {
     }
 
     fn check_user_process_initialized(&mut self) -> Result<bool, ContextError> {
-        let contents = std::fs::read_to_string("/etc/customer-env")?;
-        let is_initialized = contents.contains("EV_INITIALIZED");
+        let is_initialized = match std::fs::read_to_string("/etc/customer-env") {
+            Ok(c) => Ok(c.contains("EV_INITIALIZED")),
+            Err(e) => match e.kind() {
+                std::io::ErrorKind::NotFound => Ok(false),
+                _ => Err(e),
+            },
+        }?;
 
         if is_initialized {
             let _ = EnclaveContext::get()?;
