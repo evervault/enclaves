@@ -242,7 +242,7 @@ async fn extract_ciphertexts_from_payload(
 }
 
 fn get_ciphertext_regex() -> regex::Regex {
-    let pattern = r"^ev\:(RFVC|T1JL|Tk9D|TENZ|QlJV|QkTC|S0lS)\:.*";
+    let pattern = r"^ev\:(RFVC|T1JL|Tk9D|TENZ|QlJV|QkTC|S0lS|[a-zA-Z0-9]{16})\:.*";
     Regex::new(pattern).expect("Failed to create regex")
 }
 
@@ -417,6 +417,20 @@ mod tests {
                 .unwrap(),
             "plaintext"
         );
+    }
+
+    #[tokio::test]
+    async fn test_ciphertext_regex() {
+        let regex = get_ciphertext_regex();
+        assert!(regex.is_match("ev:RFVC:1234567890"));
+        assert!(regex.is_match("ev:T1JL:1234567890"));
+        assert!(regex.is_match("ev:QlJV:1234567890"));
+        assert!(regex.is_match("ev:QkTC:1234567890"));
+        assert!(regex.is_match("ev:S0lS:1234567890"));
+        assert!(regex.is_match("ev:Tk9D:1234567890"));
+        assert!(regex.is_match("ev:TENZ:1234567890"));
+        assert!(regex.is_match("ev:9ESJyCXIkIS1hpMg:A7KyUHHg0VYFw7jDZUBQeMWUDA4EeMKKtQrivOG+meGy:5NsnpUnLrsWrM2ccX+r/pXtZ:$"));
+        assert!(!regex.is_match("ev:INVALID:1234567890"));
     }
 
     fn get_test_trx() -> TrxContextBuilder {
