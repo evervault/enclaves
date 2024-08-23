@@ -19,5 +19,18 @@ mock! {
     ) -> Result<T, E3Error>;
 
     async fn authenticate(&self, api_key: &HeaderValue, payload: AuthRequest) -> Result<(), E3Error>;
+
+    async fn decrypt_with_retries<T: DeserializeOwned + 'static, P: E3Payload + Clone + Send + Sync + 'static>(
+        &self,
+        retries: usize,
+        payload: P,
+    ) -> Result<T, E3Error>;
+
+    async fn encrypt_with_retries<T: DeserializeOwned + 'static, P: E3Payload + Clone + Send + Sync + 'static>(
+        &self,
+        retries: usize,
+        payload: P,
+        data_role: Option<String>,
+    ) -> Result<T, E3Error>;
   }
 }

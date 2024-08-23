@@ -246,20 +246,54 @@ impl EncryptedDataEntry {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct DecryptRequest {
-    data: Vec<EncryptedDataEntry>,
+#[derive(Serialize, Deserialize, Clone)]
+pub struct AutoDecryptRequest {
+    body_data: Vec<EncryptedDataEntry>,
+    header_data: Vec<EncryptedHeader>,
 }
 
-impl E3Payload for DecryptRequest {}
+impl E3Payload for AutoDecryptRequest {}
 
-impl DecryptRequest {
-    pub fn data(&self) -> &Vec<EncryptedDataEntry> {
-        &self.data
+impl AutoDecryptRequest {
+    pub fn new(
+        body_data: Vec<EncryptedDataEntry>,
+        header_data: Vec<EncryptedHeader>,
+    ) -> AutoDecryptRequest {
+        AutoDecryptRequest {
+            body_data,
+            header_data,
+        }
+    }
+
+    pub fn body_data(&self) -> &Vec<EncryptedDataEntry> {
+        &self.body_data
+    }
+    pub fn header_data(&self) -> &Vec<EncryptedHeader> {
+        &self.header_data
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct EncryptedHeader {
+    key: String,
+    value: String,
+}
+
+impl EncryptedHeader {
+    pub fn key(&self) -> &String {
+        &self.key
+    }
+
+    pub fn value(&self) -> &String {
+        &self.value
+    }
+
+    pub fn new(key: String, value: String) -> Self {
+        Self { key, value }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CryptoRequest {
     pub data: Value,
 }
@@ -275,6 +309,7 @@ impl CryptoRequest {
     pub fn data(&self) -> &Value {
         &self.data
     }
+
     pub fn to_vec(&self) -> Vec<u8> {
         serde_json::to_vec(self).unwrap()
     }

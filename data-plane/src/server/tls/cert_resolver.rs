@@ -386,7 +386,7 @@ mod tests {
     }
 
     fn write_to_trusted_cert_store(cert: Option<CertifiedKey>) -> () {
-        if let Err(e) = TRUSTED_CERT_STORE
+        if let Err(_e) = TRUSTED_CERT_STORE
             .try_write()
             .map(|mut store| *store = cert)
         {
