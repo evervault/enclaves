@@ -57,10 +57,7 @@ lazy_static! {
 }
 
 #[derive(Clone)]
-pub struct DecryptLayer<T: E3Api>
-where
-    T: E3Api,
-{
+pub struct DecryptLayer<T: E3Api> {
     e3_client: Arc<T>,
 }
 
