@@ -182,10 +182,20 @@ where
                     .headers
                     .insert("content-length", bytes_vec.len().into());
                 decrypted.header_data().iter().for_each(|header| {
-                    req_info.headers.insert(
-                        HeaderName::try_from(header.key().clone()).unwrap(),
-                        HeaderValue::from_str(header.value()).unwrap(),
-                    );
+                    let key_result = HeaderName::try_from(header.key().clone());
+                    let value_result = HeaderValue::from_str(header.value());
+
+                    match (key_result, value_result) {
+                        (Ok(key), Ok(value)) => {
+                            req_info.headers.insert(key, value);
+                        }
+                        (Err(e), _) => {
+                            eprintln!("Failed to parse header key: {:?}", e);
+                        }
+                        (_, Err(e)) => {
+                            eprintln!("Failed to parse header value: {:?}", e);
+                        }
+                    }
                 });
             }
 
