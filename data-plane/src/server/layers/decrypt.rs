@@ -427,6 +427,8 @@ mod tests {
         assert!(regex.is_match("ev:QlJV:1234567890"));
         assert!(regex.is_match("ev:QkTC:1234567890"));
         assert!(regex.is_match("ev:S0lS:1234567890"));
+        assert!(regex.is_match("ev:Tk9D:1234567890"));
+        assert!(regex.is_match("ev:TENZ:1234567890"));
         assert!(regex.is_match("ev:9ESJyCXIkIS1hpMg:A7KyUHHg0VYFw7jDZUBQeMWUDA4EeMKKtQrivOG+meGy:5NsnpUnLrsWrM2ccX+r/pXtZ:$"));
         assert!(!regex.is_match("ev:INVALID:1234567890"));
     }
