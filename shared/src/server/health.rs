@@ -126,7 +126,9 @@ impl DataPlaneDiagnostic {
         match self.user_process {
             UserProcessHealth::Unknown(_) => true,
             UserProcessHealth::Error(_) => false,
-            UserProcessHealth::Response { status_code, .. } => status_code == 200,
+            UserProcessHealth::Response { status_code, .. } => {
+                status_code >= 200 && status_code < 300
+            }
         }
     }
 }
