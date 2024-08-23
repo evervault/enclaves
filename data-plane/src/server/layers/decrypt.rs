@@ -57,20 +57,20 @@ lazy_static! {
 }
 
 #[derive(Clone)]
-pub struct DecryptLayer<T: E3Api + Send + Sync + 'static>
+pub struct DecryptLayer<T: E3Api>
 where
-    T: E3Api + Send + Sync + 'static,
+    T: E3Api,
 {
     e3_client: Arc<T>,
 }
 
-impl<T: E3Api + Send + Sync + 'static> DecryptLayer<T> {
+impl<T: E3Api> DecryptLayer<T> {
     pub fn new(e3_client: Arc<T>) -> Self {
         Self { e3_client }
     }
 }
 
-impl<S, T: E3Api + Send + Sync + 'static> Layer<S> for DecryptLayer<T> {
+impl<S, T: E3Api> Layer<S> for DecryptLayer<T> {
     type Service = DecryptService<S, T>;
 
     fn layer(&self, inner: S) -> Self::Service {

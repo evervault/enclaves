@@ -53,18 +53,18 @@ impl std::convert::From<AuthError> for Response<Body> {
 }
 
 #[derive(Clone)]
-pub struct AuthLayer<T: E3Api + Send + Sync + 'static> {
+pub struct AuthLayer<T: E3Api> {
     e3_client: Arc<T>,
     context: Arc<EnclaveContext>,
 }
 
-impl<T: E3Api + Send + Sync + 'static> AuthLayer<T> {
+impl<T: E3Api> AuthLayer<T> {
     pub fn new(e3_client: Arc<T>, context: Arc<EnclaveContext>) -> Self {
         Self { e3_client, context }
     }
 }
 
-impl<S, T: E3Api + Send + Sync + 'static> Layer<S> for AuthLayer<T> {
+impl<S, T: E3Api> Layer<S> for AuthLayer<T> {
     type Service = AuthService<S, T>;
 
     fn layer(&self, inner: S) -> Self::Service {
@@ -77,7 +77,7 @@ impl<S, T: E3Api + Send + Sync + 'static> Layer<S> for AuthLayer<T> {
 }
 
 #[derive(Clone)]
-pub struct AuthService<S, T: E3Api + Send + Sync + 'static> {
+pub struct AuthService<S, T: E3Api> {
     e3_client: Arc<T>,
     context: Arc<EnclaveContext>,
     inner: S,
