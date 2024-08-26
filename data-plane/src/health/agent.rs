@@ -137,7 +137,14 @@ impl HealthcheckAgent {
     ) {
         let healthcheck_result = match self.state {
             HealthcheckAgentState::Initializing => match self.check_user_process_initialized() {
-                Ok(_) => UserProcessHealth::Unknown("Enclave is not initialized yet".to_string()),
+                Ok(is_initialized) => {
+                    if is_initialized {
+                        self.perform_healthcheck(client.clone()).await;
+                        return;
+                    }
+
+                    UserProcessHealth::Unknown("Enclave is not initialized yet".to_string())
+                }
                 Err(err) => {
                     log::warn!("Error reading init state from user process env - {err:?}");
 
