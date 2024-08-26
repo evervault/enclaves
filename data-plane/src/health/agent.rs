@@ -458,7 +458,7 @@ mod test {
     #[tokio::test]
     async fn it_can_parse_unhealthy_json_responses_from_user_process() {
         mock_connector!(MockHealthcheckEndpoint {
-              "http://127.0.0.1" => "HTTP/1.1 500 Ok\r\n\r\n{\"very-bad-state\": \"unhealthy\"}"
+            "http://127.0.0.1" => "HTTP/1.1 500 Internal Server Error\r\n\r\n{\"very-bad-state\": \"unhealthy\"}"
         });
 
         let duration = std::time::Duration::from_secs(1);
