@@ -112,21 +112,30 @@ impl HealthcheckAgent {
         Client::builder().build(https_connector)
     }
 
-    fn check_user_process_initialized(&mut self) -> Result<bool, ContextError> {
-        let is_initialized = match std::fs::read_to_string("/etc/customer-env") {
-            Ok(c) => Ok(c.contains("EV_INITIALIZED")),
-            Err(e) => match e.kind() {
-                std::io::ErrorKind::NotFound => Ok(false),
-                _ => Err(e),
-            },
-        }?;
+    fn check_user_process_initialized(&mut self) -> Result<HealthcheckAgentState, ContextError> {
+        let hc_state = match self.state {
+            HealthcheckAgentState::Initializing => {
+                match std::fs::read_to_string("/etc/customer-env") {
+                    Ok(c) => {
+                        if c.contains("EV_INITIALIZED") {
+                            let _ = EnclaveContext::get()?;
+                            self.state = HealthcheckAgentState::Ready;
+                            HealthcheckAgentState::Ready
+                        } else {
+                            HealthcheckAgentState::Initializing
+                        }
+                    }
 
-        if is_initialized {
-            let _ = EnclaveContext::get()?;
-            self.state = HealthcheckAgentState::Ready;
-        }
+                    Err(e) => match e.kind() {
+                        std::io::ErrorKind::NotFound => HealthcheckAgentState::Initializing,
+                        _ => return Err(e.into()),
+                    },
+                }
+            }
+            _ => HealthcheckAgentState::Ready,
+        };
 
-        Ok(is_initialized)
+        Ok(hc_state)
     }
 
     async fn perform_healthcheck<
@@ -135,34 +144,23 @@ impl HealthcheckAgent {
         &mut self,
         client: Client<C, Body>,
     ) {
-        let healthcheck_result = match self.state {
-            HealthcheckAgentState::Initializing => match self.check_user_process_initialized() {
-                Ok(is_initialized) => {
-                    if is_initialized {
-                        self.perform_healthcheck(client.clone()).await;
-                        return;
-                    }
-
-                    UserProcessHealth::Unknown("Enclave is not initialized yet".to_string())
-                }
-                Err(err) => {
-                    log::warn!("Error reading init state from user process env - {err:?}");
-
-                    UserProcessHealth::Error(format!(
-                        "Error reading init state from user process env - {err:?}"
-                    ))
-                }
-            },
-            HealthcheckAgentState::Ready if self.healthcheck_path.is_some() => {
+        let hc_result = match self.check_user_process_initialized() {
+            Ok(HealthcheckAgentState::Ready) if self.healthcheck_path.is_some() => {
                 self.probe_user_process(client, self.healthcheck_path.as_deref().unwrap())
                     .await
             }
-            HealthcheckAgentState::Ready => {
+            Ok(HealthcheckAgentState::Ready) => {
                 UserProcessHealth::Unknown("No healthcheck path provided".to_string())
             }
+            Ok(HealthcheckAgentState::Initializing) => {
+                UserProcessHealth::Unknown("Enclave is not initialized yet".to_string())
+            }
+            Err(e) => UserProcessHealth::Error(format!(
+                "Error reading init state from user process env - {e:?}"
+            )),
         };
 
-        self.record_result(healthcheck_result);
+        self.record_result(hc_result);
     }
 
     fn serve_healthcheck_request(&mut self, request: HealthcheckStatusRequest) {
