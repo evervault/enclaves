@@ -147,8 +147,14 @@ impl UserProcessHealth {
     pub fn rank(&self) -> u8 {
         match self {
             UserProcessHealth::Unknown(_) => 0,
-            UserProcessHealth::Error(_) => 1,
-            UserProcessHealth::Response { .. } => 2,
+            UserProcessHealth::Error(_) => 2,
+            UserProcessHealth::Response { status_code, .. } => {
+                if *status_code >= 200 && *status_code < 300 {
+                    1
+                } else {
+                    3
+                }
+            }
         }
     }
 }
