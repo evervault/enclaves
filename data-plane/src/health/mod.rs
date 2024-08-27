@@ -1,11 +1,11 @@
 mod agent;
-mod initialized;
 
 use agent::UserProcessHealthcheckSender;
 
+use hyper::header;
 use hyper::{service::service_fn, Body, Response};
 use shared::server::get_vsock_server;
-use shared::server::health::{HealthCheckLog, HealthCheckStatus};
+use shared::server::health::{DataPlaneDiagnostic, DataPlaneState, UserProcessHealth};
 use shared::server::CID::Enclave;
 use shared::{server::Listener, ENCLAVE_HEALTH_CHECK_PORT};
 
@@ -46,11 +46,14 @@ pub async fn start_health_check_server(customer_process_port: u16, healthcheck: 
             async move {
                 let user_process_health = check_user_process_health(&user_process_channel).await;
 
+                let result = DataPlaneState::Initialized(DataPlaneDiagnostic {
+                    user_process: user_process_health,
+                });
+
                 Response::builder()
-                    .status(user_process_health.status_code())
-                    .body(Body::from(
-                        serde_json::to_string(&user_process_health).unwrap(),
-                    ))
+                    .status(200)
+                    .header(header::CONTENT_TYPE, "application/json;version=1")
+                    .body(Body::from(serde_json::to_string(&result).unwrap()))
             }
         });
 
@@ -64,25 +67,18 @@ pub async fn start_health_check_server(customer_process_port: u16, healthcheck: 
     }
 }
 
-async fn check_user_process_health(channel: &UserProcessHealthcheckSender) -> HealthCheckLog {
+async fn check_user_process_health(channel: &UserProcessHealthcheckSender) -> UserProcessHealth {
     let (request, receiver) = HealthcheckStatusRequest::new();
     if let Err(e) = channel.send(request) {
-        return HealthCheckLog {
-            message: Some(format!("Failed to send healthcheck to user process - {e}")),
-            status: HealthCheckStatus::Err,
-        };
+        return UserProcessHealth::Error(format!(
+            "Failed to send healthcheck to user process on channel {e:?}"
+        ));
     }
 
     match receiver.await {
-        Ok(status) => HealthCheckLog {
-            status,
-            message: None,
-        },
-        Err(e) => HealthCheckLog {
-            status: HealthCheckStatus::Err,
-            message: Some(format!(
-                "Failed to receive healthcheck response from agent - {e}"
-            )),
-        },
+        Ok(health) => health,
+        Err(e) => UserProcessHealth::Error(format!(
+            "Failed to receive healthcheck from on channel {e:?}"
+        )),
     }
 }
