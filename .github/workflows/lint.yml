@@ -19,7 +19,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.79.0
         with:
           targets: x86_64-unknown-linux-musl
-        components: clippy, rustfmt
+          components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: "standard-cache"

@@ -126,9 +126,7 @@ impl DataPlaneDiagnostic {
         match self.user_process {
             UserProcessHealth::Unknown(_) => true,
             UserProcessHealth::Error(_) => false,
-            UserProcessHealth::Response { status_code, .. } => {
-                status_code >= 200 && status_code < 300
-            }
+            UserProcessHealth::Response { status_code, .. } => (200..300).contains(&status_code),
         }
     }
 }
@@ -176,8 +174,7 @@ mod test {
     use super::*;
 
     #[tokio::test]
-    async fn test_max_of_enum() {
-        // used in run_ecs_health_check_service to ensure non-success codes have priority
+    async fn it_returns_errors_over_healthy_up_responses() {
         let max = [
             UserProcessHealth::Error("".to_string()),
             UserProcessHealth::Response {
@@ -189,13 +186,11 @@ mod test {
         .into_iter()
         .max()
         .unwrap();
-        assert!(matches!(
-            max,
-            UserProcessHealth::Response {
-                status_code: 200,
-                body: None,
-            }
-        ));
+        assert!(matches!(max, UserProcessHealth::Error(_)));
+    }
+
+    #[tokio::test]
+    async fn it_returns_errors_over_unknown() {
         let max = [
             UserProcessHealth::Unknown("".to_string()),
             UserProcessHealth::Unknown("".to_string()),
@@ -206,5 +201,29 @@ mod test {
         .max()
         .unwrap();
         assert!(matches!(max, UserProcessHealth::Error(_)));
+    }
+
+    #[tokio::test]
+    async fn it_returns_unhealthy_up_responses_over_errors() {
+        let max = [
+            UserProcessHealth::Unknown("".to_string()),
+            UserProcessHealth::Unknown("".to_string()),
+            UserProcessHealth::Error("".to_string()),
+            UserProcessHealth::Response {
+                status_code: 500,
+                body: None,
+            },
+            UserProcessHealth::Unknown("".to_string()),
+        ]
+        .into_iter()
+        .max()
+        .unwrap();
+        assert!(matches!(
+            max,
+            UserProcessHealth::Response {
+                status_code: 500,
+                body: None,
+            }
+        ));
     }
 }
