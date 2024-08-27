@@ -176,7 +176,7 @@ mod test {
     use super::*;
 
     #[tokio::test]
-    async fn it_returns_errors_over_health_up_responses() {
+    async fn it_returns_errors_over_healthy_up_responses() {
         let max = [
             UserProcessHealth::Error("".to_string()),
             UserProcessHealth::Response {
