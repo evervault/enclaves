@@ -113,29 +113,24 @@ impl HealthcheckAgent {
     }
 
     fn check_user_process_initialized(&mut self) -> Result<HealthcheckAgentState, ContextError> {
-        let hc_state = match self.state {
-            HealthcheckAgentState::Initializing => {
-                match std::fs::read_to_string("/etc/customer-env") {
-                    Ok(c) => {
-                        if c.contains("EV_INITIALIZED") {
-                            let _ = EnclaveContext::get()?;
-                            self.state = HealthcheckAgentState::Ready;
-                            HealthcheckAgentState::Ready
-                        } else {
-                            HealthcheckAgentState::Initializing
-                        }
-                    }
-
-                    Err(e) => match e.kind() {
-                        std::io::ErrorKind::NotFound => HealthcheckAgentState::Initializing,
-                        _ => return Err(e.into()),
-                    },
+        let new_state = match std::fs::read_to_string("/etc/customer-env") {
+            Ok(c) => {
+                if c.contains("EV_INITIALIZED") {
+                    let _ = EnclaveContext::get()?;
+                    self.state = HealthcheckAgentState::Ready;
+                    HealthcheckAgentState::Ready
+                } else {
+                    HealthcheckAgentState::Initializing
                 }
             }
-            _ => HealthcheckAgentState::Ready,
+
+            Err(e) => match e.kind() {
+                std::io::ErrorKind::NotFound => HealthcheckAgentState::Initializing,
+                _ => return Err(e.into()),
+            },
         };
 
-        Ok(hc_state)
+        Ok(new_state)
     }
 
     async fn perform_healthcheck<
@@ -144,7 +139,12 @@ impl HealthcheckAgent {
         &mut self,
         client: Client<C, Body>,
     ) {
-        let hc_result = match self.check_user_process_initialized() {
+        let hc_state = match self.state {
+            HealthcheckAgentState::Initializing => self.check_user_process_initialized(),
+            _ => Ok(HealthcheckAgentState::Ready),
+        };
+
+        let hc_result = match hc_state {
             Ok(HealthcheckAgentState::Ready) if self.healthcheck_path.is_some() => {
                 self.probe_user_process(client, self.healthcheck_path.as_deref().unwrap())
                     .await
