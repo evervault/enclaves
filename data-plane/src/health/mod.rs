@@ -1,6 +1,7 @@
-pub mod agent;
+mod agent;
+pub mod diagnostic;
 
-use agent::UserProcessHealthcheckSender;
+use agent::{DiagnosticReceiver, UserProcessHealthcheckSender};
 
 use hyper::header;
 use hyper::{service::service_fn, Body, Response};
@@ -14,8 +15,10 @@ use crate::health::agent::HealthcheckStatusRequest;
 fn spawn_customer_healthcheck_agent(
     customer_process_port: u16,
     healthcheck: Option<String>,
+    diag_recv: DiagnosticReceiver,
 ) -> UserProcessHealthcheckSender {
-    let (agent, healthcheck_channel) = agent::default_agent(customer_process_port, healthcheck);
+    let (agent, healthcheck_channel) =
+        agent::default_agent(customer_process_port, healthcheck, diag_recv);
     tokio::spawn(async move {
         log::info!("Spawning healthcheck agent.");
         agent.run().await;
@@ -23,9 +26,13 @@ fn spawn_customer_healthcheck_agent(
     healthcheck_channel
 }
 
-pub async fn start_health_check_server(customer_process_port: u16, healthcheck: Option<String>) {
+pub async fn start_health_check_server(
+    customer_process_port: u16,
+    healthcheck: Option<String>,
+    diag_recv: DiagnosticReceiver,
+) {
     let user_process_healthcheck_channel =
-        spawn_customer_healthcheck_agent(customer_process_port, healthcheck);
+        spawn_customer_healthcheck_agent(customer_process_port, healthcheck, diag_recv);
     let mut health_check_server = get_vsock_server(ENCLAVE_HEALTH_CHECK_PORT, Enclave)
         .await
         .unwrap();

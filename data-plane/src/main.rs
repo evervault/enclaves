@@ -1,6 +1,6 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use data_plane::health::agent::{Diagnostic, DiagnosticSender};
+use data_plane::health::diagnostic::{Diagnostic, DiagnosticSender};
 #[cfg(not(feature = "tls_termination"))]
 use shared::server::Listener;
 use shared::server::CID::Enclave;
@@ -67,13 +67,13 @@ fn main() {
         }
     };
 
-    let (hc_sender, hc_receiver) = mpsc::unbounded_channel::<Diagnostic>();
-    let hc_sender = Arc::new(Mutex::new(hc_sender));
+    let (diag_sender, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
+    let diag_sender = Arc::new(diag_sender);
 
     runtime.block_on(async move {
         tokio::join!(
-            start(data_plane_port, hc_sender),
-            start_health_check_server(data_plane_port, ctx.healthcheck)
+            start(data_plane_port, diag_sender),
+            start_health_check_server(data_plane_port, ctx.healthcheck, diag_recv),
         );
     });
 }

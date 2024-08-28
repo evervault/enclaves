@@ -3,9 +3,9 @@ use hyper::header::HeaderValue;
 use hyper::{Body, Response};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use serde_json::value::Value;
 use std::ops::Deref;
-use tokio::sync::mpsc;
 use tokio_rustls::rustls::ServerName;
 use tokio_rustls::TlsConnector;
 
@@ -89,9 +89,13 @@ pub struct E3Client {
     hc_sender: Option<DiagnosticSender>,
 }
 
-impl Recordable for E3Client {
-    fn recorder(&self) -> Option<DiagnosticSender> {
+impl Diagnosable for E3Client {
+    fn sender(&self) -> Option<DiagnosticSender> {
         self.hc_sender.clone()
+    }
+
+    fn label() -> String {
+        "E3Client".to_string()
     }
 }
 
@@ -99,7 +103,7 @@ use crate::base_tls_client::tls_client_config::get_tls_client_config;
 use crate::base_tls_client::{AuthType, BaseClient, ClientError, OpenServerCertVerifier};
 use crate::configuration;
 use crate::crypto::token::TokenClient;
-use crate::health::agent::{Diagnostic, DiagnosticSender, Record, RecordError, Recordable};
+use crate::health::diagnostic::{Diagnosable, Diagnose, DiagnosticSender};
 use crate::stats_client::StatsClient;
 
 impl E3Client {
@@ -156,9 +160,9 @@ impl E3Api for E3Client {
             )
             .await
             .inspect_err(|e| {
-                self.diagnostic(Diagnostic {
-                    label: "non".to_string(),
-                });
+                self.diagnostic(json!({
+                    "decryption_err": e.to_string(),
+                }))
             })?;
 
         StatsClient::record_decrypt();
@@ -192,7 +196,13 @@ impl E3Api for E3Client {
                 payload.try_into_body()?,
                 request_headers,
             )
-            .await?;
+            .await
+            .inspect_err(|e| {
+                self.diagnostic(json!({
+                    "encryption_err": e.to_string(),
+                }))
+            })?;
+
         StatsClient::record_encrypt();
         self.parse_response(response).await
     }

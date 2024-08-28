@@ -1,64 +1,16 @@
-use futures::lock::MutexGuard;
 use hyper::{client::HttpConnector, header, Body, Client, Method, Request};
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use shared::server::health::UserProcessHealth;
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex, TryLockError};
 use thiserror::Error;
-use tokio::sync::mpsc::{self, unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::sync::oneshot::{
     channel as oneshot_channel, Receiver as OneshotReceiver, Sender as OneshotSender,
 };
 
 use crate::{ContextError, EnclaveContext};
 
-#[derive(Error, Debug)]
-pub enum RecordError {
-    #[error("sad!")]
-    Mutex(String),
-    #[error("sad!")]
-    Send(#[from] mpsc::error::SendError<Diagnostic>),
-    #[error("sad!")]
-    NoSender,
-}
-
-#[derive(Debug)]
-pub struct Diagnostic {
-    pub label: String,
-}
-
-pub trait Recordable {
-    fn recorder(&self) -> Option<DiagnosticSender>;
-}
-
-#[allow(unused)]
-pub trait Record {
-    fn diagnostic(&self, diagnostic: Diagnostic);
-}
-
-impl<T: Recordable> Record for T {
-    fn diagnostic(&self, diagnostic: Diagnostic) {
-        if let Some(hc_sender) = self.recorder().clone() {
-            let lock = match hc_sender.try_lock() {
-                Ok(lock) => lock,
-                Err(e) => {
-                    log::error!("Couldn't acquire lock for diagnostic sender {e:?}");
-                    return;
-                }
-            };
-
-            match lock.send(diagnostic) {
-                Ok(_) => (),
-                Err(e) => log::error!("Couldn't send diagnostic over channel {e:?}"),
-            };
-        } else {
-            log::warn!("tried to record diagnostic {diagnostic:?} where sender wasn't present");
-        };
-    }
-}
-
-pub type DiagnosticSender = Arc<Mutex<mpsc::UnboundedSender<Diagnostic>>>;
+use super::diagnostic::Diagnostic;
 
 enum HealthcheckAgentState {
     Initializing,
@@ -83,25 +35,30 @@ impl HealthcheckStatusRequest {
 }
 
 pub type UserProcessHealthcheckSender = UnboundedSender<HealthcheckStatusRequest>;
+pub type DiagnosticReceiver = UnboundedReceiver<Diagnostic>;
 
 pub struct HealthcheckAgent {
     customer_process_port: u16,
     healthcheck_path: Option<String>,
-    buffer: VecDeque<UserProcessHealth>,
+    hc_buffer: VecDeque<UserProcessHealth>,
+    diag_buffer: VecDeque<serde_json::Value>,
     interval: std::time::Duration,
     state: HealthcheckAgentState,
     recv: UnboundedReceiver<HealthcheckStatusRequest>,
+    diag_recv: DiagnosticReceiver,
     buffer_size_limit: usize,
 }
 
 pub fn default_agent(
     customer_process_port: u16,
     healthcheck: Option<String>,
+    diag_recv: DiagnosticReceiver,
 ) -> (HealthcheckAgent, UnboundedSender<HealthcheckStatusRequest>) {
     HealthcheckAgent::new(
         customer_process_port,
         std::time::Duration::from_secs(1),
         healthcheck,
+        diag_recv,
     )
 }
 
@@ -120,24 +77,27 @@ impl HealthcheckAgent {
         customer_process_port: u16,
         interval: std::time::Duration,
         healthcheck_path: Option<String>,
+        diag_recv: DiagnosticReceiver,
     ) -> (Self, UnboundedSender<HealthcheckStatusRequest>) {
         let (sender, recv) = unbounded_channel();
         let healthcheck_agent = Self {
             customer_process_port,
             healthcheck_path,
-            buffer: VecDeque::with_capacity(DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT),
+            hc_buffer: VecDeque::with_capacity(DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT),
+            diag_buffer: VecDeque::with_capacity(DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT),
             state: HealthcheckAgentState::default(),
             interval,
             recv,
+            diag_recv,
             buffer_size_limit: DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT,
         };
         (healthcheck_agent, sender)
     }
 
     fn record_result(&mut self, healthcheck_status: UserProcessHealth) {
-        self.buffer.push_back(healthcheck_status);
-        if self.buffer.len() >= self.buffer_size_limit {
-            self.buffer.pop_front();
+        self.hc_buffer.push_back(healthcheck_status);
+        if self.hc_buffer.len() >= self.buffer_size_limit {
+            self.hc_buffer.pop_front();
         }
     }
 
@@ -214,7 +174,7 @@ impl HealthcheckAgent {
     }
 
     fn serve_healthcheck_request(&mut self, request: HealthcheckStatusRequest) {
-        if self.buffer.is_empty() {
+        if self.hc_buffer.is_empty() {
             let _ = request.sender.send(UserProcessHealth::Unknown(
                 "Enclave is not initialized yet".to_string(),
             ));
@@ -222,7 +182,7 @@ impl HealthcheckAgent {
         }
 
         // Safety: Iterator checked to be non-empty at start of func
-        let max_result = self.buffer.iter().max().unwrap();
+        let max_result = self.hc_buffer.iter().max().unwrap();
         let _ = request.sender.send(max_result.to_owned());
     }
 
@@ -231,10 +191,11 @@ impl HealthcheckAgent {
         let client = Self::build_client();
         loop {
             tokio::select! {
-              healthcheck_req = self.recv.recv() => {
-                if let Some(req) = healthcheck_req {
-                  self.serve_healthcheck_request(req);
-                }
+              Some(hc_req) = self.recv.recv() => {
+                  self.serve_healthcheck_request(hc_req);
+              },
+              Some(diag) = self.diag_recv.recv() => {
+                  log::info!("Received diagnostic message - {diag:?}");
               },
               _ = interval.tick() => self.perform_healthcheck(client.clone()).await
             }
@@ -311,7 +272,7 @@ mod test {
     fn validate_response_returned_from_healthy_buffer() {
         let (mut agent, _sender) = default_agent(3000, None);
         for _ in 0..5 {
-            agent.buffer.push_back(UserProcessHealth::Response {
+            agent.hc_buffer.push_back(UserProcessHealth::Response {
                 status_code: 200,
                 body: None,
             });
@@ -333,12 +294,12 @@ mod test {
     fn validate_response_returned_from_buffer_with_unknown() {
         let (mut agent, _sender) = default_agent(3000, None);
         for _ in 0..5 {
-            agent.buffer.push_back(UserProcessHealth::Response {
+            agent.hc_buffer.push_back(UserProcessHealth::Response {
                 status_code: 200,
                 body: None,
             });
         }
-        agent.buffer.push_back(UserProcessHealth::Unknown(
+        agent.hc_buffer.push_back(UserProcessHealth::Unknown(
             "Enclave is not initialized yet".to_string(),
         ));
         let (req, mut receiver) = HealthcheckStatusRequest::new();
@@ -362,7 +323,7 @@ mod test {
         let client = hyper::Client::builder().build_http();
         agent.perform_healthcheck(client).await;
 
-        let healthcheck_result = agent.buffer.iter().max().unwrap();
+        let healthcheck_result = agent.hc_buffer.iter().max().unwrap();
         assert!(matches!(
             healthcheck_result.to_owned(),
             UserProcessHealth::Unknown(_)
@@ -378,7 +339,7 @@ mod test {
         let client = hyper::Client::builder().build_http();
         agent.perform_healthcheck(client).await;
 
-        let healthcheck_result = agent.buffer.iter().max().unwrap();
+        let healthcheck_result = agent.hc_buffer.iter().max().unwrap();
         assert!(matches!(
             healthcheck_result.to_owned(),
             UserProcessHealth::Unknown(_)
@@ -398,7 +359,7 @@ mod test {
         let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
         agent.perform_healthcheck(client).await;
 
-        let healthcheck_result = agent.buffer.iter().max().unwrap();
+        let healthcheck_result = agent.hc_buffer.iter().max().unwrap();
         assert_eq!(
             healthcheck_result.to_owned(),
             UserProcessHealth::Response {
@@ -421,7 +382,7 @@ mod test {
         let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
         agent.perform_healthcheck(client).await;
 
-        let healthcheck_result = agent.buffer.iter().max().unwrap();
+        let healthcheck_result = agent.hc_buffer.iter().max().unwrap();
         assert_eq!(
             healthcheck_result.to_owned(),
             UserProcessHealth::Response {
@@ -446,7 +407,7 @@ mod test {
         let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
         agent.perform_healthcheck(client).await;
 
-        let healthcheck_result = agent.buffer.iter().max().unwrap();
+        let healthcheck_result = agent.hc_buffer.iter().max().unwrap();
         assert_eq!(
             healthcheck_result.to_owned(),
             UserProcessHealth::Response {
@@ -471,7 +432,7 @@ mod test {
         let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
         agent.perform_healthcheck(client).await;
 
-        let healthcheck_result = agent.buffer.iter().max().unwrap();
+        let healthcheck_result = agent.hc_buffer.iter().max().unwrap();
         assert_eq!(
             healthcheck_result.to_owned(),
             UserProcessHealth::Response {
@@ -496,7 +457,7 @@ mod test {
         let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
         agent.perform_healthcheck(client).await;
 
-        let healthcheck_result = agent.buffer.iter().max().unwrap();
+        let healthcheck_result = agent.hc_buffer.iter().max().unwrap();
         assert_eq!(
             healthcheck_result.to_owned(),
             UserProcessHealth::Response {
@@ -521,7 +482,7 @@ mod test {
         let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
         agent.perform_healthcheck(client).await;
 
-        let healthcheck_result = agent.buffer.iter().max().unwrap();
+        let healthcheck_result = agent.hc_buffer.iter().max().unwrap();
         assert_eq!(
             healthcheck_result.to_owned(),
             UserProcessHealth::Response {
@@ -546,7 +507,7 @@ mod test {
         let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
         agent.perform_healthcheck(client).await;
 
-        let healthcheck_result = agent.buffer.iter().max().unwrap();
+        let healthcheck_result = agent.hc_buffer.iter().max().unwrap();
         assert_eq!(
             healthcheck_result.to_owned(),
             UserProcessHealth::Response {
@@ -571,7 +532,7 @@ mod test {
         let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
         agent.perform_healthcheck(client).await;
 
-        let healthcheck_result = agent.buffer.iter().max().unwrap();
+        let healthcheck_result = agent.hc_buffer.iter().max().unwrap();
         assert_eq!(
             healthcheck_result.to_owned(),
             UserProcessHealth::Response {

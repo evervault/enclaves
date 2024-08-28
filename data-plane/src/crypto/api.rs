@@ -6,7 +6,6 @@ use shared::server::error::ServerResult;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::mpsc;
 
 use hyper::{
     service::{make_service_fn, service_fn},
@@ -16,7 +15,7 @@ use hyper::{
 use crate::base_tls_client::ClientError;
 use crate::e3client::{CryptoRequest, CryptoResponse, E3Api, E3Client};
 use crate::error::Error;
-use crate::health::agent::{Diagnostic, DiagnosticSender};
+use crate::health::diagnostic::DiagnosticSender;
 use crate::ContextError;
 
 #[cfg(feature = "enclave")]
