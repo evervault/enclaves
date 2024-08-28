@@ -1,4 +1,4 @@
-mod agent;
+pub mod agent;
 
 use agent::UserProcessHealthcheckSender;
 

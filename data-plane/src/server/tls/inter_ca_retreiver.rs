@@ -17,7 +17,7 @@ impl InterCaRetreiver {
     pub fn new() -> Self {
         let cert_provisioner_client = cert_provisioner_client::CertProvisionerClient::new();
         let config_client = config_client::ConfigClient::new();
-        let e3_client = E3Client::new();
+        let e3_client = E3Client::new(None);
         let env = Environment { e3_client };
 
         Self {

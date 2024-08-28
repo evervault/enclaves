@@ -1,3 +1,6 @@
+use std::sync::{Arc, Mutex};
+
+use data_plane::health::agent::{Diagnostic, DiagnosticSender};
 #[cfg(not(feature = "tls_termination"))]
 use shared::server::Listener;
 use shared::server::CID::Enclave;
@@ -14,6 +17,7 @@ use data_plane::stats_client::StatsClient;
 use data_plane::time::ClockSync;
 use data_plane::FeatureContext;
 use shared::ENCLAVE_CONNECT_PORT;
+use tokio::sync::mpsc;
 use tokio::time::Duration;
 
 #[cfg(feature = "enclave")]
@@ -63,16 +67,19 @@ fn main() {
         }
     };
 
+    let (hc_sender, hc_receiver) = mpsc::unbounded_channel::<Diagnostic>();
+    let hc_sender = Arc::new(Mutex::new(hc_sender));
+
     runtime.block_on(async move {
         tokio::join!(
-            start(data_plane_port),
+            start(data_plane_port, hc_sender),
             start_health_check_server(data_plane_port, ctx.healthcheck)
         );
     });
 }
 
 #[cfg(not(feature = "network_egress"))]
-async fn start(data_plane_port: u16) {
+async fn start(data_plane_port: u16, hc_sender: DiagnosticSender) {
     use data_plane::{crypto::api::CryptoApi, stats::StatsProxy};
 
     StatsClient::init();
@@ -88,7 +95,7 @@ async fn start(data_plane_port: u16) {
     log::info!("Running data plane with egress disabled");
     let (_, e3_api_result, stats_result, _) = tokio::join!(
         start_data_plane(data_plane_port, context),
-        CryptoApi::listen(),
+        CryptoApi::listen(hc_sender),
         StatsProxy::listen(),
         ClockSync::run(ENCLAVE_CLOCK_SYNC_INTERVAL)
     );

@@ -39,7 +39,7 @@ where
         .with_attestable_cert()
         .await
         .expect("Failed to create tls server");
-    let e3_client = Arc::new(E3Client::new());
+    let e3_client = Arc::new(E3Client::new(None));
 
     let (tx, rx): (
         UnboundedSender<LogHandlerMessage>,
