@@ -1,4 +1,7 @@
 use data_plane::health::notify_shutdown::{NotifyShutdown, Service};
+use std::sync::{Arc, Mutex};
+
+use data_plane::health::agent::{Diagnostic, DiagnosticSender};
 #[cfg(not(feature = "tls_termination"))]
 use shared::server::Listener;
 use shared::server::CID::Enclave;
@@ -18,6 +21,7 @@ use data_plane::time::ClockSync;
 use data_plane::FeatureContext;
 use shared::ENCLAVE_CONNECT_PORT;
 use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc;
 use tokio::time::Duration;
 
 #[cfg(feature = "enclave")]
@@ -67,6 +71,9 @@ fn main() {
         }
     };
 
+    let (hc_sender, hc_receiver) = mpsc::unbounded_channel::<Diagnostic>();
+    let hc_sender = Arc::new(Mutex::new(hc_sender));
+
     runtime.block_on(async move {
         let Ok((health_check_server, shutdown_notifier)) = build_health_check_server(
             ctx.healthcheck_port.unwrap_or(data_plane_port),
@@ -89,6 +96,47 @@ fn main() {
 }
 
 async fn start(data_plane_port: u16, shutdown_notifier: Sender<Service>) {
+        tokio::join!(
+            start(data_plane_port, hc_sender),
+            start_health_check_server(data_plane_port, ctx.healthcheck)
+        );
+}
+
+#[cfg(not(feature = "network_egress"))]
+async fn start(data_plane_port: u16, hc_sender: DiagnosticSender) {
+    use data_plane::{crypto::api::CryptoApi, stats::StatsProxy};
+
+    StatsClient::init();
+
+    let context = match FeatureContext::get() {
+        Ok(context) => context,
+        Err(e) => {
+            log::error!("Failed to access context in enclave - {e}");
+            return;
+        }
+    };
+
+    log::info!("Running data plane with egress disabled");
+    let (_, e3_api_result, stats_result, _) = tokio::join!(
+        start_data_plane(data_plane_port, context),
+        CryptoApi::listen(hc_sender),
+        StatsProxy::listen(),
+        ClockSync::run(ENCLAVE_CLOCK_SYNC_INTERVAL)
+    );
+
+    if let Err(e) = e3_api_result {
+        log::error!("An error occurred within the E3 API server — {e:?}");
+    }
+
+    if let Err(e) = stats_result {
+        log::error!("An error occurred within the stats proxy — {e:?}");
+    }
+}
+
+#[cfg(feature = "network_egress")]
+async fn start(data_plane_port: u16) {
+    use data_plane::{crypto::api::CryptoApi, stats::StatsProxy};
+
     StatsClient::init();
     let context = match FeatureContext::get() {
         Ok(context) => context,

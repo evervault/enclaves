@@ -1,8 +1,11 @@
 use hyper::client::connect::Connect;
+use futures::lock::MutexGuard;
 use hyper::{client::HttpConnector, header, Body, Client, Method, Request};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use shared::server::health::UserProcessHealth;
 use std::collections::VecDeque;
+use std::sync::{Arc, Mutex, TryLockError};
 use thiserror::Error;
 use tokio::sync::mpsc::{
     channel, unbounded_channel, Receiver, Sender, UnboundedReceiver, UnboundedSender,
@@ -14,6 +17,52 @@ use tokio::sync::oneshot::{
 use crate::{ContextError, EnclaveContext};
 
 use super::notify_shutdown::Service;
+#[derive(Error, Debug)]
+pub enum RecordError {
+    #[error("sad!")]
+    Mutex(String),
+    #[error("sad!")]
+    Send(#[from] mpsc::error::SendError<Diagnostic>),
+    #[error("sad!")]
+    NoSender,
+}
+
+#[derive(Debug)]
+pub struct Diagnostic {
+    pub label: String,
+}
+
+pub trait Recordable {
+    fn recorder(&self) -> Option<DiagnosticSender>;
+}
+
+#[allow(unused)]
+pub trait Record {
+    fn diagnostic(&self, diagnostic: Diagnostic);
+}
+
+impl<T: Recordable> Record for T {
+    fn diagnostic(&self, diagnostic: Diagnostic) {
+        if let Some(hc_sender) = self.recorder().clone() {
+            let lock = match hc_sender.try_lock() {
+                Ok(lock) => lock,
+                Err(e) => {
+                    log::error!("Couldn't acquire lock for diagnostic sender {e:?}");
+                    return;
+                }
+            };
+
+            match lock.send(diagnostic) {
+                Ok(_) => (),
+                Err(e) => log::error!("Couldn't send diagnostic over channel {e:?}"),
+            };
+        } else {
+            log::warn!("tried to record diagnostic {diagnostic:?} where sender wasn't present");
+        };
+    }
+}
+
+pub type DiagnosticSender = Arc<Mutex<mpsc::UnboundedSender<Diagnostic>>>;
 
 enum HealthcheckAgentState {
     Initializing,
