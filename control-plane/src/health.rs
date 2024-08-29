@@ -3,9 +3,13 @@ use crate::error::ServerError;
 use axum::http::HeaderValue;
 use hyper::{Body, Request, Response};
 use serde::{Deserialize, Serialize};
-use shared::server::health::{HealthCheckLog, HealthCheckStatus, HealthCheckVersion};
-use shared::server::{error::ServerResult, tcp::TcpServer, Listener};
-use shared::{env_var_present_and_true, ENCLAVE_HEALTH_CHECK_PORT};
+use shared::server::{
+    error::ServerResult,
+    health::{ControlPlaneState, DataPlaneState, HealthCheck, HealthCheckLog, HealthCheckVersion},
+    tcp::TcpServer,
+    Listener,
+};
+use shared::ENCLAVE_HEALTH_CHECK_PORT;
 use std::net::SocketAddr;
 use std::sync::OnceLock;
 
@@ -17,24 +21,23 @@ pub struct HealthCheckServer {
     tcp_server: TcpServer,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct CombinedHealthCheckLog {
-    control_plane: HealthCheckLog,
+    control_plane: ControlPlaneState,
     data_plane: HealthCheckVersion,
 }
 
-async fn run_ecs_health_check_service(
-    skip_deep_healthcheck: bool,
+pub async fn run_ecs_health_check_service(
     is_draining: bool,
 ) -> std::result::Result<Response<Body>, ServerError> {
     if is_draining {
-        let draining_log =
-            HealthCheckLog::new(HealthCheckStatus::Err, Some("Enclave is draining".into()));
-
         let combined_log = CombinedHealthCheckLog {
-            control_plane: draining_log.clone(),
-            data_plane: HealthCheckVersion::V1(draining_log),
+            control_plane: ControlPlaneState::Draining,
+            data_plane: DataPlaneState::Unknown(
+                "Enclave is draining, data-plane health will not be checked".into(),
+            )
+            .into(),
         };
 
         let combined_log_json = serde_json::to_string(&combined_log)?;
@@ -45,32 +48,12 @@ async fn run_ecs_health_check_service(
             .body(Body::from(combined_log_json))?);
     };
 
-    let control_plane = HealthCheckLog::new(
-        HealthCheckStatus::Ok,
-        Some("Control plane is running".into()),
-    );
+    let control_plane = ControlPlaneState::Ok;
+    let data_plane = health_check_data_plane().await.unwrap_or_else(|e| {
+        DataPlaneState::Error(format!("Failed to contact data-plane for healthcheck: {e}")).into()
+    });
 
-    let data_plane = if skip_deep_healthcheck {
-        HealthCheckVersion::V1(HealthCheckLog::new(HealthCheckStatus::Ignored, None))
-    } else {
-        match health_check_data_plane().await {
-            Ok(v) => v,
-            Err(e) => HealthCheckVersion::V1(HealthCheckLog::new(
-                HealthCheckStatus::Err,
-                Some(e.to_string()),
-            )),
-        }
-    };
-
-    let data_plane_log = match &data_plane {
-        HealthCheckVersion::V0(log) | HealthCheckVersion::V1(log) => log,
-    };
-
-    let status_to_return = [control_plane.status.clone(), data_plane_log.status.clone()]
-        .iter()
-        .max()
-        .unwrap()
-        .clone();
+    let status_to_return = std::cmp::max(control_plane.status_code(), data_plane.status_code());
 
     let combined_log = CombinedHealthCheckLog {
         control_plane,
@@ -79,7 +62,7 @@ async fn run_ecs_health_check_service(
     let combined_log_json = serde_json::to_string(&combined_log).unwrap();
 
     Response::builder()
-        .status(status_to_return.status_code())
+        .status(status_to_return)
         .header("Content-Type", "application/json")
         .body(Body::from(combined_log_json))
         .map_err(ServerError::from)
@@ -110,7 +93,7 @@ async fn health_check_data_plane() -> Result<HealthCheckVersion, ServerError> {
 
     let hc = match content_type {
         Some("application/json;version=1") => {
-            HealthCheckVersion::V1(serde_json::from_slice::<HealthCheckLog>(bytes)?)
+            HealthCheckVersion::V1(serde_json::from_slice::<DataPlaneState>(bytes)?)
         }
         _ => HealthCheckVersion::V0(serde_json::from_slice::<HealthCheckLog>(bytes)?),
     };
@@ -133,9 +116,6 @@ impl HealthCheckServer {
             "Control plane health-check server running on port {CONTROL_PLANE_HEALTH_CHECK_PORT}"
         );
 
-        // Perform deep healthchecks into the enclave *unless* `DISABLE_DEEP_HEALTH_CHECKS` is set to "true"
-        let skip_deep_healthcheck = env_var_present_and_true!("DISABLE_DEEP_HEALTH_CHECKS");
-
         loop {
             let stream = self.tcp_server.accept().await?;
             let service = hyper::service::service_fn(move |request: Request<Body>| async move {
@@ -146,7 +126,7 @@ impl HealthCheckServer {
                 {
                     Some(b"ECS-HealthCheck") => {
                         let is_draining = IS_DRAINING.get().is_some();
-                        run_ecs_health_check_service(skip_deep_healthcheck, is_draining).await
+                        run_ecs_health_check_service(is_draining).await
                     }
                     _ => Response::builder()
                         .status(400)
@@ -178,77 +158,37 @@ mod health_check_tests {
     #[tokio::test]
     async fn test_enclave_health_check_service() {
         // the data-plane status should error, as its not running
-        let response = run_ecs_health_check_service(false, false).await.unwrap();
+        let response = run_ecs_health_check_service(false).await.unwrap();
         assert_eq!(response.status(), 500);
         println!("deep response: {response:?}");
         let health_check_log = response_to_health_check_log(response).await;
 
-        let dp_status = match health_check_log.data_plane {
-            HealthCheckVersion::V0(log) => panic!("Expected V1 Version"),
-            HealthCheckVersion::V1(log) => log.status,
+        let dp_state = match health_check_log.data_plane {
+            HealthCheckVersion::V0(_) => panic!("Expected V1 Version"),
+            HealthCheckVersion::V1(state) => state,
         };
 
-        assert!(matches!(dp_status, HealthCheckStatus::Err));
-    }
-
-    #[tokio::test]
-    async fn test_enclave_health_check_service_with_skip_deep_set_to_true() {
-        // the data-plane status should error, as its not running
-        let response = run_ecs_health_check_service(true, false).await.unwrap();
-        assert_eq!(response.status(), 200);
-        println!("deep response: {response:?}");
-        let health_check_log = response_to_health_check_log(response).await;
-
-        let dp_status = match health_check_log.data_plane {
-            HealthCheckVersion::V0(log) => panic!("Expected V1 Version"),
-            HealthCheckVersion::V1(log) => log.status,
-        };
-
-        assert!(matches!(dp_status, HealthCheckStatus::Ignored));
+        assert!(matches!(dp_state, DataPlaneState::Error(_)));
     }
 
     #[tokio::test]
     async fn test_enclave_health_check_service_with_draining_set_to_true() {
         // the data-plane status should error, as its not running
         IS_DRAINING.set(true).unwrap();
-        let response = run_ecs_health_check_service(false, true).await.unwrap();
+        let response = run_ecs_health_check_service(true).await.unwrap();
         assert_eq!(response.status(), 500);
         println!("deep response: {response:?}");
         let health_check_log = response_to_health_check_log(response).await;
 
-        let dp_status = match health_check_log.data_plane {
-            HealthCheckVersion::V0(log) => panic!("Expected V1 Version"),
-            HealthCheckVersion::V1(log) => log.status,
+        let dp_state = match health_check_log.data_plane {
+            HealthCheckVersion::V0(_) => panic!("Expected V1 Version"),
+            HealthCheckVersion::V1(state) => state,
         };
 
-        assert!(matches!(dp_status, HealthCheckStatus::Err));
+        assert!(matches!(dp_state, DataPlaneState::Unknown(_)));
         assert!(matches!(
-            health_check_log.control_plane.status,
-            HealthCheckStatus::Err
+            health_check_log.control_plane,
+            ControlPlaneState::Draining
         ));
-    }
-
-    #[tokio::test]
-    async fn test_max_of_enum() {
-        // used in run_ecs_health_check_service to ensure non-success codes have priority
-        let max = [
-            HealthCheckStatus::Err,
-            HealthCheckStatus::Ok,
-            HealthCheckStatus::Unknown,
-            HealthCheckStatus::Ignored,
-        ]
-        .iter()
-        .max()
-        .unwrap();
-        assert!(matches!(max, HealthCheckStatus::Err));
-        let max = [
-            HealthCheckStatus::Ok,
-            HealthCheckStatus::Unknown,
-            HealthCheckStatus::Ignored,
-        ]
-        .iter()
-        .max()
-        .unwrap();
-        assert!(matches!(max, HealthCheckStatus::Unknown));
     }
 }
