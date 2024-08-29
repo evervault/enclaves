@@ -12,8 +12,8 @@ pub trait Diagnose {
 
 impl<T: Diagnosable> Diagnose for T {
     fn diagnostic(&self, data: serde_json::Value) {
-        if let Some(hc_sender) = self.sender().clone() {
-            match hc_sender.send(Diagnostic {
+        if let Some(diag_sender) = self.sender().clone() {
+            match diag_sender.send(Diagnostic {
                 label: Self::label(),
                 data,
             }) {
@@ -21,7 +21,10 @@ impl<T: Diagnosable> Diagnose for T {
                 Err(e) => log::error!("Error sending diagnostic over channel {e:?}"),
             };
         } else {
-            log::warn!("tried to record diagnostic {data} where sender wasn't present");
+            log::warn!(
+                "tried to record diagnostic in {} where sender wasn't present",
+                Self::label()
+            );
         };
     }
 }

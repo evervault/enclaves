@@ -87,12 +87,12 @@ pub trait E3Api {
 pub struct E3Client {
     base_client: BaseClient,
     token_client: TokenClient,
-    hc_sender: Option<DiagnosticSender>,
+    diag_sender: Option<DiagnosticSender>,
 }
 
 impl Diagnosable for E3Client {
     fn sender(&self) -> Option<DiagnosticSender> {
-        self.hc_sender.clone()
+        self.diag_sender.clone()
     }
 
     fn label() -> String {
@@ -108,7 +108,7 @@ use crate::health::diagnostic::{Diagnosable, Diagnose};
 use crate::stats_client::StatsClient;
 
 impl E3Client {
-    pub fn new(hc_sender: Option<DiagnosticSender>) -> Self {
+    pub fn new(diag_sender: Option<DiagnosticSender>) -> Self {
         let verifier = std::sync::Arc::new(OpenServerCertVerifier);
         let tls_connector =
             TlsConnector::from(std::sync::Arc::new(get_tls_client_config(verifier)));
@@ -119,7 +119,7 @@ impl E3Client {
         Self {
             base_client: BaseClient::new(tls_connector, server_name, shared::ENCLAVE_CRYPTO_PORT),
             token_client: TokenClient::new(),
-            hc_sender,
+            diag_sender,
         }
     }
 

@@ -1,10 +1,9 @@
-use std::sync::Arc;
-
 use shared::server::diagnostic::{Diagnostic, DiagnosticSender};
 #[cfg(not(feature = "tls_termination"))]
 use shared::server::Listener;
 use shared::server::CID::Enclave;
 use shared::{print_version, server::get_vsock_server_with_proxy_protocol};
+use std::sync::Arc;
 
 #[cfg(feature = "network_egress")]
 use data_plane::dns::egressproxy::EgressProxy;
@@ -79,7 +78,7 @@ fn main() {
 }
 
 #[cfg(not(feature = "network_egress"))]
-async fn start(data_plane_port: u16, hc_sender: DiagnosticSender) {
+async fn start(data_plane_port: u16, diag_sender: DiagnosticSender) {
     use data_plane::{crypto::api::CryptoApi, stats::StatsProxy};
 
     StatsClient::init();
@@ -95,7 +94,7 @@ async fn start(data_plane_port: u16, hc_sender: DiagnosticSender) {
     log::info!("Running data plane with egress disabled");
     let (_, e3_api_result, stats_result, _) = tokio::join!(
         start_data_plane(data_plane_port, context),
-        CryptoApi::listen(hc_sender),
+        CryptoApi::listen(diag_sender),
         StatsProxy::listen(),
         ClockSync::run(ENCLAVE_CLOCK_SYNC_INTERVAL)
     );
@@ -110,7 +109,7 @@ async fn start(data_plane_port: u16, hc_sender: DiagnosticSender) {
 }
 
 #[cfg(feature = "network_egress")]
-async fn start(data_plane_port: u16, hc_sender: DiagnosticSender) {
+async fn start(data_plane_port: u16, diag_sender: DiagnosticSender) {
     use data_plane::{crypto::api::CryptoApi, stats::StatsProxy};
 
     StatsClient::init();
@@ -125,7 +124,7 @@ async fn start(data_plane_port: u16, hc_sender: DiagnosticSender) {
     let (_, dns_result, e3_api_result, egress_result, stats_result, _) = tokio::join!(
         start_data_plane(data_plane_port, context.clone()),
         EnclaveDnsProxy::bind_server(context.egress.allow_list),
-        CryptoApi::listen(hc_sender),
+        CryptoApi::listen(diag_sender),
         EgressProxy::listen(),
         StatsProxy::listen(),
         ClockSync::run(ENCLAVE_CLOCK_SYNC_INTERVAL)
