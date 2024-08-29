@@ -193,10 +193,14 @@ impl HealthcheckAgent {
         // Safety: Iterator checked to be non-empty at start of func
         let max_result = self.hc_buffer.iter().max().unwrap();
 
-        if let Ok(_) = request.sender.send(DataPlaneDiagnostic {
-            user_process: max_result.to_owned(),
-            diagnostics: self.diag_buffer.clone().into(),
-        }) {
+        if request
+            .sender
+            .send(DataPlaneDiagnostic {
+                user_process: max_result.to_owned(),
+                diagnostics: self.diag_buffer.clone().into(),
+            })
+            .is_ok()
+        {
             self.diag_buffer.clear();
         };
     }
