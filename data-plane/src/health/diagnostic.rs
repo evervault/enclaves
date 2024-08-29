@@ -1,12 +1,4 @@
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tokio::sync::mpsc;
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Diagnostic {
-    label: String,
-    data: serde_json::Value,
-}
+use shared::server::diagnostic::{Diagnostic, DiagnosticSender};
 
 pub trait Diagnosable {
     fn sender(&self) -> Option<DiagnosticSender>;
@@ -33,5 +25,3 @@ impl<T: Diagnosable> Diagnose for T {
         };
     }
 }
-
-pub type DiagnosticSender = Arc<mpsc::UnboundedSender<Diagnostic>>;

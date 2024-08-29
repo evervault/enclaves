@@ -1,6 +1,7 @@
 use hyper::{client::HttpConnector, header, Body, Client, Method, Request};
 use serde_json::Value;
-use shared::server::health::UserProcessHealth;
+use shared::server::diagnostic::Diagnostic;
+use shared::server::health::{DataPlaneDiagnostic, UserProcessHealth};
 use std::collections::VecDeque;
 use thiserror::Error;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -9,8 +10,6 @@ use tokio::sync::oneshot::{
 };
 
 use crate::{ContextError, EnclaveContext};
-
-use super::diagnostic::Diagnostic;
 
 enum HealthcheckAgentState {
     Initializing,
@@ -23,28 +22,28 @@ impl std::default::Default for HealthcheckAgentState {
     }
 }
 
-pub struct HealthcheckStatusRequest {
-    sender: OneshotSender<UserProcessHealth>,
+pub struct HealthcheckAgentRequest {
+    sender: OneshotSender<DataPlaneDiagnostic>,
 }
 
-impl HealthcheckStatusRequest {
-    pub fn new() -> (Self, OneshotReceiver<UserProcessHealth>) {
+impl HealthcheckAgentRequest {
+    pub fn new() -> (Self, OneshotReceiver<DataPlaneDiagnostic>) {
         let (sender, receiver) = oneshot_channel();
         (Self { sender }, receiver)
     }
 }
 
-pub type UserProcessHealthcheckSender = UnboundedSender<HealthcheckStatusRequest>;
+pub type HealthcheckAgentSender = UnboundedSender<HealthcheckAgentRequest>;
 pub type DiagnosticReceiver = UnboundedReceiver<Diagnostic>;
 
 pub struct HealthcheckAgent {
     customer_process_port: u16,
     healthcheck_path: Option<String>,
     hc_buffer: VecDeque<UserProcessHealth>,
-    diag_buffer: VecDeque<serde_json::Value>,
+    diag_buffer: VecDeque<Diagnostic>,
     interval: std::time::Duration,
     state: HealthcheckAgentState,
-    recv: UnboundedReceiver<HealthcheckStatusRequest>,
+    recv: UnboundedReceiver<HealthcheckAgentRequest>,
     diag_recv: DiagnosticReceiver,
     buffer_size_limit: usize,
 }
@@ -53,7 +52,7 @@ pub fn default_agent(
     customer_process_port: u16,
     healthcheck: Option<String>,
     diag_recv: DiagnosticReceiver,
-) -> (HealthcheckAgent, UnboundedSender<HealthcheckStatusRequest>) {
+) -> (HealthcheckAgent, UnboundedSender<HealthcheckAgentRequest>) {
     HealthcheckAgent::new(
         customer_process_port,
         std::time::Duration::from_secs(1),
@@ -78,7 +77,7 @@ impl HealthcheckAgent {
         interval: std::time::Duration,
         healthcheck_path: Option<String>,
         diag_recv: DiagnosticReceiver,
-    ) -> (Self, UnboundedSender<HealthcheckStatusRequest>) {
+    ) -> (Self, UnboundedSender<HealthcheckAgentRequest>) {
         let (sender, recv) = unbounded_channel();
         let healthcheck_agent = Self {
             customer_process_port,
@@ -92,6 +91,13 @@ impl HealthcheckAgent {
             buffer_size_limit: DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT,
         };
         (healthcheck_agent, sender)
+    }
+
+    fn record_diag(&mut self, diag: Diagnostic) {
+        self.diag_buffer.push_back(diag);
+        if self.diag_buffer.len() >= self.buffer_size_limit {
+            self.diag_buffer.pop_front();
+        }
     }
 
     fn record_result(&mut self, healthcheck_status: UserProcessHealth) {
@@ -173,17 +179,26 @@ impl HealthcheckAgent {
         self.record_result(hc_result);
     }
 
-    fn serve_healthcheck_request(&mut self, request: HealthcheckStatusRequest) {
+    fn serve_healthcheck_request(&mut self, request: HealthcheckAgentRequest) {
         if self.hc_buffer.is_empty() {
-            let _ = request.sender.send(UserProcessHealth::Unknown(
-                "Enclave is not initialized yet".to_string(),
-            ));
+            let _ = request.sender.send(DataPlaneDiagnostic {
+                user_process: UserProcessHealth::Unknown(
+                    "Enclave is not initialized yet".to_string(),
+                ),
+                diagnostics: self.diag_buffer.clone().into(),
+            });
             return;
         }
 
         // Safety: Iterator checked to be non-empty at start of func
         let max_result = self.hc_buffer.iter().max().unwrap();
-        let _ = request.sender.send(max_result.to_owned());
+
+        if let Ok(_) = request.sender.send(DataPlaneDiagnostic {
+            user_process: max_result.to_owned(),
+            diagnostics: self.diag_buffer.clone().into(),
+        }) {
+            self.diag_buffer.clear();
+        };
     }
 
     pub async fn run(mut self) {
@@ -195,7 +210,7 @@ impl HealthcheckAgent {
                   self.serve_healthcheck_request(hc_req);
               },
               Some(diag) = self.diag_recv.recv() => {
-                  log::info!("Received diagnostic message - {diag:?}");
+                self.record_diag(diag);
               },
               _ = interval.tick() => self.perform_healthcheck(client.clone()).await
             }
@@ -264,35 +279,44 @@ impl HealthcheckAgent {
 
 #[cfg(test)]
 mod test {
-    use super::{default_agent, HealthcheckAgent, HealthcheckStatusRequest};
-    use shared::server::health::UserProcessHealth;
+    use super::{default_agent, HealthcheckAgent, HealthcheckAgentRequest};
+    use shared::server::{
+        diagnostic::Diagnostic,
+        health::{DataPlaneDiagnostic, UserProcessHealth},
+    };
+    use tokio::sync::mpsc;
     use yup_hyper_mock::mock_connector;
 
     #[test]
     fn validate_response_returned_from_healthy_buffer() {
-        let (mut agent, _sender) = default_agent(3000, None);
+        let (_, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
+        let (mut agent, _sender) = default_agent(3000, None, diag_recv);
         for _ in 0..5 {
             agent.hc_buffer.push_back(UserProcessHealth::Response {
                 status_code: 200,
                 body: None,
             });
         }
-        let (req, mut receiver) = HealthcheckStatusRequest::new();
+        let (req, mut receiver) = HealthcheckAgentRequest::new();
         agent.serve_healthcheck_request(req);
 
         let result = receiver.try_recv().unwrap();
         assert!(matches!(
             result,
-            UserProcessHealth::Response {
-                status_code: 200,
-                body: None
+            DataPlaneDiagnostic {
+                user_process: UserProcessHealth::Response {
+                    status_code: 200,
+                    body: None
+                },
+                ..
             },
         ));
     }
 
     #[test]
     fn validate_response_returned_from_buffer_with_unknown() {
-        let (mut agent, _sender) = default_agent(3000, None);
+        let (_, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
+        let (mut agent, _sender) = default_agent(3000, None, diag_recv);
         for _ in 0..5 {
             agent.hc_buffer.push_back(UserProcessHealth::Response {
                 status_code: 200,
@@ -302,23 +326,28 @@ mod test {
         agent.hc_buffer.push_back(UserProcessHealth::Unknown(
             "Enclave is not initialized yet".to_string(),
         ));
-        let (req, mut receiver) = HealthcheckStatusRequest::new();
+        let (req, mut receiver) = HealthcheckAgentRequest::new();
         agent.serve_healthcheck_request(req);
 
         let result = receiver.try_recv().unwrap();
         assert!(matches!(
             result,
-            UserProcessHealth::Response {
-                status_code: 200,
-                body: None
+            DataPlaneDiagnostic {
+                user_process: UserProcessHealth::Response {
+                    status_code: 200,
+                    body: None,
+                },
+                ..
             }
         ));
     }
 
     #[tokio::test]
     async fn validate_uninitialized_user_process_doesnt_return_errors() {
+        let (_, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
+
         let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) = HealthcheckAgent::new(3000, duration, None);
+        let (mut agent, _sender) = HealthcheckAgent::new(3000, duration, None, diag_recv);
 
         let client = hyper::Client::builder().build_http();
         agent.perform_healthcheck(client).await;
@@ -332,8 +361,10 @@ mod test {
 
     #[tokio::test]
     async fn validate_initialized_agent_with_no_healthcheck_path_returns_unknown() {
+        let (_, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
+
         let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) = HealthcheckAgent::new(3000, duration, None);
+        let (mut agent, _sender) = HealthcheckAgent::new(3000, duration, None, diag_recv);
         agent.state = super::HealthcheckAgentState::Ready;
 
         let client = hyper::Client::builder().build_http();
@@ -349,11 +380,13 @@ mod test {
     #[cfg(feature = "tls_termination")]
     #[tokio::test]
     async fn validate_initialized_agent_with_healthy_response_returns_response() {
+        let (_, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
         mock_connector!(MockHealthcheckEndpoint {
           "http://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n"
         });
         let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) = HealthcheckAgent::new(3000, duration, Some("/healthz".into()));
+        let (mut agent, _sender) =
+            HealthcheckAgent::new(3000, duration, Some("/healthz".into()), diag_recv);
         agent.state = super::HealthcheckAgentState::Ready;
 
         let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
@@ -375,8 +408,10 @@ mod test {
         mock_connector!(MockHealthcheckEndpoint {
           "https://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n"
         });
+        let (_, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
         let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) = HealthcheckAgent::new(3000, duration, Some("/healthz".into()));
+        let (mut agent, _sender) =
+            HealthcheckAgent::new(3000, duration, Some("/healthz".into()), diag_recv);
         agent.state = super::HealthcheckAgentState::Ready;
 
         let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
@@ -399,9 +434,10 @@ mod test {
         mock_connector!(MockHealthcheckEndpoint {
           "http://127.0.0.1" => "HTTP/1.1 400 Bad Request\r\n\r\n"
         });
+        let (_, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
         let duration = std::time::Duration::from_secs(1);
         let (mut agent, _sender) =
-            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()));
+            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()), diag_recv);
         agent.state = super::HealthcheckAgentState::Ready;
 
         let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
@@ -424,9 +460,10 @@ mod test {
         mock_connector!(MockHealthcheckEndpoint {
           "https://127.0.0.1" => "HTTP/1.1 400 Bad Request\r\n\r\n"
         });
+        let (_, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
         let duration = std::time::Duration::from_secs(1);
         let (mut agent, _sender) =
-            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()));
+            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()), diag_recv);
         agent.state = super::HealthcheckAgentState::Ready;
 
         let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
@@ -448,10 +485,11 @@ mod test {
         mock_connector!(MockHealthcheckEndpoint {
               "http://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n{\"status\": \"ok\"}"
         });
+        let (_, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
 
         let duration = std::time::Duration::from_secs(1);
         let (mut agent, _sender) =
-            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()));
+            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()), diag_recv);
         agent.state = super::HealthcheckAgentState::Ready;
 
         let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
@@ -474,9 +512,10 @@ mod test {
               "https://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n{\"status\": \"ok\"}"
         });
 
+        let (_, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
         let duration = std::time::Duration::from_secs(1);
         let (mut agent, _sender) =
-            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()));
+            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()), diag_recv);
         agent.state = super::HealthcheckAgentState::Ready;
 
         let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
@@ -499,9 +538,10 @@ mod test {
             "http://127.0.0.1" => "HTTP/1.1 500 Internal Server Error\r\n\r\n{\"very-bad-state\": \"unhealthy\"}"
         });
 
+        let (_, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
         let duration = std::time::Duration::from_secs(1);
         let (mut agent, _sender) =
-            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()));
+            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()), diag_recv);
         agent.state = super::HealthcheckAgentState::Ready;
 
         let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
@@ -524,9 +564,10 @@ mod test {
             "https://127.0.0.1" => "HTTP/1.1 500 Internal Server Error\r\n\r\n{\"very-bad-state\": \"unhealthy\"}"
         });
 
+        let (_, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
         let duration = std::time::Duration::from_secs(1);
         let (mut agent, _sender) =
-            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()));
+            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()), diag_recv);
         agent.state = super::HealthcheckAgentState::Ready;
 
         let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());

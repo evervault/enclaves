@@ -5,6 +5,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use serde_json::value::Value;
+use shared::server::diagnostic::DiagnosticSender;
 use std::ops::Deref;
 use tokio_rustls::rustls::ServerName;
 use tokio_rustls::TlsConnector;
@@ -103,7 +104,7 @@ use crate::base_tls_client::tls_client_config::get_tls_client_config;
 use crate::base_tls_client::{AuthType, BaseClient, ClientError, OpenServerCertVerifier};
 use crate::configuration;
 use crate::crypto::token::TokenClient;
-use crate::health::diagnostic::{Diagnosable, Diagnose, DiagnosticSender};
+use crate::health::diagnostic::{Diagnosable, Diagnose};
 use crate::stats_client::StatsClient;
 
 impl E3Client {

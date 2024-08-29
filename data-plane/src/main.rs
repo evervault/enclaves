@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use data_plane::health::diagnostic::{Diagnostic, DiagnosticSender};
+use shared::server::diagnostic::{Diagnostic, DiagnosticSender};
 #[cfg(not(feature = "tls_termination"))]
 use shared::server::Listener;
 use shared::server::CID::Enclave;
@@ -110,7 +110,7 @@ async fn start(data_plane_port: u16, hc_sender: DiagnosticSender) {
 }
 
 #[cfg(feature = "network_egress")]
-async fn start(data_plane_port: u16) {
+async fn start(data_plane_port: u16, hc_sender: DiagnosticSender) {
     use data_plane::{crypto::api::CryptoApi, stats::StatsProxy};
 
     StatsClient::init();
@@ -125,7 +125,7 @@ async fn start(data_plane_port: u16) {
     let (_, dns_result, e3_api_result, egress_result, stats_result, _) = tokio::join!(
         start_data_plane(data_plane_port, context.clone()),
         EnclaveDnsProxy::bind_server(context.egress.allow_list),
-        CryptoApi::listen(),
+        CryptoApi::listen(hc_sender),
         EgressProxy::listen(),
         StatsProxy::listen(),
         ClockSync::run(ENCLAVE_CLOCK_SYNC_INTERVAL)
