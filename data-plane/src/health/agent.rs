@@ -381,38 +381,18 @@ mod test {
         ))
     }
 
-    #[cfg(feature = "tls_termination")]
     #[tokio::test]
     async fn validate_initialized_agent_with_healthy_response_returns_response() {
         let (_, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
+        #[cfg(feature = "tls_termination")]
         mock_connector!(MockHealthcheckEndpoint {
           "http://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n"
         });
-        let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) =
-            HealthcheckAgent::new(3000, duration, Some("/healthz".into()), diag_recv);
-        agent.state = super::HealthcheckAgentState::Ready;
-
-        let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
-        agent.perform_healthcheck(client).await;
-
-        let healthcheck_result = agent.hc_buffer.iter().max().unwrap();
-        assert_eq!(
-            healthcheck_result.to_owned(),
-            UserProcessHealth::Response {
-                status_code: 200,
-                body: None
-            }
-        );
-    }
-
-    #[cfg(not(feature = "tls_termination"))]
-    #[tokio::test]
-    async fn validate_initialized_agent_with_healthy_response_returns_response() {
+        #[cfg(not(feature = "tls_termination"))]
         mock_connector!(MockHealthcheckEndpoint {
           "https://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n"
         });
-        let (_, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
+
         let duration = std::time::Duration::from_secs(1);
         let (mut agent, _sender) =
             HealthcheckAgent::new(3000, duration, Some("/healthz".into()), diag_recv);
@@ -431,39 +411,18 @@ mod test {
         );
     }
 
-    #[cfg(feature = "tls_termination")]
     #[tokio::test]
     async fn validate_initialized_agent_with_unhealthy_response_returns_response_with_correct_status(
     ) {
+        #[cfg(feature = "tls_termination")]
         mock_connector!(MockHealthcheckEndpoint {
           "http://127.0.0.1" => "HTTP/1.1 400 Bad Request\r\n\r\n"
         });
-        let (_, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
-        let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) =
-            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()), diag_recv);
-        agent.state = super::HealthcheckAgentState::Ready;
-
-        let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
-        agent.perform_healthcheck(client).await;
-
-        let healthcheck_result = agent.hc_buffer.iter().max().unwrap();
-        assert_eq!(
-            healthcheck_result.to_owned(),
-            UserProcessHealth::Response {
-                status_code: 400,
-                body: None
-            }
-        );
-    }
-
-    #[cfg(not(feature = "tls_termination"))]
-    #[tokio::test]
-    async fn validate_initialized_agent_with_unhealthy_response_returns_response_with_correct_status(
-    ) {
+        #[cfg(not(feature = "tls_termination"))]
         mock_connector!(MockHealthcheckEndpoint {
           "https://127.0.0.1" => "HTTP/1.1 400 Bad Request\r\n\r\n"
         });
+
         let (_, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
         let duration = std::time::Duration::from_secs(1);
         let (mut agent, _sender) =
@@ -483,40 +442,19 @@ mod test {
         );
     }
 
-    #[cfg(feature = "tls_termination")]
     #[tokio::test]
     async fn it_can_parse_json_responses_from_user_process() {
+        #[cfg(feature = "tls_termination")]
         mock_connector!(MockHealthcheckEndpoint {
               "http://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n{\"status\": \"ok\"}"
         });
-        let (_, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
-
-        let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) =
-            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()), diag_recv);
-        agent.state = super::HealthcheckAgentState::Ready;
-
-        let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
-        agent.perform_healthcheck(client).await;
-
-        let healthcheck_result = agent.hc_buffer.iter().max().unwrap();
-        assert_eq!(
-            healthcheck_result.to_owned(),
-            UserProcessHealth::Response {
-                status_code: 200,
-                body: Some(serde_json::json!({"status": "ok"}))
-            }
-        );
-    }
-
-    #[cfg(not(feature = "tls_termination"))]
-    #[tokio::test]
-    async fn it_can_parse_json_responses_from_user_process() {
+        #[cfg(not(feature = "tls_termination"))]
         mock_connector!(MockHealthcheckEndpoint {
               "https://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n{\"status\": \"ok\"}"
         });
 
         let (_, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
+
         let duration = std::time::Duration::from_secs(1);
         let (mut agent, _sender) =
             HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()), diag_recv);
@@ -535,35 +473,13 @@ mod test {
         );
     }
 
-    #[cfg(feature = "tls_termination")]
     #[tokio::test]
     async fn it_can_parse_unhealthy_json_responses_from_user_process() {
+        #[cfg(feature = "tls_termination")]
         mock_connector!(MockHealthcheckEndpoint {
             "http://127.0.0.1" => "HTTP/1.1 500 Internal Server Error\r\n\r\n{\"very-bad-state\": \"unhealthy\"}"
         });
-
-        let (_, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
-        let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) =
-            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()), diag_recv);
-        agent.state = super::HealthcheckAgentState::Ready;
-
-        let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
-        agent.perform_healthcheck(client).await;
-
-        let healthcheck_result = agent.hc_buffer.iter().max().unwrap();
-        assert_eq!(
-            healthcheck_result.to_owned(),
-            UserProcessHealth::Response {
-                status_code: 500,
-                body: Some(serde_json::json!({"very-bad-state": "unhealthy"}))
-            }
-        );
-    }
-
-    #[cfg(not(feature = "tls_termination"))]
-    #[tokio::test]
-    async fn it_can_parse_unhealthy_json_responses_from_user_process() {
+        #[cfg(not(feature = "tls_termination"))]
         mock_connector!(MockHealthcheckEndpoint {
             "https://127.0.0.1" => "HTTP/1.1 500 Internal Server Error\r\n\r\n{\"very-bad-state\": \"unhealthy\"}"
         });
