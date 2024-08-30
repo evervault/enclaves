@@ -180,28 +180,21 @@ impl HealthcheckAgent {
     }
 
     fn serve_healthcheck_request(&mut self, request: HealthcheckAgentRequest) {
-        if self.hc_buffer.is_empty() {
-            let _ = request.sender.send(DataPlaneDiagnostic {
-                user_process: UserProcessHealth::Unknown(
-                    "Enclave is not initialized yet".to_string(),
-                ),
-                diagnostics: self.diag_buffer.clone().into(),
-            });
-            return;
-        }
+        let user_process = if self.hc_buffer.is_empty() {
+            UserProcessHealth::Unknown("Enclave is not initialized yet".to_string())
+        } else {
+            self.hc_buffer.iter().max().unwrap().to_owned()
+        };
 
-        // Safety: Iterator checked to be non-empty at start of func
-        let max_result = self.hc_buffer.iter().max().unwrap();
-
-        if request
-            .sender
-            .send(DataPlaneDiagnostic {
-                user_process: max_result.to_owned(),
-                diagnostics: self.diag_buffer.clone().into(),
-            })
-            .is_ok()
-        {
-            self.diag_buffer.clear();
+        match request.sender.send(DataPlaneDiagnostic {
+            user_process,
+            diagnostics: self.diag_buffer.clone().into(),
+        }) {
+            Ok(_) => {
+                log::info!("Healthcheck request served successfully");
+                self.diag_buffer.clear()
+            }
+            _ => log::error!("Failed to send healthcheck response"),
         };
     }
 
@@ -283,7 +276,11 @@ impl HealthcheckAgent {
 
 #[cfg(test)]
 mod test {
-    use super::{default_agent, HealthcheckAgent, HealthcheckAgentRequest};
+    use super::{
+        default_agent, HealthcheckAgent, HealthcheckAgentRequest,
+        DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT,
+    };
+    use serde_json::json;
     use shared::server::{
         diagnostic::Diagnostic,
         health::{DataPlaneDiagnostic, UserProcessHealth},
@@ -500,6 +497,80 @@ mod test {
                 status_code: 500,
                 body: Some(serde_json::json!({"very-bad-state": "unhealthy"}))
             }
+        );
+    }
+
+    #[tokio::test]
+    async fn it_returns_stored_diagnostics() {
+        let (_, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
+        let duration = std::time::Duration::from_secs(1);
+        let (mut agent, _sender) =
+            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()), diag_recv);
+        agent.state = super::HealthcheckAgentState::Ready;
+
+        agent.diag_buffer.push_back(Diagnostic {
+            label: "MockService".to_string(),
+            data: json!({ "feeling": "good" }),
+        });
+
+        let (req, mut receiver) = HealthcheckAgentRequest::new();
+        agent.serve_healthcheck_request(req);
+
+        let result = receiver.try_recv().unwrap();
+
+        assert_eq!(
+            result.diagnostics.get(0).unwrap().label,
+            "MockService".to_string()
+        );
+        assert_eq!(
+            result.diagnostics.get(0).unwrap().data,
+            json!({ "feeling": "good" })
+        );
+        assert_eq!(result.diagnostics.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn it_empties_the_diag_buffer_after_responding_to_hc() {
+        let (_, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
+        let duration = std::time::Duration::from_secs(1);
+        let (mut agent, _sender) =
+            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()), diag_recv);
+        agent.state = super::HealthcheckAgentState::Ready;
+
+        agent.diag_buffer.push_back(Diagnostic {
+            label: "MockService".to_string(),
+            data: json!({ "feeling": "good" }),
+        });
+
+        let (req, mut rx) = HealthcheckAgentRequest::new();
+        let _ = rx.try_recv();
+
+        agent.serve_healthcheck_request(req);
+
+        assert_eq!(agent.diag_buffer.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn it_limits_the_diag_buffers_size() {
+        let (_, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
+        let duration = std::time::Duration::from_secs(1);
+        let (mut agent, _sender) =
+            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()), diag_recv);
+        agent.state = super::HealthcheckAgentState::Ready;
+
+        for _ in 0..DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT + 5 {
+            agent.record_diag(Diagnostic {
+                label: "MockService".to_string(),
+                data: json!({ "feeling": "good" }),
+            });
+        }
+
+        let (req, _) = HealthcheckAgentRequest::new();
+        agent.serve_healthcheck_request(req);
+
+        assert_eq!(
+            agent.diag_buffer.len(),
+            DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT - 1
         );
     }
 }
