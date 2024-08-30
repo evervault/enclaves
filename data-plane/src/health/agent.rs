@@ -186,12 +186,15 @@ impl HealthcheckAgent {
             self.hc_buffer.iter().max().unwrap().to_owned()
         };
 
-        match request.sender.send(DataPlaneDiagnostic {
-            user_process,
-            diagnostics: self.diag_buffer.clone().into(),
-        }) {
-            Ok(_) => self.diag_buffer.clear(),
-            _ => (),
+        if request
+            .sender
+            .send(DataPlaneDiagnostic {
+                user_process,
+                diagnostics: self.diag_buffer.clone().into(),
+            })
+            .is_ok()
+        {
+            self.diag_buffer.clear();
         };
     }
 
