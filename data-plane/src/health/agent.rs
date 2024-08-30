@@ -190,11 +190,8 @@ impl HealthcheckAgent {
             user_process,
             diagnostics: self.diag_buffer.clone().into(),
         }) {
-            Ok(_) => {
-                log::info!("Healthcheck request served successfully");
-                self.diag_buffer.clear()
-            }
-            _ => log::error!("Failed to send healthcheck response"),
+            Ok(_) => self.diag_buffer.clear(),
+            _ => (),
         };
     }
 
