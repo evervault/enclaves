@@ -15,7 +15,7 @@ jobs:
       - name: Build bundle using local action
         uses: ./installer
       - name: Upload bundle as artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: runtime-dependencies-${{github.sha}}.zip
           path: ./output/runtime-dependencies.tar.gz
@@ -24,11 +24,14 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        dockerfile: [test-abyss.Dockerfile, test-alpine.Dockerfile, test.Dockerfile]
+        dockerfile:
+          - test-abyss.Dockerfile
+          - test-alpine.Dockerfile
+          - test.Dockerfile
     steps:
       - uses: actions/checkout@v3
       - name: Download bundle artifact
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4.1.7
         with:
           name: runtime-dependencies-${{github.sha}}.zip
           path: ./installer/output
