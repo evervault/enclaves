@@ -1,14 +1,21 @@
-use tokio::io::ErrorKind;
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, Error, ErrorKind};
 
-pub async fn pipe_streams<T1, T2>(mut src: T1, mut dest: T2) -> Result<(u64, u64), tokio::io::Error>
+pub async fn pipe_streams<T1, T2>(mut src: T1, mut dest: T2) -> Result<(u64, u64), Error>
 where
     T1: AsyncRead + AsyncWrite + Unpin,
     T2: AsyncRead + AsyncWrite + Unpin,
 {
     match tokio::io::copy_bidirectional(&mut src, &mut dest).await {
-        Ok(bytes) => Ok(bytes),
-        Err(e) if e.kind() == ErrorKind::BrokenPipe => Ok((0, 0)),
+        Ok(result) => {
+            let _ = src.shutdown().await;
+            let _ = dest.shutdown().await;
+            Ok(result)
+        }
+        Err(e) if e.kind() == ErrorKind::BrokenPipe => {
+            let _ = src.shutdown().await;
+            let _ = dest.shutdown().await;
+            Ok((0, 0))
+        }
         Err(e) => Err(e),
     }
 }
