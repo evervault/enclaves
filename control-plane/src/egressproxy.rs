@@ -58,7 +58,7 @@ impl EgressProxy {
     async fn handle_connection<T: AsyncReadExt + AsyncWriteExt + Unpin>(
         mut external_stream: T,
         egress_destinations: &EgressDestinations,
-    ) -> Result<(u64, u64)> {
+    ) -> Result<()> {
         log::debug!("Received request to egress proxy");
         let mut request_buffer = [0; 4096];
         let packet_size = external_stream.read(&mut request_buffer).await?;
@@ -74,14 +74,13 @@ impl EgressProxy {
         {
             let _ = external_stream.shutdown().await;
             log::info!("Blocking request to ip: {:?}  - {err}", external_request.ip);
-            return Ok((0, 0));
+            return Ok(());
         };
         let mut remote_stream =
             TcpStream::connect((external_request.ip, external_request.port)).await?;
         remote_stream.write_all(&external_request.data).await?;
 
-        let joined_streams = pipe_streams(external_stream, remote_stream).await?;
-        Ok(joined_streams)
+        Ok(pipe_streams(external_stream, remote_stream).await?)
     }
 }
 
