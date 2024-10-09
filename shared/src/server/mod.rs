@@ -7,6 +7,7 @@ pub mod proxy_protocol;
 pub mod sni;
 pub mod tcp;
 pub use tcp::{TcpServer, TcpServerWithProxyProtocol};
+pub mod diagnostic;
 
 #[cfg(feature = "enclave")]
 pub mod vsock;

@@ -23,7 +23,7 @@ pub mod mocks;
 
 pub async fn get_trusted_cert() -> Result<(Vec<u8>, CertifiedKey), AcmeError> {
     let config_client = ConfigClient::new();
-    let e3_client = E3Client::new();
+    let e3_client = E3Client::new(None);
     let enclave_context = EnclaveContext::get()?;
 
     let trusted_key_pair: PKey<openssl::pkey::Private> =
