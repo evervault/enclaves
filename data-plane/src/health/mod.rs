@@ -20,12 +20,12 @@ fn spawn_customer_healthcheck_agent(
     if use_tls {
         let (agent, channel) =
             HealthcheckAgent::build_tls_agent(customer_process_port, default_interval, healthcheck);
-        tokio::spawn(async move { agent.run() });
+        tokio::spawn(async move { agent.run().await });
         channel
     } else {
         let (agent, channel) =
             HealthcheckAgent::build_agent(customer_process_port, default_interval, healthcheck);
-        tokio::spawn(async move { agent.run() });
+        tokio::spawn(async move { agent.run().await });
         channel
     }
 }
