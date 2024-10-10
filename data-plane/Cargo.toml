@@ -53,7 +53,6 @@ regex = "1.10.6"
 [dev-dependencies]
 tokio-test = "0.4.2"
 yup-hyper-mock = "6.0.0"
-test-case = "3.3.1"
 
 [features]
 default = ["tls_termination"]

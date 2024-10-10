@@ -259,7 +259,6 @@ impl<C: Connect + Clone + Send + Sync + 'static> HealthcheckAgent<C> {
 mod test {
     use super::{HealthcheckAgent, HealthcheckStatusRequest};
     use shared::server::health::UserProcessHealth;
-    use test_case::case;
     use yup_hyper_mock::mock_connector;
 
     mock_connector!(MockHttpHealthyEmptyEndpoint {
@@ -267,7 +266,7 @@ mod test {
     });
 
     mock_connector!(MockHttpsHealthyEmptyEndpoint {
-      "http://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n"
+      "https://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n"
     });
 
     mock_connector!(MockHttpUnhealthyEmptyEndpoint {
@@ -378,7 +377,7 @@ mod test {
         let (mut agent, _sender) = HealthcheckAgent::new(
             3000,
             std::time::Duration::from_secs(1),
-            None,
+            Some("/healthz".into()),
             client,
             "http".into(),
         );
