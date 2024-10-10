@@ -94,7 +94,6 @@ impl EgressProxy {
 
     #[cfg(feature = "enclave")]
     fn get_destination_ipv4(fd: RawFd) -> Result<(IpAddr, u16), DNSError> {
-        println!("Getting original destination ipv4!");
         use libc::sockaddr_in;
         use libc::socklen_t;
         use std::io::Error;
