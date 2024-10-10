@@ -66,7 +66,11 @@ fn main() {
     runtime.block_on(async move {
         tokio::join!(
             start(data_plane_port),
-            start_health_check_server(data_plane_port, ctx.healthcheck)
+            start_health_check_server(
+                ctx.healthcheck_port.unwrap_or(data_plane_port),
+                ctx.healthcheck,
+                ctx.healthcheck_use_tls.unwrap_or(false)
+            )
         );
     });
 }

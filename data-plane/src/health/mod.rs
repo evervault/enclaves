@@ -9,23 +9,34 @@ use shared::server::health::{DataPlaneDiagnostic, DataPlaneState, UserProcessHea
 use shared::server::CID::Enclave;
 use shared::{server::Listener, ENCLAVE_HEALTH_CHECK_PORT};
 
-use crate::health::agent::HealthcheckStatusRequest;
+use crate::health::agent::{HealthcheckAgent, HealthcheckStatusRequest};
 
 fn spawn_customer_healthcheck_agent(
     customer_process_port: u16,
     healthcheck: Option<String>,
+    use_tls: bool,
 ) -> UserProcessHealthcheckSender {
-    let (agent, healthcheck_channel) = agent::default_agent(customer_process_port, healthcheck);
-    tokio::spawn(async move {
-        log::info!("Spawning healthcheck agent.");
-        agent.run().await;
-    });
-    healthcheck_channel
+    let default_interval = std::time::Duration::from_secs(1);
+    if use_tls {
+        let (agent, channel) =
+            HealthcheckAgent::build_tls_agent(customer_process_port, default_interval, healthcheck);
+        tokio::spawn(async move { agent.run().await });
+        channel
+    } else {
+        let (agent, channel) =
+            HealthcheckAgent::build_agent(customer_process_port, default_interval, healthcheck);
+        tokio::spawn(async move { agent.run().await });
+        channel
+    }
 }
 
-pub async fn start_health_check_server(customer_process_port: u16, healthcheck: Option<String>) {
+pub async fn start_health_check_server(
+    customer_process_port: u16,
+    healthcheck: Option<String>,
+    use_tls: bool,
+) {
     let user_process_healthcheck_channel =
-        spawn_customer_healthcheck_agent(customer_process_port, healthcheck);
+        spawn_customer_healthcheck_agent(customer_process_port, healthcheck, use_tls);
     let mut health_check_server = get_vsock_server(ENCLAVE_HEALTH_CHECK_PORT, Enclave)
         .await
         .unwrap();
