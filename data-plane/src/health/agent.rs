@@ -1,3 +1,4 @@
+use hyper::client::connect::Connect;
 use hyper::{client::HttpConnector, header, Body, Client, Method, Request};
 use serde_json::Value;
 use shared::server::health::UserProcessHealth;
@@ -34,25 +35,16 @@ impl HealthcheckStatusRequest {
 
 pub type UserProcessHealthcheckSender = UnboundedSender<HealthcheckStatusRequest>;
 
-pub struct HealthcheckAgent {
+pub struct HealthcheckAgent<C> {
     customer_process_port: u16,
     healthcheck_path: Option<String>,
+    client: hyper::Client<C, Body>,
     buffer: VecDeque<UserProcessHealth>,
     interval: std::time::Duration,
     state: HealthcheckAgentState,
     recv: UnboundedReceiver<HealthcheckStatusRequest>,
     buffer_size_limit: usize,
-}
-
-pub fn default_agent(
-    customer_process_port: u16,
-    healthcheck: Option<String>,
-) -> (HealthcheckAgent, UnboundedSender<HealthcheckStatusRequest>) {
-    HealthcheckAgent::new(
-        customer_process_port,
-        std::time::Duration::from_secs(1),
-        healthcheck,
-    )
+    proto: String,
 }
 
 const DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT: usize = 10;
@@ -65,39 +57,23 @@ enum UserProcessHealthCheckError {
     HealthcheckRequest(#[from] hyper::Error),
 }
 
-impl HealthcheckAgent {
-    pub fn new(
+impl HealthcheckAgent<hyper_rustls::HttpsConnector<HttpConnector>> {
+    pub fn build_tls_agent(
         customer_process_port: u16,
         interval: std::time::Duration,
         healthcheck_path: Option<String>,
     ) -> (Self, UnboundedSender<HealthcheckStatusRequest>) {
-        let (sender, recv) = unbounded_channel();
-        let healthcheck_agent = Self {
+        let client = Self::build_tls_client();
+        Self::new(
             customer_process_port,
-            healthcheck_path,
-            buffer: VecDeque::with_capacity(DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT),
-            state: HealthcheckAgentState::default(),
             interval,
-            recv,
-            buffer_size_limit: DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT,
-        };
-        (healthcheck_agent, sender)
+            healthcheck_path,
+            client,
+            "https".into(),
+        )
     }
 
-    fn record_result(&mut self, healthcheck_status: UserProcessHealth) {
-        self.buffer.push_back(healthcheck_status);
-        if self.buffer.len() >= self.buffer_size_limit {
-            self.buffer.pop_front();
-        }
-    }
-
-    #[cfg(feature = "tls_termination")]
-    fn build_client() -> hyper::Client<HttpConnector, Body> {
-        Client::builder().build_http()
-    }
-
-    #[cfg(not(feature = "tls_termination"))]
-    fn build_client() -> hyper::Client<hyper_rustls::HttpsConnector<HttpConnector>, Body> {
+    fn build_tls_client() -> hyper::Client<hyper_rustls::HttpsConnector<HttpConnector>, Body> {
         use crate::base_tls_client::{
             tls_client_config::get_tls_client_config, OpenServerCertVerifier,
         };
@@ -110,6 +86,54 @@ impl HealthcheckAgent {
             .enable_all_versions()
             .build();
         Client::builder().build(https_connector)
+    }
+}
+
+impl HealthcheckAgent<HttpConnector> {
+    pub fn build_agent(
+        customer_process_port: u16,
+        interval: std::time::Duration,
+        healthcheck_path: Option<String>,
+    ) -> (Self, UnboundedSender<HealthcheckStatusRequest>) {
+        let client = Client::builder().build_http();
+        Self::new(
+            customer_process_port,
+            interval,
+            healthcheck_path,
+            client,
+            "http".into(),
+        )
+    }
+}
+
+impl<C: Connect + Clone + Send + Sync + 'static> HealthcheckAgent<C> {
+    fn new(
+        customer_process_port: u16,
+        interval: std::time::Duration,
+        healthcheck_path: Option<String>,
+        client: hyper::Client<C>,
+        proto: String,
+    ) -> (Self, UnboundedSender<HealthcheckStatusRequest>) {
+        let (sender, recv) = unbounded_channel();
+        let healthcheck_agent = Self {
+            customer_process_port,
+            healthcheck_path,
+            buffer: VecDeque::with_capacity(DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT),
+            state: HealthcheckAgentState::default(),
+            interval,
+            recv,
+            buffer_size_limit: DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT,
+            client,
+            proto,
+        };
+        (healthcheck_agent, sender)
+    }
+
+    fn record_result(&mut self, healthcheck_status: UserProcessHealth) {
+        self.buffer.push_back(healthcheck_status);
+        if self.buffer.len() >= self.buffer_size_limit {
+            self.buffer.pop_front();
+        }
     }
 
     fn check_user_process_initialized(&mut self) -> Result<HealthcheckAgentState, ContextError> {
@@ -133,12 +157,7 @@ impl HealthcheckAgent {
         Ok(new_state)
     }
 
-    async fn perform_healthcheck<
-        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
-    >(
-        &mut self,
-        client: Client<C, Body>,
-    ) {
+    async fn perform_healthcheck(&mut self) {
         let hc_state = match self.state {
             HealthcheckAgentState::Initializing => self.check_user_process_initialized(),
             _ => Ok(HealthcheckAgentState::Ready),
@@ -146,7 +165,7 @@ impl HealthcheckAgent {
 
         let hc_result = match hc_state {
             Ok(HealthcheckAgentState::Ready) if self.healthcheck_path.is_some() => {
-                self.probe_user_process(client, self.healthcheck_path.as_deref().unwrap())
+                self.probe_user_process(self.healthcheck_path.as_deref().unwrap())
                     .await
             }
             Ok(HealthcheckAgentState::Ready) => {
@@ -177,8 +196,8 @@ impl HealthcheckAgent {
     }
 
     pub async fn run(mut self) {
+        log::info!("Starting healthcheck agent");
         let mut interval = tokio::time::interval(self.interval);
-        let client = Self::build_client();
         loop {
             tokio::select! {
               healthcheck_req = self.recv.recv() => {
@@ -186,34 +205,19 @@ impl HealthcheckAgent {
                   self.serve_healthcheck_request(req);
                 }
               },
-              _ = interval.tick() => self.perform_healthcheck(client.clone()).await
+              _ = interval.tick() => self.perform_healthcheck().await
             }
         }
     }
 
-    #[cfg(not(feature = "tls_termination"))]
     fn build_healthcheck_uri(&self, healthcheck_path: &str) -> String {
         format!(
-            "https://127.0.0.1:{}{}",
-            self.customer_process_port, &healthcheck_path
+            "{}://127.0.0.1:{}{}",
+            &self.proto, self.customer_process_port, &healthcheck_path
         )
     }
 
-    #[cfg(feature = "tls_termination")]
-    fn build_healthcheck_uri(&self, healthcheck_path: &str) -> String {
-        format!(
-            "http://127.0.0.1:{}{}",
-            self.customer_process_port, &healthcheck_path
-        )
-    }
-
-    async fn probe_user_process<
-        C: hyper::client::connect::Connect + Clone + Send + Sync + 'static,
-    >(
-        &self,
-        client: Client<C, Body>,
-        healthcheck_path: &str,
-    ) -> UserProcessHealth {
+    async fn probe_user_process(&self, healthcheck_path: &str) -> UserProcessHealth {
         let healthcheck_uri = self.build_healthcheck_uri(healthcheck_path);
         let req = Request::builder()
             .method(Method::GET)
@@ -222,7 +226,7 @@ impl HealthcheckAgent {
             .body(Body::empty())
             .expect("Failed to create user process healthcheck request");
         log::debug!("Probing user process from healthcheck agent - {healthcheck_uri}");
-        match client.request(req).await {
+        match self.client.request(req).await {
             Ok(res) => {
                 let (parts, body) = res.into_parts();
                 if !parts.status.is_success() {
@@ -253,13 +257,46 @@ impl HealthcheckAgent {
 
 #[cfg(test)]
 mod test {
-    use super::{default_agent, HealthcheckAgent, HealthcheckStatusRequest};
+    use super::{HealthcheckAgent, HealthcheckStatusRequest};
     use shared::server::health::UserProcessHealth;
     use yup_hyper_mock::mock_connector;
 
+    mock_connector!(MockHttpHealthyEmptyEndpoint {
+      "http://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n"
+    });
+
+    mock_connector!(MockHttpsHealthyEmptyEndpoint {
+      "https://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n"
+    });
+
+    mock_connector!(MockHttpUnhealthyEmptyEndpoint {
+      "http://127.0.0.1" => "HTTP/1.1 400 Bad Request\r\n\r\n"
+    });
+
+    mock_connector!(MockHttpsUnhealthyEmptyEndpoint {
+      "https://127.0.0.1" => "HTTP/1.1 400 Bad Request\r\n\r\n"
+    });
+
+    mock_connector!(MockHttpsHealthyJsonEndpoint {
+      "https://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n{\"status\": \"ok\"}"
+    });
+
+    mock_connector!(MockHttpHealthyJsonEndpoint {
+      "http://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n{\"status\": \"ok\"}"
+    });
+
+    mock_connector!(MockHttpUnhealthyJsonEndpoint {
+      "http://127.0.0.1" => "HTTP/1.1 500 Internal Server Error\r\n\r\n{\"very-bad-state\": \"unhealthy\"}"
+    });
+
+    mock_connector!(MockHttpsUnhealthyJsonEndpoint {
+      "https://127.0.0.1" => "HTTP/1.1 500 Internal Server Error\r\n\r\n{\"very-bad-state\": \"unhealthy\"}"
+    });
+
     #[test]
     fn validate_response_returned_from_healthy_buffer() {
-        let (mut agent, _sender) = default_agent(3000, None);
+        let (mut agent, _sender) =
+            HealthcheckAgent::build_agent(3000, std::time::Duration::from_secs(1), None);
         for _ in 0..5 {
             agent.buffer.push_back(UserProcessHealth::Response {
                 status_code: 200,
@@ -281,7 +318,8 @@ mod test {
 
     #[test]
     fn validate_response_returned_from_buffer_with_unknown() {
-        let (mut agent, _sender) = default_agent(3000, None);
+        let (mut agent, _sender) =
+            HealthcheckAgent::build_agent(3000, std::time::Duration::from_secs(1), None);
         for _ in 0..5 {
             agent.buffer.push_back(UserProcessHealth::Response {
                 status_code: 200,
@@ -307,10 +345,9 @@ mod test {
     #[tokio::test]
     async fn validate_uninitialized_user_process_doesnt_return_errors() {
         let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) = HealthcheckAgent::new(3000, duration, None);
+        let (mut agent, _sender) = HealthcheckAgent::build_agent(3000, duration, None);
 
-        let client = hyper::Client::builder().build_http();
-        agent.perform_healthcheck(client).await;
+        agent.perform_healthcheck().await;
 
         let healthcheck_result = agent.buffer.iter().max().unwrap();
         assert!(matches!(
@@ -322,11 +359,10 @@ mod test {
     #[tokio::test]
     async fn validate_initialized_agent_with_no_healthcheck_path_returns_unknown() {
         let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) = HealthcheckAgent::new(3000, duration, None);
+        let (mut agent, _sender) = HealthcheckAgent::build_agent(3000, duration, None);
         agent.state = super::HealthcheckAgentState::Ready;
 
-        let client = hyper::Client::builder().build_http();
-        agent.perform_healthcheck(client).await;
+        agent.perform_healthcheck().await;
 
         let healthcheck_result = agent.buffer.iter().max().unwrap();
         assert!(matches!(
@@ -335,18 +371,19 @@ mod test {
         ))
     }
 
-    #[cfg(feature = "tls_termination")]
     #[tokio::test]
     async fn validate_initialized_agent_with_healthy_response_returns_response() {
-        mock_connector!(MockHealthcheckEndpoint {
-          "http://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n"
-        });
-        let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) = HealthcheckAgent::new(3000, duration, Some("/healthz".into()));
+        let client = hyper::Client::builder().build(MockHttpHealthyEmptyEndpoint::default());
+        let (mut agent, _sender) = HealthcheckAgent::new(
+            3000,
+            std::time::Duration::from_secs(1),
+            Some("/healthz".into()),
+            client,
+            "http".into(),
+        );
         agent.state = super::HealthcheckAgentState::Ready;
 
-        let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
-        agent.perform_healthcheck(client).await;
+        agent.perform_healthcheck().await;
 
         let healthcheck_result = agent.buffer.iter().max().unwrap();
         assert_eq!(
@@ -358,18 +395,19 @@ mod test {
         );
     }
 
-    #[cfg(not(feature = "tls_termination"))]
     #[tokio::test]
-    async fn validate_initialized_agent_with_healthy_response_returns_response() {
-        mock_connector!(MockHealthcheckEndpoint {
-          "https://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n"
-        });
-        let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) = HealthcheckAgent::new(3000, duration, Some("/healthz".into()));
+    async fn validate_initialized_agent_with_healthy_response_returns_response_over_tls() {
+        let client = hyper::Client::builder().build(MockHttpsHealthyEmptyEndpoint::default());
+        let (mut agent, _sender) = HealthcheckAgent::new(
+            3000,
+            std::time::Duration::from_secs(1),
+            Some("/healthz".into()),
+            client,
+            "https".into(),
+        );
         agent.state = super::HealthcheckAgentState::Ready;
 
-        let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
-        agent.perform_healthcheck(client).await;
+        agent.perform_healthcheck().await;
 
         let healthcheck_result = agent.buffer.iter().max().unwrap();
         assert_eq!(
@@ -381,20 +419,20 @@ mod test {
         );
     }
 
-    #[cfg(feature = "tls_termination")]
     #[tokio::test]
     async fn validate_initialized_agent_with_unhealthy_response_returns_response_with_correct_status(
     ) {
-        mock_connector!(MockHealthcheckEndpoint {
-          "http://127.0.0.1" => "HTTP/1.1 400 Bad Request\r\n\r\n"
-        });
-        let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) =
-            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()));
+        let client = hyper::Client::builder().build(MockHttpUnhealthyEmptyEndpoint::default());
+        let (mut agent, _sender) = HealthcheckAgent::new(
+            3000,
+            std::time::Duration::from_secs(1),
+            Some("/healthcheck".into()),
+            client,
+            "http".into(),
+        );
         agent.state = super::HealthcheckAgentState::Ready;
 
-        let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
-        agent.perform_healthcheck(client).await;
+        agent.perform_healthcheck().await;
 
         let healthcheck_result = agent.buffer.iter().max().unwrap();
         assert_eq!(
@@ -406,20 +444,20 @@ mod test {
         );
     }
 
-    #[cfg(not(feature = "tls_termination"))]
     #[tokio::test]
-    async fn validate_initialized_agent_with_unhealthy_response_returns_response_with_correct_status(
+    async fn validate_initialized_agent_with_unhealthy_response_returns_response_with_correct_status_over_tls(
     ) {
-        mock_connector!(MockHealthcheckEndpoint {
-          "https://127.0.0.1" => "HTTP/1.1 400 Bad Request\r\n\r\n"
-        });
-        let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) =
-            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()));
+        let client = hyper::Client::builder().build(MockHttpsUnhealthyEmptyEndpoint::default());
+        let (mut agent, _sender) = HealthcheckAgent::new(
+            3001,
+            std::time::Duration::from_secs(1),
+            Some("/healthcheck".into()),
+            client,
+            "https".into(),
+        );
         agent.state = super::HealthcheckAgentState::Ready;
 
-        let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
-        agent.perform_healthcheck(client).await;
+        agent.perform_healthcheck().await;
 
         let healthcheck_result = agent.buffer.iter().max().unwrap();
         assert_eq!(
@@ -431,20 +469,19 @@ mod test {
         );
     }
 
-    #[cfg(feature = "tls_termination")]
     #[tokio::test]
     async fn it_can_parse_json_responses_from_user_process() {
-        mock_connector!(MockHealthcheckEndpoint {
-              "http://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n{\"status\": \"ok\"}"
-        });
-
-        let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) =
-            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()));
+        let client = hyper::Client::builder().build(MockHttpHealthyJsonEndpoint::default());
+        let (mut agent, _sender) = HealthcheckAgent::new(
+            3000,
+            std::time::Duration::from_secs(1),
+            Some("/healthcheck".into()),
+            client,
+            "http".into(),
+        );
         agent.state = super::HealthcheckAgentState::Ready;
 
-        let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
-        agent.perform_healthcheck(client).await;
+        agent.perform_healthcheck().await;
 
         let healthcheck_result = agent.buffer.iter().max().unwrap();
         assert_eq!(
@@ -456,20 +493,19 @@ mod test {
         );
     }
 
-    #[cfg(not(feature = "tls_termination"))]
     #[tokio::test]
-    async fn it_can_parse_json_responses_from_user_process() {
-        mock_connector!(MockHealthcheckEndpoint {
-              "https://127.0.0.1" => "HTTP/1.1 200 Ok\r\n\r\n{\"status\": \"ok\"}"
-        });
-
-        let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) =
-            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()));
+    async fn it_can_parse_json_responses_from_user_process_over_tls() {
+        let client = hyper::Client::builder().build(MockHttpsHealthyJsonEndpoint::default());
+        let (mut agent, _sender) = HealthcheckAgent::new(
+            3000,
+            std::time::Duration::from_secs(1),
+            Some("/healthcheck".into()),
+            client,
+            "https".into(),
+        );
         agent.state = super::HealthcheckAgentState::Ready;
 
-        let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
-        agent.perform_healthcheck(client).await;
+        agent.perform_healthcheck().await;
 
         let healthcheck_result = agent.buffer.iter().max().unwrap();
         assert_eq!(
@@ -481,20 +517,19 @@ mod test {
         );
     }
 
-    #[cfg(feature = "tls_termination")]
     #[tokio::test]
     async fn it_can_parse_unhealthy_json_responses_from_user_process() {
-        mock_connector!(MockHealthcheckEndpoint {
-            "http://127.0.0.1" => "HTTP/1.1 500 Internal Server Error\r\n\r\n{\"very-bad-state\": \"unhealthy\"}"
-        });
-
-        let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) =
-            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()));
+        let client = hyper::Client::builder().build(MockHttpUnhealthyJsonEndpoint::default());
+        let (mut agent, _sender) = HealthcheckAgent::new(
+            3000,
+            std::time::Duration::from_secs(1),
+            Some("/healthcheck".into()),
+            client,
+            "http".into(),
+        );
         agent.state = super::HealthcheckAgentState::Ready;
 
-        let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
-        agent.perform_healthcheck(client).await;
+        agent.perform_healthcheck().await;
 
         let healthcheck_result = agent.buffer.iter().max().unwrap();
         assert_eq!(
@@ -506,20 +541,19 @@ mod test {
         );
     }
 
-    #[cfg(not(feature = "tls_termination"))]
     #[tokio::test]
-    async fn it_can_parse_unhealthy_json_responses_from_user_process() {
-        mock_connector!(MockHealthcheckEndpoint {
-            "https://127.0.0.1" => "HTTP/1.1 500 Internal Server Error\r\n\r\n{\"very-bad-state\": \"unhealthy\"}"
-        });
-
-        let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) =
-            HealthcheckAgent::new(3001, duration, Some("/healthcheck".into()));
+    async fn it_can_parse_unhealthy_json_responses_from_user_process_over_tls() {
+        let client = hyper::Client::builder().build(MockHttpsUnhealthyJsonEndpoint::default());
+        let (mut agent, _sender) = HealthcheckAgent::new(
+            3000,
+            std::time::Duration::from_secs(1),
+            Some("/healthcheck".into()),
+            client,
+            "https".into(),
+        );
         agent.state = super::HealthcheckAgentState::Ready;
 
-        let client = hyper::Client::builder().build(MockHealthcheckEndpoint::default());
-        agent.perform_healthcheck(client).await;
+        agent.perform_healthcheck().await;
 
         let healthcheck_result = agent.buffer.iter().max().unwrap();
         assert_eq!(

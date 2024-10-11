@@ -152,6 +152,8 @@ impl From<ProvisionerContext> for EnclaveContext {
 pub struct FeatureContext {
     pub api_key_auth: bool,
     pub healthcheck: Option<String>,
+    pub healthcheck_port: Option<u16>,
+    pub healthcheck_use_tls: Option<bool>,
     pub trx_logging_enabled: bool,
     pub forward_proxy_protocol: bool,
     pub trusted_headers: Vec<String>,
