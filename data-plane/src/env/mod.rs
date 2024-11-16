@@ -1,5 +1,6 @@
 use std::{
     fs::{File, OpenOptions},
+    future::Future,
     io::Write,
 };
 
@@ -81,12 +82,47 @@ impl Environment {
     }
 
     #[cfg(not(feature = "tls_termination"))]
-    pub async fn init_without_certs(self) -> Result<(), EnvError> {
+    async fn with_retries<F, Fut, T>(func: F) -> Result<T, crate::error::Error>
+    where
+        F: Fn() -> Fut,
+        Fut: Future<Output = Result<T, crate::error::Error>>,
+    {
+        let mut attempts = 0;
+        loop {
+            match func().await {
+                Ok(response) => return Ok(response),
+                Err(e) if attempts < 3 => {
+                    attempts += 1;
+                    log::error!("Request failed during environment init flow - {e:?}");
+                    tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    #[cfg(not(feature = "tls_termination"))]
+    pub async fn init_without_certs(self) -> crate::error::Result<()> {
         use crate::EnclaveContext;
 
         log::info!("Initializing env without TLS termination, sending request to control plane for cert provisioner token.");
-        let token = self.config_client.get_cert_token().await.unwrap().token();
-        let secrets_response = self.cert_provisioner_client.get_secrets(token).await?;
+        let token = Self::with_retries(|| async {
+            self.config_client
+                .get_cert_token()
+                .await
+                .map_err(crate::error::Error::from)
+        })
+        .await?
+        .token();
+
+        let secrets_response = Self::with_retries(|| async {
+            self.cert_provisioner_client
+                .get_secrets(token.clone())
+                .await
+                .map_err(crate::error::Error::from)
+        })
+        .await?;
+
         EnclaveContext::set(secrets_response.context.clone().into());
 
         self.init(secrets_response.clone().secrets).await?;
