@@ -187,6 +187,8 @@ where
             "An error occurred initializing the enclave environment — {:?}",
             e
         );
+        // If the environment fails to initialize, we should exit.
+        return;
     }
 
     loop {
