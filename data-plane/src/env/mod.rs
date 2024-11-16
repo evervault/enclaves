@@ -1,9 +1,3 @@
-use std::{
-    fs::{File, OpenOptions},
-    future::Future,
-    io::Write,
-};
-
 #[cfg(not(feature = "tls_termination"))]
 use crate::cert_provisioner_client::CertProvisionerClient;
 #[cfg(not(feature = "tls_termination"))]
@@ -12,6 +6,12 @@ use crate::{base_tls_client::ClientError, ContextError};
 use hyper::header::InvalidHeaderValue;
 use serde_json::json;
 use shared::server::config_server::requests::Secret;
+#[cfg(not(feature = "tls_termination"))]
+use std::future::Future;
+use std::{
+    fs::{File, OpenOptions},
+    io::Write,
+};
 use thiserror::Error;
 
 use crate::e3client::{CryptoRequest, CryptoResponse, E3Api, E3Client};
