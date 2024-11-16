@@ -94,7 +94,7 @@ impl Environment {
                 Ok(response) => return Ok(response),
                 Err(e) if attempts < 3 => {
                     log::error!("Request failed during environment init flow - {e:?}");
-                    tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
                 }
                 Err(e) => return Err(e),
             }
