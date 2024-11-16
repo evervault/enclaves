@@ -89,10 +89,10 @@ impl Environment {
     {
         let mut attempts = 0;
         loop {
+            attempts += 1;
             match func().await {
                 Ok(response) => return Ok(response),
                 Err(e) if attempts < 3 => {
-                    attempts += 1;
                     log::error!("Request failed during environment init flow - {e:?}");
                     tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
                 }
@@ -152,5 +152,55 @@ impl Environment {
         write!(file, "export EV_INITIALIZED=true")?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    #[tokio::test]
+    #[cfg(not(feature = "tls_termination"))]
+    async fn with_retries_redrives_requests_as_expected() {
+        let responses = vec![
+            Ok(()),
+            Err(crate::error::Error::RequestTimeout(0)),
+            Err(crate::error::Error::RequestTimeout(0)),
+        ];
+
+        let ctr = std::sync::Arc::new(std::sync::Mutex::new(responses));
+        let ctr_clone = ctr.clone();
+        let fallable_func = || async {
+            let mut ctr_lock = ctr.lock().unwrap();
+            let value = (*ctr_lock).pop().unwrap();
+            value
+        };
+
+        let result = super::Environment::with_retries(fallable_func).await;
+        assert!(result.is_ok());
+        let responses_lock = ctr_clone.lock().unwrap();
+        assert!(responses_lock.is_empty());
+    }
+
+    #[tokio::test]
+    #[cfg(not(feature = "tls_termination"))]
+    async fn with_retries_redrives_requests_and_bubbles_errors() {
+        let responses = vec![
+            Ok(()),
+            Err(crate::error::Error::RequestTimeout(0)),
+            Err(crate::error::Error::RequestTimeout(0)),
+            Err(crate::error::Error::RequestTimeout(0)),
+        ];
+
+        let ctr = std::sync::Arc::new(std::sync::Mutex::new(responses));
+        let ctr_clone = ctr.clone();
+        let fallable_func = || async {
+            let mut ctr_lock = ctr.lock().unwrap();
+            let value = (*ctr_lock).pop().unwrap();
+            value
+        };
+
+        let result = super::Environment::with_retries(fallable_func).await;
+        assert!(result.is_err());
+        let responses_lock = ctr_clone.lock().unwrap();
+        assert_eq!(responses_lock.len(), 1);
     }
 }
