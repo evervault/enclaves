@@ -83,9 +83,9 @@ impl Environment {
 
     #[cfg(not(feature = "tls_termination"))]
     async fn with_retries<F, Fut, T>(
-        backoff: u32,
+        backoff: u64,
         n_attempts: u8,
-        upper_bound: u32,
+        upper_bound: u64,
         func: F,
     ) -> Result<T, crate::error::Error>
     where
@@ -96,7 +96,8 @@ impl Environment {
 
         let mut attempts = 0;
         loop {
-            let computed_backoff = (2.pow(attempts) * backoff) + thread_rng().gen_range(50..150);
+            let computed_backoff =
+                (2_u64.pow(attempts) * backoff) + thread_rng().gen_range(50..150);
             attempts += 1;
             match func().await {
                 Ok(response) => return Ok(response),
