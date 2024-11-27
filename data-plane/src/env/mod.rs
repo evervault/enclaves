@@ -92,7 +92,7 @@ impl Environment {
         F: Fn() -> Fut,
         Fut: Future<Output = Result<T, crate::error::Error>>,
     {
-        use rand::thread_rng;
+        use rand::{thread_rng,Rng};
 
         let mut attempts = 0;
         loop {
