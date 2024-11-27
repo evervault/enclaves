@@ -82,7 +82,12 @@ impl Environment {
     }
 
     #[cfg(not(feature = "tls_termination"))]
-    async fn with_retries<F, Fut, T>(backoff: u32, n_attempts: u8, upper_bound: u32, func: F) -> Result<T, crate::error::Error>
+    async fn with_retries<F, Fut, T>(
+        backoff: u32,
+        n_attempts: u8,
+        upper_bound: u32,
+        func: F,
+    ) -> Result<T, crate::error::Error>
     where
         F: Fn() -> Fut,
         Fut: Future<Output = Result<T, crate::error::Error>>,
