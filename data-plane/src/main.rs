@@ -3,6 +3,7 @@ use shared::server::Listener;
 use shared::server::CID::Enclave;
 use shared::{print_version, server::get_vsock_server_with_proxy_protocol};
 
+use data_plane::crypto::api::CryptoApi;
 #[cfg(feature = "network_egress")]
 use data_plane::dns::egressproxy::EgressProxy;
 #[cfg(feature = "network_egress")]
@@ -10,6 +11,7 @@ use data_plane::dns::enclavedns::EnclaveDnsProxy;
 #[cfg(not(feature = "tls_termination"))]
 use data_plane::env::Environment;
 use data_plane::health::start_health_check_server;
+use data_plane::stats::StatsProxy;
 use data_plane::stats_client::StatsClient;
 use data_plane::time::ClockSync;
 use data_plane::FeatureContext;
@@ -64,52 +66,20 @@ fn main() {
     };
 
     runtime.block_on(async move {
-        tokio::join!(
-            start(data_plane_port),
-            start_health_check_server(
-                ctx.healthcheck_port.unwrap_or(data_plane_port),
-                ctx.healthcheck,
-                ctx.healthcheck_use_tls.unwrap_or(false)
-            )
+        let data_plane_fut = start(data_plane_port);
+        let health_check_fut = start_health_check_server(
+            ctx.healthcheck_port.unwrap_or(data_plane_port),
+            ctx.healthcheck,
+            ctx.healthcheck_use_tls.unwrap_or(false),
         );
+        tokio::select! {
+          _ = data_plane_fut => {},
+          _ = health_check_fut => {}
+        };
     });
 }
 
-#[cfg(not(feature = "network_egress"))]
 async fn start(data_plane_port: u16) {
-    use data_plane::{crypto::api::CryptoApi, stats::StatsProxy};
-
-    StatsClient::init();
-
-    let context = match FeatureContext::get() {
-        Ok(context) => context,
-        Err(e) => {
-            log::error!("Failed to access context in enclave - {e}");
-            return;
-        }
-    };
-
-    log::info!("Running data plane with egress disabled");
-    let (_, e3_api_result, stats_result, _) = tokio::join!(
-        start_data_plane(data_plane_port, context),
-        CryptoApi::listen(),
-        StatsProxy::listen(),
-        ClockSync::run(ENCLAVE_CLOCK_SYNC_INTERVAL)
-    );
-
-    if let Err(e) = e3_api_result {
-        log::error!("An error occurred within the E3 API server — {e:?}");
-    }
-
-    if let Err(e) = stats_result {
-        log::error!("An error occurred within the stats proxy — {e:?}");
-    }
-}
-
-#[cfg(feature = "network_egress")]
-async fn start(data_plane_port: u16) {
-    use data_plane::{crypto::api::CryptoApi, stats::StatsProxy};
-
     StatsClient::init();
     let context = match FeatureContext::get() {
         Ok(context) => context,
@@ -119,22 +89,27 @@ async fn start(data_plane_port: u16) {
         }
     };
 
-    let (_, dns_result, e3_api_result, egress_result, stats_result, _) = tokio::join!(
+    if cfg!(not(feature = "network_egress")) {
+        log::info!("Running data plane with egress disabled");
+    } else {
+        log::info!("Running data plane with egress enabled");
+    }
+
+    let service_results = tokio::join!(
         start_data_plane(data_plane_port, context.clone()),
-        EnclaveDnsProxy::bind_server(context.egress.allow_list),
         CryptoApi::listen(),
-        EgressProxy::listen(),
         StatsProxy::listen(),
-        ClockSync::run(ENCLAVE_CLOCK_SYNC_INTERVAL)
+        ClockSync::run(ENCLAVE_CLOCK_SYNC_INTERVAL),
+        #[cfg(feature = "network_egress")]
+        EnclaveDnsProxy::bind_server(context.egress.allow_list),
+        #[cfg(feature = "network_egress")]
+        EgressProxy::listen(),
     );
 
-    if let Err(e) = dns_result {
-        log::error!("An error occurred within the dns server — {e:?}");
-    }
-
-    if let Err(e) = egress_result {
-        log::error!("An error occurred within the egress server — {e:?}");
-    }
+    #[cfg(feature = "network_egress")]
+    let (_, e3_api_result, stats_result, _, dns_result, egress_result) = service_results;
+    #[cfg(not(feature = "network_egress"))]
+    let (_, e3_api_result, stats_result, _) = service_results;
 
     if let Err(e) = e3_api_result {
         log::error!("An error occurred within the E3 API server — {e:?}");
@@ -142,6 +117,16 @@ async fn start(data_plane_port: u16) {
 
     if let Err(e) = stats_result {
         log::error!("An error occurred within the Stats proxy — {e:?}");
+    }
+
+    #[cfg(feature = "network_egress")]
+    if let Err(e) = dns_result {
+        log::error!("An error occurred within the dns server — {e:?}");
+    }
+
+    #[cfg(feature = "network_egress")]
+    if let Err(e) = egress_result {
+        log::error!("An error occurred within the egress server — {e:?}");
     }
 }
 
