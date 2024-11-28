@@ -1,6 +1,7 @@
 use cadence::StatsdClient;
 use cadence::{BufferedUdpMetricSink, QueuingMetricSink};
 use cadence_macros::{set_global_default, statsd_count, statsd_gauge};
+use log::logger;
 use shared::stats::StatsError;
 use shared::{publish_count, publish_count_dynamic_label, publish_gauge, ENCLAVE_STATSD_PORT};
 use std::fs;
@@ -73,28 +74,42 @@ impl StatsClient {
     }
 
     pub fn try_record_system_metrics() -> Result<(), StatsError> {
-        let mem_info = sys_info::mem_info()?;
-        let cpu = sys_info::loadavg()?;
-        let cpu_num = sys_info::cpu_num()?;
-        let (allocated, free, max) = Self::get_file_descriptor_info()?;
+        let mem_info =
+            sys_info::mem_info().map_err(|e| log::error!("Couldn't obtain mem info: {e}"));
+        let cpu = sys_info::loadavg().map_err(|e| log::error!("Couldn't obtain cpu info: {e}"));
+        let cpu_num = sys_info::cpu_num().map_err(|e| log::error!("Couldn't obtain cpu num: {e}"));
+        let fd_info = Self::get_file_descriptor_info()
+            .map_err(|e| log::error!("Couldn't obtain fd info: {e}"));
 
         if let Ok(context) = EnclaveContext::get() {
-            publish_gauge!(
-                "evervault.enclaves.memory.total",
-                mem_info.total as f64,
-                context
-            );
-            publish_gauge!(
-                "evervault.enclaves.memory.avail",
-                mem_info.avail as f64,
-                context
-            );
-            publish_gauge!("evervault.enclaves.cpu.cores", cpu_num as f64, context);
-            publish_gauge!("evervault.enclaves.cpu.one", cpu.one, context);
-            publish_gauge!("evervault.enclaves.fd.allocated", allocated, context);
-            publish_gauge!("evervault.enclaves.fd.free", free, context);
-            publish_gauge!("evervault.enclaves.fd.max", max, context);
-        };
+            if let Ok(mem_info) = mem_info {
+                publish_gauge!(
+                    "evervault.enclaves.memory.total",
+                    mem_info.total as f64,
+                    context
+                );
+                publish_gauge!(
+                    "evervault.enclaves.memory.avail",
+                    mem_info.avail as f64,
+                    context
+                );
+            }
+
+            if let Ok(cpu_num) = cpu_num {
+                publish_gauge!("evervault.enclaves.cpu.cores", cpu_num as f64, context);
+            }
+
+            if let Ok(cpu) = cpu {
+                publish_gauge!("evervault.enclaves.cpu.one", cpu.one, context);
+            }
+
+            if let Ok((allocated, free, max)) = fd_info {
+                publish_gauge!("evervault.enclaves.fd.allocated", allocated, context);
+                publish_gauge!("evervault.enclaves.fd.free", free, context);
+                publish_gauge!("evervault.enclaves.fd.max", max, context);
+            }
+        }
+
         Ok(())
     }
 }
