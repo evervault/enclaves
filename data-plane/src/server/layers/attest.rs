@@ -70,6 +70,7 @@ where
                     };
                     let base64_doc = base64::encode(attestation_doc);
                     cache.cache_set(attestation_doc_key, base64_doc.clone());
+                    log::info!("Attestation doc generated and cached.");
                     base64_doc
                 }
             };
