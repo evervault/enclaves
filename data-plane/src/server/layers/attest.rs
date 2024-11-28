@@ -1,3 +1,4 @@
+use cached::Cached;
 use hyper::http::{Request, Response};
 use hyper::Body;
 use serde::{Deserialize, Serialize};
@@ -5,6 +6,7 @@ use std::future::Future;
 use std::pin::Pin;
 use tower::{Layer, Service};
 
+use crate::cache::ATTESTATION_DOC;
 use crate::crypto::attest;
 use crate::server::http::build_internal_error_response;
 use crate::server::tls::TRUSTED_PUB_CERT;
