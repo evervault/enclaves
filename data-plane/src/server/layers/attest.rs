@@ -71,8 +71,8 @@ where
                         Ok(ad) => ad,
                         Err(e) => {
                             log::error!("Failed to generate attestation doc. Error: {:?}", e);
-                            return Ok(build_internal_error_response(None))
-                        },
+                            return Ok(build_internal_error_response(None));
+                        }
                     };
                     let base64_doc = base64::encode(doc);
                     cache.cache_set(attestation_doc_key, base64_doc.clone());
