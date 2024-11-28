@@ -66,7 +66,7 @@ where
             let base64_doc = match cache.cache_get(&attestation_doc_key) {
                 Some(ad) => ad.clone(),
                 None => {
-                    doc = match attest::get_attestation_doc(None, None) {
+                    let doc = match attest::get_attestation_doc(None, None) {
                         Ok(ad) => ad,
                         Err(e) => return Ok(build_internal_error_response(None)),
                     };
