@@ -66,11 +66,11 @@ where
             let base64_doc = match cache.cache_get(&attestation_doc_key) {
                 Some(ad) => ad.clone(),
                 None => {
-                    attestation_doc = match attest::get_attestation_doc(None, None) {
-                        Ok(attestation_doc) => attestation_doc,
+                    doc = match attest::get_attestation_doc(None, None) {
+                        Ok(ad) => ad,
                         Err(e) => return Ok(build_internal_error_response(None)),
                     };
-                    let base64_doc = base64::encode(attestation_doc);
+                    let base64_doc = base64::encode(doc);
                     cache.cache_set(attestation_doc_key, base64_doc.clone());
                     log::info!("Attestation doc generated and cached.");
                     base64_doc
