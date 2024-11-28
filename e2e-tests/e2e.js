@@ -178,6 +178,15 @@ describe("Enclave is runnning", () => {
         expect(keys).to.include(
           "evervault.enclaves.cpu.cores;enclave_uuid=enclave_123;app_uuid=app_12345678"
         );
+        expect(keys).to.include(
+          "evervault.enclaves.fd.allocated;enclave_uuid=enclave_123;app_uuid=app_12345678"
+        );
+        expect(keys).to.include(
+          "evervault.enclaves.fd.max;enclave_uuid=enclave_123;app_uuid=app_12345678"
+        );
+        expect(keys).to.include(
+          "evervault.enclaves.fd.free;enclave_uuid=enclave_123;app_uuid=app_12345678"
+        );
       } finally {
         sysClient.destroy();
         done();

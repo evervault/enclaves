@@ -3,6 +3,7 @@ use cadence::{BufferedUdpMetricSink, QueuingMetricSink};
 use cadence_macros::{set_global_default, statsd_count, statsd_gauge};
 use shared::stats::StatsError;
 use shared::{publish_count, publish_count_dynamic_label, publish_gauge, ENCLAVE_STATSD_PORT};
+use std::fs;
 use std::net::UdpSocket;
 
 use crate::EnclaveContext;
@@ -31,6 +32,26 @@ impl StatsClient {
         }
     }
 
+    fn get_file_descriptor_info() -> Result<(u64, u64, u64), StatsError> {
+        let content = fs::read_to_string("/proc/sys/fs/file-nr")?;
+        let parts: Vec<&str> = content.split_whitespace().collect();
+
+        if parts.len() == 3 {
+            let allocated: u64 = parts[0]
+                .parse()
+                .map_err(|_| StatsError::FDUsageParseError)?;
+            let free: u64 = parts[1]
+                .parse()
+                .map_err(|_| StatsError::FDUsageParseError)?;
+            let max: u64 = parts[2]
+                .parse()
+                .map_err(|_| StatsError::FDUsageParseError)?;
+            Ok((allocated, free, max))
+        } else {
+            Err(StatsError::FDUsageReadError)
+        }
+    }
+
     pub fn record_encrypt() {
         if let Ok(context) = EnclaveContext::get() {
             publish_count!("evervault.enclaves.encrypt.count", 1, context);
@@ -55,6 +76,7 @@ impl StatsClient {
         let mem_info = sys_info::mem_info()?;
         let cpu = sys_info::loadavg()?;
         let cpu_num = sys_info::cpu_num()?;
+        let (allocated, free, max) = Self::get_file_descriptor_info()?;
 
         if let Ok(context) = EnclaveContext::get() {
             publish_gauge!(
@@ -69,6 +91,9 @@ impl StatsClient {
             );
             publish_gauge!("evervault.enclaves.cpu.cores", cpu_num as f64, context);
             publish_gauge!("evervault.enclaves.cpu.one", cpu.one, context);
+            publish_gauge!("evervault.enclaves.fd.allocated", allocated, context);
+            publish_gauge!("evervault.enclaves.fd.free", free, context);
+            publish_gauge!("evervault.enclaves.fd.max", max, context);
         };
         Ok(())
     }
