@@ -1,3 +1,4 @@
+use cached::Cached;
 use hyper::http::{Request, Response};
 use hyper::Body;
 use serde::{Deserialize, Serialize};
@@ -5,6 +6,7 @@ use std::future::Future;
 use std::pin::Pin;
 use tower::{Layer, Service};
 
+use crate::cache::ATTESTATION_DOC;
 use crate::crypto::attest;
 use crate::server::http::build_internal_error_response;
 use crate::server::tls::TRUSTED_PUB_CERT;
@@ -58,14 +60,26 @@ where
         }
 
         Box::pin(async move {
-            let challenge = TRUSTED_PUB_CERT.get();
+            let attestation_doc_key: String = "attestation_doc".to_string();
+            let mut cache = ATTESTATION_DOC.lock().await;
 
-            let attestation_doc = match attest::get_attestation_doc(challenge.cloned(), None) {
-                Ok(attestation_doc) => attestation_doc,
-                Err(e) => return Ok(e.into()),
+            let base64_doc = match cache.cache_get(&attestation_doc_key) {
+                Some(ad) => ad.clone(),
+                None => {
+                    let challenge = TRUSTED_PUB_CERT.get();
+                    let doc = match attest::get_attestation_doc(challenge.cloned(), None) {
+                        Ok(ad) => ad,
+                        Err(e) => {
+                            log::error!("Failed to generate attestation doc. Error: {:?}", e);
+                            return Ok(build_internal_error_response(None));
+                        }
+                    };
+                    let base64_doc = base64::encode(doc);
+                    cache.cache_set(attestation_doc_key, base64_doc.clone());
+                    log::info!("Attestation doc generated and cached.");
+                    base64_doc
+                }
             };
-
-            let base64_doc = base64::encode(attestation_doc);
 
             let response = AttestationResponse {
                 attestation_doc: base64_doc,
