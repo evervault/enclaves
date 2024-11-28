@@ -84,7 +84,7 @@ impl Environment {
     #[cfg(not(feature = "tls_termination"))]
     async fn with_retries<F, Fut, T>(
         backoff: u64,
-        n_attempts: u8,
+        n_attempts: u32,
         upper_bound: u64,
         func: F,
     ) -> Result<T, crate::error::Error>
