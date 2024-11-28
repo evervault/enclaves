@@ -1,7 +1,6 @@
 use cadence::StatsdClient;
 use cadence::{BufferedUdpMetricSink, QueuingMetricSink};
 use cadence_macros::{set_global_default, statsd_count, statsd_gauge};
-use log::logger;
 use shared::stats::StatsError;
 use shared::{publish_count, publish_count_dynamic_label, publish_gauge, ENCLAVE_STATSD_PORT};
 use std::fs;
