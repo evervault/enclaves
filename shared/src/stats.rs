@@ -11,6 +11,10 @@ pub enum StatsError {
     MetricError(#[from] MetricError),
     #[error("IO error {0}")]
     IOError(#[from] Error),
+    #[error("Couldn't parse file descriptor values info from /proc/sys/fs/file-nr")]
+    FDUsageParseError,
+    #[error("Couldn't read file descriptor info from /proc/sys/fs/file-nr")]
+    FDUsageReadError,
 }
 
 #[macro_export]
