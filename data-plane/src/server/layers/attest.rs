@@ -66,9 +66,13 @@ where
             let base64_doc = match cache.cache_get(&attestation_doc_key) {
                 Some(ad) => ad.clone(),
                 None => {
-                    let doc = match attest::get_attestation_doc(None, None) {
+                    let challenge = TRUSTED_PUB_CERT.get();
+                    let doc = match attest::get_attestation_doc(challenge.cloned(), None) {
                         Ok(ad) => ad,
-                        Err(e) => return Ok(build_internal_error_response(None)),
+                        Err(e) => {
+                            log::error!("Failed to generate attestation doc. Error: {:?}", e);
+                            return Ok(build_internal_error_response(None))
+                        },
                     };
                     let base64_doc = base64::encode(doc);
                     cache.cache_set(attestation_doc_key, base64_doc.clone());
@@ -76,8 +80,6 @@ where
                     base64_doc
                 }
             };
-
-            let challenge = TRUSTED_PUB_CERT.get();
 
             let response = AttestationResponse {
                 attestation_doc: base64_doc,
