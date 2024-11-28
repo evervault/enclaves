@@ -82,19 +82,29 @@ impl Environment {
     }
 
     #[cfg(not(feature = "tls_termination"))]
-    async fn with_retries<F, Fut, T>(func: F) -> Result<T, crate::error::Error>
+    async fn with_retries<F, Fut, T>(
+        backoff: u64,
+        n_attempts: u32,
+        upper_bound: u64,
+        func: F,
+    ) -> Result<T, crate::error::Error>
     where
         F: Fn() -> Fut,
         Fut: Future<Output = Result<T, crate::error::Error>>,
     {
+        use rand::{thread_rng, Rng};
+
         let mut attempts = 0;
         loop {
+            let computed_backoff =
+                (2_u64.pow(attempts) * backoff) + thread_rng().gen_range(50..150);
             attempts += 1;
             match func().await {
                 Ok(response) => return Ok(response),
-                Err(e) if attempts < 3 => {
+                Err(e) if attempts < n_attempts => {
                     log::error!("Request failed during environment init flow - {e:?}");
-                    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                    let limited_backoff = std::cmp::min(upper_bound, computed_backoff);
+                    tokio::time::sleep(tokio::time::Duration::from_millis(limited_backoff)).await;
                 }
                 Err(e) => return Err(e),
             }
@@ -105,8 +115,9 @@ impl Environment {
     pub async fn init_without_certs(self) -> crate::error::Result<()> {
         use crate::EnclaveContext;
 
+        let half_min = 1_000 * 30;
         log::info!("Initializing env without TLS termination, sending request to control plane for cert provisioner token.");
-        let token = Self::with_retries(|| async {
+        let token = Self::with_retries(500, 10, half_min, || async {
             self.config_client
                 .get_cert_token()
                 .await
@@ -115,7 +126,7 @@ impl Environment {
         .await?
         .token();
 
-        let secrets_response = Self::with_retries(|| async {
+        let secrets_response = Self::with_retries(500, 10, half_min, || async {
             self.cert_provisioner_client
                 .get_secrets(token.clone())
                 .await
@@ -174,7 +185,7 @@ mod test {
             value
         };
 
-        let result = super::Environment::with_retries(fallable_func).await;
+        let result = super::Environment::with_retries(100, 3, 1_000, fallable_func).await;
         assert!(result.is_ok());
         let responses_lock = ctr_clone.lock().unwrap();
         assert!(responses_lock.is_empty());
@@ -198,7 +209,7 @@ mod test {
             value
         };
 
-        let result = super::Environment::with_retries(fallable_func).await;
+        let result = super::Environment::with_retries(100, 3, 1_000, fallable_func).await;
         assert!(result.is_err());
         let responses_lock = ctr_clone.lock().unwrap();
         assert_eq!(responses_lock.len(), 1);
