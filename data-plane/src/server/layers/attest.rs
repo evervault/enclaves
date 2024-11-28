@@ -58,14 +58,23 @@ where
         }
 
         Box::pin(async move {
-            let challenge = TRUSTED_PUB_CERT.get();
+            let attestation_doc_key: String = "attestation_doc".to_string();
+            let mut cache = ATTESTATION_DOC.lock().await;
 
-            let attestation_doc = match attest::get_attestation_doc(challenge.cloned(), None) {
-                Ok(attestation_doc) => attestation_doc,
-                Err(e) => return Ok(e.into()),
+            let base64_doc = match cache.cache_get(&attestation_doc_key) {
+                Some(ad) => ad.clone(),
+                None => {
+                    attestation_doc = match attest::get_attestation_doc(None, None) {
+                        Ok(attestation_doc) => attestation_doc,
+                        Err(e) => return Ok(build_internal_error_response(None)),
+                    };
+                    let base64_doc = base64::encode(attestation_doc);
+                    cache.cache_set(attestation_doc_key, base64_doc.clone());
+                    base64_doc
+                }
             };
 
-            let base64_doc = base64::encode(attestation_doc);
+            let challenge = TRUSTED_PUB_CERT.get();
 
             let response = AttestationResponse {
                 attestation_doc: base64_doc,
