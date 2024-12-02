@@ -1,6 +1,7 @@
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
-use std::fs;
+use std::{fs, future::Future, task::ready};
+use tokio_util::sync::CancellationToken;
 
 #[cfg(test)]
 pub mod mocks;
@@ -189,6 +190,67 @@ impl FeatureContext {
     }
 }
 
+pub enum CancellableResult<T> {
+    Cancelled,
+    Complete(T),
+}
+
+impl<T> CancellableResult<T> {
+    pub fn is_cancelled(&self) -> bool {
+        matches!(self, Self::Cancelled)
+    }
+
+    pub fn unwrap(self) -> T {
+        match self {
+            Self::Cancelled => panic!("unwrap called on cancelled result"),
+            Self::Complete(result) => result,
+        }
+    }
+}
+
+/// The critical service trait is used to represent the interdepence of the critical in-Enclave services. If any critical service fails,
+/// all other critical services should be cancelled to force the Enclave to be restarted. This process is managed using a cancellation token.
+pub trait Critical: Future {
+    fn critical(self, cancellation_token: CancellationToken) -> CriticalService<Self>
+    where
+        Self: Sized,
+    {
+        CriticalService {
+            inner: self,
+            cancellation_token,
+        }
+    }
+}
+
+impl<F: ?Sized> Critical for F where F: Future {}
+
+#[pin_project::pin_project]
+pub struct CriticalService<F: Future> {
+    #[pin]
+    inner: F,
+    #[pin]
+    cancellation_token: CancellationToken,
+}
+
+impl<F: Future> Future for CriticalService<F> {
+    type Output = CancellableResult<F::Output>;
+
+    fn poll(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        let this = self.project();
+        let is_cancelled = this.cancellation_token.is_cancelled();
+        if is_cancelled {
+            return std::task::Poll::Ready(CancellableResult::Cancelled);
+        }
+
+        let result = ready!(this.inner.poll(cx));
+        this.cancellation_token.cancel();
+        std::task::Poll::Ready(CancellableResult::Complete(result))
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::FeatureContext;
@@ -257,5 +319,58 @@ mod test {
             vec![".stripe.com".to_string()]
         );
         assert_eq!(feature_context.healthcheck, Some("/health".into()));
+    }
+
+    #[tokio::test]
+    async fn test_critical_service_exits_tasks_as_expected() {
+        let cancellation_token = CancellationToken::new();
+        let (sender, mut receiver) = tokio::sync::oneshot::channel();
+        let fut1 = async move {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            sender.send(1).unwrap();
+        }
+        .critical(cancellation_token.child_token());
+
+        let fut2 = async move {
+            cancellation_token.cancel();
+            2
+        };
+
+        let (res1, res2) = tokio::join!(fut1, fut2);
+        assert!(res1.is_cancelled());
+        assert_eq!(res2, 2);
+        // Assert that we forced the exit of the async task without it sending a message
+        let msg = receiver.try_recv();
+        assert!(msg.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_critical_services_are_made_interdependent_on_each_other() {
+        let cancellation_token = CancellationToken::new();
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(2);
+        let sender1 = sender.clone();
+
+        let fut1 = async move {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            sender1.send(1).await.unwrap();
+        }
+        .critical(cancellation_token.clone());
+
+        let fut2 = async move {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            sender.send(2).await.unwrap();
+        }
+        .critical(cancellation_token.clone());
+
+        let fut3 = async move { Ok(()) as Result<(), ()> }.critical(cancellation_token.clone());
+
+        let (res1, res2, res3) = tokio::join!(fut1, fut2, fut3);
+        assert!(cancellation_token.is_cancelled());
+        assert_eq!(res3.unwrap(), Ok(()));
+        assert!(res1.is_cancelled());
+        assert!(res2.is_cancelled());
+        // Assert that we forced the exit of the async task without it sending a message
+        let msg = receiver.try_recv();
+        assert!(msg.is_err());
     }
 }
