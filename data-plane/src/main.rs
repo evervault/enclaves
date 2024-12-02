@@ -95,39 +95,39 @@ async fn start(data_plane_port: u16) {
         log::info!("Running data plane with egress enabled");
     }
 
-    let service_results = tokio::join!(
-        start_data_plane(data_plane_port, context.clone()),
-        CryptoApi::listen(),
-        StatsProxy::listen(),
-        ClockSync::run(ENCLAVE_CLOCK_SYNC_INTERVAL),
-        #[cfg(feature = "network_egress")]
-        EnclaveDnsProxy::bind_server(context.egress.allow_list),
-        #[cfg(feature = "network_egress")]
-        EgressProxy::listen(),
-    );
+    // let service_results = tokio::join!(
+    //     start_data_plane(data_plane_port, context.clone()),
+    //     CryptoApi::listen(),
+    //     StatsProxy::listen(),
+    //     ClockSync::run(ENCLAVE_CLOCK_SYNC_INTERVAL),
+    //     #[cfg(feature = "network_egress")]
+    //     EnclaveDnsProxy::bind_server(context.egress.allow_list),
+    //     #[cfg(feature = "network_egress")]
+    //     EgressProxy::listen(),
+    // );
 
-    #[cfg(feature = "network_egress")]
-    let (_, e3_api_result, stats_result, _, dns_result, egress_result) = service_results;
-    #[cfg(not(feature = "network_egress"))]
-    let (_, e3_api_result, stats_result, _) = service_results;
+    // #[cfg(feature = "network_egress")]
+    // let (_, e3_api_result, stats_result, _, dns_result, egress_result) = service_results;
+    // #[cfg(not(feature = "network_egress"))]
+    // let (_, e3_api_result, stats_result, _) = service_results;
 
-    if let Err(e) = e3_api_result {
-        log::error!("An error occurred within the E3 API server — {e:?}");
-    }
+    // if let Err(e) = e3_api_result {
+    //     log::error!("An error occurred within the E3 API server — {e:?}");
+    // }
 
-    if let Err(e) = stats_result {
-        log::error!("An error occurred within the Stats proxy — {e:?}");
-    }
+    // if let Err(e) = stats_result {
+    //     log::error!("An error occurred within the Stats proxy — {e:?}");
+    // }
 
-    #[cfg(feature = "network_egress")]
-    if let Err(e) = dns_result {
-        log::error!("An error occurred within the dns server — {e:?}");
-    }
+    // #[cfg(feature = "network_egress")]
+    // if let Err(e) = dns_result {
+    //     log::error!("An error occurred within the dns server — {e:?}");
+    // }
 
-    #[cfg(feature = "network_egress")]
-    if let Err(e) = egress_result {
-        log::error!("An error occurred within the egress server — {e:?}");
-    }
+    // #[cfg(feature = "network_egress")]
+    // if let Err(e) = egress_result {
+    //     log::error!("An error occurred within the egress server — {e:?}");
+    // }
 }
 
 #[allow(unused_variables)]
