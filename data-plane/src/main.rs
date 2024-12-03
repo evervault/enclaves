@@ -105,7 +105,12 @@ async fn start(data_plane_port: u16, shutdown_notifier: Sender<Service>) {
     }
 
     // Schedule non-critical stats proxy
-    tokio::spawn(StatsProxy::listen());
+    tokio::spawn(async move {
+        if let Err(e) = StatsProxy::listen().await {
+            log::error!("In-Enclave Stats proxy exited with an error - {e}");
+            return;
+        }
+    });
 
     // Schedule critical services with notify shutdown futures to ensure healthchecks detect any single critical failure.
     tokio::spawn(

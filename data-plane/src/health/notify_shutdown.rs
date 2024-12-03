@@ -21,7 +21,7 @@ impl std::fmt::Display for Service {
             Self::DnsProxy => "dns-proxy",
             Self::EgressProxy => "egress-proxy",
         };
-        f.write_str(&service_label)
+        f.write_str(service_label)
     }
 }
 
