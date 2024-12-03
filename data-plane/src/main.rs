@@ -108,7 +108,6 @@ async fn start(data_plane_port: u16, shutdown_notifier: Sender<Service>) {
     tokio::spawn(async move {
         if let Err(e) = StatsProxy::listen().await {
             log::error!("In-Enclave Stats proxy exited with an error - {e}");
-            return;
         }
     });
 
