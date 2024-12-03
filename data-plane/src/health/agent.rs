@@ -4,12 +4,16 @@ use serde_json::Value;
 use shared::server::health::UserProcessHealth;
 use std::collections::VecDeque;
 use thiserror::Error;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{
+    channel, unbounded_channel, Receiver, Sender, UnboundedReceiver, UnboundedSender,
+};
 use tokio::sync::oneshot::{
     channel as oneshot_channel, Receiver as OneshotReceiver, Sender as OneshotSender,
 };
 
 use crate::{ContextError, EnclaveContext};
+
+use super::notify_shutdown::Service;
 
 enum HealthcheckAgentState {
     Initializing,
@@ -45,6 +49,8 @@ pub struct HealthcheckAgent<C> {
     recv: UnboundedReceiver<HealthcheckStatusRequest>,
     buffer_size_limit: usize,
     proto: String,
+    shutdown_receiver: Receiver<Service>,
+    exited_services: Vec<Service>,
 }
 
 const DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT: usize = 10;
@@ -62,7 +68,11 @@ impl HealthcheckAgent<hyper_rustls::HttpsConnector<HttpConnector>> {
         customer_process_port: u16,
         interval: std::time::Duration,
         healthcheck_path: Option<String>,
-    ) -> (Self, UnboundedSender<HealthcheckStatusRequest>) {
+    ) -> (
+        Self,
+        UnboundedSender<HealthcheckStatusRequest>,
+        Sender<Service>,
+    ) {
         let client = Self::build_tls_client();
         Self::new(
             customer_process_port,
@@ -94,7 +104,11 @@ impl HealthcheckAgent<HttpConnector> {
         customer_process_port: u16,
         interval: std::time::Duration,
         healthcheck_path: Option<String>,
-    ) -> (Self, UnboundedSender<HealthcheckStatusRequest>) {
+    ) -> (
+        Self,
+        UnboundedSender<HealthcheckStatusRequest>,
+        Sender<Service>,
+    ) {
         let client = Client::builder().build_http();
         Self::new(
             customer_process_port,
@@ -113,8 +127,20 @@ impl<C: Connect + Clone + Send + Sync + 'static> HealthcheckAgent<C> {
         healthcheck_path: Option<String>,
         client: hyper::Client<C>,
         proto: String,
-    ) -> (Self, UnboundedSender<HealthcheckStatusRequest>) {
+    ) -> (
+        Self,
+        UnboundedSender<HealthcheckStatusRequest>,
+        Sender<Service>,
+    ) {
         let (sender, recv) = unbounded_channel();
+        let (shutdown_sender, shutdown_receiver) = channel(1);
+
+        let critical_service_vec = if cfg!(feature = "network_egress") {
+            Vec::with_capacity(5)
+        } else {
+            Vec::with_capacity(3)
+        };
+
         let healthcheck_agent = Self {
             customer_process_port,
             healthcheck_path,
@@ -125,8 +151,10 @@ impl<C: Connect + Clone + Send + Sync + 'static> HealthcheckAgent<C> {
             buffer_size_limit: DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT,
             client,
             proto,
+            shutdown_receiver,
+            exited_services: critical_service_vec,
         };
-        (healthcheck_agent, sender)
+        (healthcheck_agent, sender, shutdown_sender)
     }
 
     fn record_result(&mut self, healthcheck_status: UserProcessHealth) {
@@ -157,6 +185,14 @@ impl<C: Connect + Clone + Send + Sync + 'static> HealthcheckAgent<C> {
         Ok(new_state)
     }
 
+    fn serialize_exited_services(&self) -> String {
+        self.exited_services
+            .iter()
+            .map(|service| service.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
     async fn perform_healthcheck(&mut self) {
         let hc_state = match self.state {
             HealthcheckAgentState::Initializing => self.check_user_process_initialized(),
@@ -164,12 +200,24 @@ impl<C: Connect + Clone + Send + Sync + 'static> HealthcheckAgent<C> {
         };
 
         let hc_result = match hc_state {
-            Ok(HealthcheckAgentState::Ready) if self.healthcheck_path.is_some() => {
-                self.probe_user_process(self.healthcheck_path.as_deref().unwrap())
-                    .await
-            }
             Ok(HealthcheckAgentState::Ready) => {
-                UserProcessHealth::Unknown("No healthcheck path provided".to_string())
+                if let Ok(exited_service) = self.shutdown_receiver.try_recv() {
+                    self.exited_services.push(exited_service);
+                    UserProcessHealth::Error(format!(
+                        "Critical in-Enclave services have exited: {}",
+                        self.serialize_exited_services()
+                    ))
+                } else if !self.exited_services.is_empty() {
+                    UserProcessHealth::Error(format!(
+                        "Critical in-Enclave services have exited: {}",
+                        self.serialize_exited_services()
+                    ))
+                } else if self.healthcheck_path.is_some() {
+                    self.probe_user_process(self.healthcheck_path.as_deref().unwrap())
+                        .await
+                } else {
+                    UserProcessHealth::Unknown("No healthcheck path provided".to_string())
+                }
             }
             Ok(HealthcheckAgentState::Initializing) => {
                 UserProcessHealth::Unknown("Enclave is not initialized yet".to_string())
@@ -295,7 +343,7 @@ mod test {
 
     #[test]
     fn validate_response_returned_from_healthy_buffer() {
-        let (mut agent, _sender) =
+        let (mut agent, _sender, _) =
             HealthcheckAgent::build_agent(3000, std::time::Duration::from_secs(1), None);
         for _ in 0..5 {
             agent.buffer.push_back(UserProcessHealth::Response {
@@ -318,7 +366,7 @@ mod test {
 
     #[test]
     fn validate_response_returned_from_buffer_with_unknown() {
-        let (mut agent, _sender) =
+        let (mut agent, _sender, _) =
             HealthcheckAgent::build_agent(3000, std::time::Duration::from_secs(1), None);
         for _ in 0..5 {
             agent.buffer.push_back(UserProcessHealth::Response {
@@ -345,7 +393,7 @@ mod test {
     #[tokio::test]
     async fn validate_uninitialized_user_process_doesnt_return_errors() {
         let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) = HealthcheckAgent::build_agent(3000, duration, None);
+        let (mut agent, _sender, _) = HealthcheckAgent::build_agent(3000, duration, None);
 
         agent.perform_healthcheck().await;
 
@@ -359,7 +407,7 @@ mod test {
     #[tokio::test]
     async fn validate_initialized_agent_with_no_healthcheck_path_returns_unknown() {
         let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender) = HealthcheckAgent::build_agent(3000, duration, None);
+        let (mut agent, _sender, _) = HealthcheckAgent::build_agent(3000, duration, None);
         agent.state = super::HealthcheckAgentState::Ready;
 
         agent.perform_healthcheck().await;
@@ -374,7 +422,7 @@ mod test {
     #[tokio::test]
     async fn validate_initialized_agent_with_healthy_response_returns_response() {
         let client = hyper::Client::builder().build(MockHttpHealthyEmptyEndpoint::default());
-        let (mut agent, _sender) = HealthcheckAgent::new(
+        let (mut agent, _sender, _) = HealthcheckAgent::new(
             3000,
             std::time::Duration::from_secs(1),
             Some("/healthz".into()),
@@ -398,7 +446,7 @@ mod test {
     #[tokio::test]
     async fn validate_initialized_agent_with_healthy_response_returns_response_over_tls() {
         let client = hyper::Client::builder().build(MockHttpsHealthyEmptyEndpoint::default());
-        let (mut agent, _sender) = HealthcheckAgent::new(
+        let (mut agent, _sender, _) = HealthcheckAgent::new(
             3000,
             std::time::Duration::from_secs(1),
             Some("/healthz".into()),
@@ -423,7 +471,7 @@ mod test {
     async fn validate_initialized_agent_with_unhealthy_response_returns_response_with_correct_status(
     ) {
         let client = hyper::Client::builder().build(MockHttpUnhealthyEmptyEndpoint::default());
-        let (mut agent, _sender) = HealthcheckAgent::new(
+        let (mut agent, _sender, _) = HealthcheckAgent::new(
             3000,
             std::time::Duration::from_secs(1),
             Some("/healthcheck".into()),
@@ -448,7 +496,7 @@ mod test {
     async fn validate_initialized_agent_with_unhealthy_response_returns_response_with_correct_status_over_tls(
     ) {
         let client = hyper::Client::builder().build(MockHttpsUnhealthyEmptyEndpoint::default());
-        let (mut agent, _sender) = HealthcheckAgent::new(
+        let (mut agent, _sender, _) = HealthcheckAgent::new(
             3001,
             std::time::Duration::from_secs(1),
             Some("/healthcheck".into()),
@@ -472,7 +520,7 @@ mod test {
     #[tokio::test]
     async fn it_can_parse_json_responses_from_user_process() {
         let client = hyper::Client::builder().build(MockHttpHealthyJsonEndpoint::default());
-        let (mut agent, _sender) = HealthcheckAgent::new(
+        let (mut agent, _sender, _) = HealthcheckAgent::new(
             3000,
             std::time::Duration::from_secs(1),
             Some("/healthcheck".into()),
@@ -496,7 +544,7 @@ mod test {
     #[tokio::test]
     async fn it_can_parse_json_responses_from_user_process_over_tls() {
         let client = hyper::Client::builder().build(MockHttpsHealthyJsonEndpoint::default());
-        let (mut agent, _sender) = HealthcheckAgent::new(
+        let (mut agent, _sender, _) = HealthcheckAgent::new(
             3000,
             std::time::Duration::from_secs(1),
             Some("/healthcheck".into()),
@@ -520,7 +568,7 @@ mod test {
     #[tokio::test]
     async fn it_can_parse_unhealthy_json_responses_from_user_process() {
         let client = hyper::Client::builder().build(MockHttpUnhealthyJsonEndpoint::default());
-        let (mut agent, _sender) = HealthcheckAgent::new(
+        let (mut agent, _sender, _) = HealthcheckAgent::new(
             3000,
             std::time::Duration::from_secs(1),
             Some("/healthcheck".into()),
@@ -544,7 +592,7 @@ mod test {
     #[tokio::test]
     async fn it_can_parse_unhealthy_json_responses_from_user_process_over_tls() {
         let client = hyper::Client::builder().build(MockHttpsUnhealthyJsonEndpoint::default());
-        let (mut agent, _sender) = HealthcheckAgent::new(
+        let (mut agent, _sender, _) = HealthcheckAgent::new(
             3000,
             std::time::Duration::from_secs(1),
             Some("/healthcheck".into()),

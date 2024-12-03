@@ -1,3 +1,4 @@
+use data_plane::health::notify_shutdown::{NotifyShutdown, Service};
 #[cfg(not(feature = "tls_termination"))]
 use shared::server::Listener;
 use shared::server::CID::Enclave;
@@ -10,12 +11,13 @@ use data_plane::dns::egressproxy::EgressProxy;
 use data_plane::dns::enclavedns::EnclaveDnsProxy;
 #[cfg(not(feature = "tls_termination"))]
 use data_plane::env::Environment;
-use data_plane::health::start_health_check_server;
+use data_plane::health::build_health_check_server;
 use data_plane::stats::StatsProxy;
 use data_plane::stats_client::StatsClient;
 use data_plane::time::ClockSync;
 use data_plane::FeatureContext;
 use shared::ENCLAVE_CONNECT_PORT;
+use tokio::sync::mpsc::Sender;
 use tokio::time::Duration;
 
 #[cfg(feature = "enclave")]
@@ -66,20 +68,27 @@ fn main() {
     };
 
     runtime.block_on(async move {
-        let data_plane_fut = start(data_plane_port);
-        let health_check_fut = start_health_check_server(
+        let Ok((health_check_server, shutdown_notifier)) = build_health_check_server(
             ctx.healthcheck_port.unwrap_or(data_plane_port),
             ctx.healthcheck,
             ctx.healthcheck_use_tls.unwrap_or(false),
-        );
+        )
+        .await
+        else {
+            log::error!("Failed to launch in-Enclave healthcheck service, exiting early.");
+            return;
+        };
+
+        let data_plane_fut = start(data_plane_port, shutdown_notifier);
+
         tokio::select! {
           _ = data_plane_fut => {},
-          _ = health_check_fut => {}
+          _ = health_check_server.run() => {}
         };
     });
 }
 
-async fn start(data_plane_port: u16) {
+async fn start(data_plane_port: u16, shutdown_notifier: Sender<Service>) {
     StatsClient::init();
     let context = match FeatureContext::get() {
         Ok(context) => context,
@@ -95,39 +104,32 @@ async fn start(data_plane_port: u16) {
         log::info!("Running data plane with egress enabled");
     }
 
-    // let service_results = tokio::join!(
-    //     start_data_plane(data_plane_port, context.clone()),
-    //     CryptoApi::listen(),
-    //     StatsProxy::listen(),
-    //     ClockSync::run(ENCLAVE_CLOCK_SYNC_INTERVAL),
-    //     #[cfg(feature = "network_egress")]
-    //     EnclaveDnsProxy::bind_server(context.egress.allow_list),
-    //     #[cfg(feature = "network_egress")]
-    //     EgressProxy::listen(),
-    // );
+    // Schedule non-critical stats proxy
+    tokio::spawn(StatsProxy::listen());
 
-    // #[cfg(feature = "network_egress")]
-    // let (_, e3_api_result, stats_result, _, dns_result, egress_result) = service_results;
-    // #[cfg(not(feature = "network_egress"))]
-    // let (_, e3_api_result, stats_result, _) = service_results;
+    // Schedule critical services with notify shutdown futures to ensure healthchecks detect any single critical failure.
+    tokio::spawn(
+        CryptoApi::listen().notify_shutdown(Service::CryptoApi, shutdown_notifier.clone()),
+    );
+    tokio::spawn(
+        ClockSync::run(ENCLAVE_CLOCK_SYNC_INTERVAL)
+            .notify_shutdown(Service::ClockSync, shutdown_notifier.clone()),
+    );
 
-    // if let Err(e) = e3_api_result {
-    //     log::error!("An error occurred within the E3 API server — {e:?}");
-    // }
+    #[cfg(feature = "network_egress")]
+    {
+        tokio::spawn(
+            EnclaveDnsProxy::bind_server(context.egress.allow_list.clone())
+                .notify_shutdown(Service::DnsProxy, shutdown_notifier.clone()),
+        );
+        tokio::spawn(
+            EgressProxy::listen().notify_shutdown(Service::EgressProxy, shutdown_notifier.clone()),
+        );
+    }
 
-    // if let Err(e) = stats_result {
-    //     log::error!("An error occurred within the Stats proxy — {e:?}");
-    // }
-
-    // #[cfg(feature = "network_egress")]
-    // if let Err(e) = dns_result {
-    //     log::error!("An error occurred within the dns server — {e:?}");
-    // }
-
-    // #[cfg(feature = "network_egress")]
-    // if let Err(e) = egress_result {
-    //     log::error!("An error occurred within the egress server — {e:?}");
-    // }
+    start_data_plane(data_plane_port, context)
+        .notify_shutdown(Service::DataPlane, shutdown_notifier.clone())
+        .await;
 }
 
 #[allow(unused_variables)]
