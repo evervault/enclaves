@@ -155,6 +155,10 @@ impl UserProcessHealth {
             }
         }
     }
+
+    pub fn is_error(&self) -> bool {
+        matches!(self, Self::Error(_))
+    }
 }
 
 impl Ord for UserProcessHealth {

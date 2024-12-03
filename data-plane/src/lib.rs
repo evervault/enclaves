@@ -192,6 +192,7 @@ impl FeatureContext {
 #[cfg(test)]
 mod test {
     use super::FeatureContext;
+
     #[cfg(not(feature = "network_egress"))]
     #[test]
     fn test_config_deserialization_without_proxy_protocol() {

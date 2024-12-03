@@ -1121,6 +1121,7 @@ dependencies = [
  "once_cell",
  "openssl",
  "pem",
+ "pin-project",
  "rand",
  "regex",
  "rlimit",
