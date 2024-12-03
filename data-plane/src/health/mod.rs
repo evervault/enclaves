@@ -6,13 +6,13 @@ use agent::UserProcessHealthcheckSender;
 use hyper::header;
 use hyper::{service::service_fn, Body, Response};
 use notify_shutdown::Service;
-use shared::server::health::{DataPlaneDiagnostic, DataPlaneState, UserProcessHealth};
-use shared::server::CID::Enclave;
 use shared::server::get_vsock_server;
+use shared::server::health::{DataPlaneDiagnostic, DataPlaneState, UserProcessHealth};
 #[cfg(not(feature = "enclave"))]
 use shared::server::TcpServer;
 #[cfg(feature = "enclave")]
 use shared::server::VsockServer;
+use shared::server::CID::Enclave;
 use shared::{server::Listener, ENCLAVE_HEALTH_CHECK_PORT};
 use tokio::sync::mpsc::{Sender, UnboundedSender};
 
@@ -53,7 +53,7 @@ pub struct HealthcheckServer {
     #[cfg(feature = "enclave")]
     listener: VsockServer,
     #[cfg(not(feature = "enclave"))]
-    listener: TcpServer
+    listener: TcpServer,
 }
 
 impl HealthcheckServer {
