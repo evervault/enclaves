@@ -13,6 +13,11 @@ use shared::server::TcpServer;
 #[cfg(feature = "enclave")]
 use shared::server::VsockServer;
 use shared::server::CID::Enclave;
+use shared::server::get_vsock_server;
+#[cfg(not(feature = "enclave"))]
+use shared::server::TcpServer;
+#[cfg(feature = "enclave")]
+use shared::server::VsockServer;
 use shared::{server::Listener, ENCLAVE_HEALTH_CHECK_PORT};
 use tokio::sync::mpsc::{Sender, UnboundedSender};
 
