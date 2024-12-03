@@ -612,4 +612,29 @@ mod test {
             }
         );
     }
+
+    #[tokio::test]
+    async fn it_fails_all_healthchecks_if_critical_service_has_exited() {
+        let client = hyper::Client::builder().build(MockHttpHealthyEmptyEndpoint::default());
+        let (mut agent, _sender, shutdown_channel) = HealthcheckAgent::new(
+            3000,
+            std::time::Duration::from_secs(1),
+            Some("/healthcheck".into()),
+            client,
+            "https".into(),
+        );
+        agent.state = super::HealthcheckAgentState::Ready;
+        shutdown_channel.try_send(crate::health::notify_shutdown::Service::DataPlane).unwrap();
+
+        agent.perform_healthcheck().await;
+        
+        let healthcheck_result = agent.buffer.iter().max().unwrap();
+        assert!(healthcheck_result.is_error());
+        // clear agent buffer to remove above error
+        agent.buffer.clear();
+        // perform additional healthcheck to assert the healthcheck fails again
+        agent.perform_healthcheck().await;
+        let next_result = agent.buffer.iter().max().unwrap();
+        assert!(next_result.is_error());
+    }
 }
