@@ -26,7 +26,7 @@ impl std::fmt::Display for Service {
 }
 
 /// The notify shutdown service trait is used to support shutdown notifications of any critical service running within the Enclave.
-/// Any future that is converted into a `NotifyShutdownFuture` will send a message containing the service label to the shutdown channel, 
+/// Any future that is converted into a `NotifyShutdownFuture` will send a message containing the service label to the shutdown channel,
 /// allowing the healthcheck agent to move the Enclave into a draining state.
 ///
 /// Note: all critical services are assumed to run indefinitely. If one exits, it's assumed that the Enclave is entering an unhealthy state.

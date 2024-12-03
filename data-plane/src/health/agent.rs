@@ -624,10 +624,12 @@ mod test {
             "https".into(),
         );
         agent.state = super::HealthcheckAgentState::Ready;
-        shutdown_channel.try_send(crate::health::notify_shutdown::Service::DataPlane).unwrap();
+        shutdown_channel
+            .try_send(crate::health::notify_shutdown::Service::DataPlane)
+            .unwrap();
 
         agent.perform_healthcheck().await;
-        
+
         let healthcheck_result = agent.buffer.iter().max().unwrap();
         assert!(healthcheck_result.is_error());
         // clear agent buffer to remove above error
