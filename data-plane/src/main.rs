@@ -1,8 +1,13 @@
 #[cfg(feature = "network_egress")]
 use data_plane::dns::{egressproxy::EgressProxy, enclavedns::EnclaveDnsProxy};
 use data_plane::{
-    crypto::api::CryptoApi, env::{EnvironmentLoader, init_environment_loader}, health::build_health_check_server,
-    stats::StatsProxy, stats_client::StatsClient, time::ClockSync, FeatureContext,
+    crypto::api::CryptoApi,
+    env::{init_environment_loader, EnvironmentLoader},
+    health::build_health_check_server,
+    stats::StatsProxy,
+    stats_client::StatsClient,
+    time::ClockSync,
+    FeatureContext,
 };
 #[cfg(not(feature = "tls_termination"))]
 use shared::server::Listener;

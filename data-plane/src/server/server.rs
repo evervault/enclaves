@@ -30,8 +30,12 @@ use super::layers::{
     forward::ForwardService,
 };
 
-pub async fn run<L: Listener + Send + Sync>(tcp_server: L, port: u16, context: FeatureContext, env_loader: EnvironmentLoader<NeedCert>)
-where
+pub async fn run<L: Listener + Send + Sync>(
+    tcp_server: L,
+    port: u16,
+    context: FeatureContext,
+    env_loader: EnvironmentLoader<NeedCert>,
+) where
     TlsError: From<<L as Listener>::Error>,
     <L as Listener>::Connection: ProxiedConnection + 'static,
 {
