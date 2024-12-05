@@ -42,10 +42,9 @@ impl EnvLoadingPhaseMarker for NeedEnv {}
 impl NeedEnv {
     async fn decrypt_secrets(
         loader: &EnvironmentLoader<Self>,
-        secrets: &Vec<Secret>,
+        secrets: Vec<Secret>,
     ) -> Result<Vec<Secret>, Error> {
         let (encrypted_env, plaintext_env): (_, Vec<Secret>) = secrets
-            .clone()
             .into_iter()
             .partition(|env| env.secret.starts_with("ev:"));
 
@@ -132,11 +131,11 @@ mod tls_enabled {
     impl EnvironmentLoader<NeedEnv> {
         /// Load the environment variables from the provisioner and transition to the next appropriate loading state - `NeedCert`
         pub async fn load_env_vars(self) -> Result<EnvironmentLoader<NeedCert>, Error> {
-            let secrets_response = NeedEnv::get_env(&self).await?;
+            let GetSecretsResponseDataPlane { secrets, context } = NeedEnv::get_env(&self).await?;
 
-            EnclaveContext::set(secrets_response.context.clone().into());
+            EnclaveContext::set(context.into());
 
-            let customer_env = NeedEnv::decrypt_secrets(&self, &secrets_response.secrets).await?;
+            let customer_env = NeedEnv::decrypt_secrets(&self, secrets).await?;
 
             NeedEnv::write_env_file(customer_env)?;
 
@@ -205,11 +204,11 @@ mod tls_disabled {
     impl EnvironmentLoader<NeedEnv> {
         /// Load the environment variables from the provisioner and transition to the next appropriate loading state - `Finalize`
         pub async fn load_env_vars(self) -> Result<EnvironmentLoader<Finalize>, Error> {
-            let secrets_response = NeedEnv::get_env(&self).await?;
+            let GetSecretsResponseDataPlane { secrets, context } = NeedEnv::get_env(&self).await?;
 
-            EnclaveContext::set(secrets_response.context.clone().into());
+            EnclaveContext::set(context.into());
 
-            let customer_env = NeedEnv::decrypt_secrets(&self, &secrets_response.secrets).await?;
+            let customer_env = NeedEnv::decrypt_secrets(&self, secrets).await?;
 
             NeedEnv::write_env_file(customer_env)?;
 
