@@ -622,7 +622,7 @@ mod test {
         );
         agent.state = super::HealthcheckAgentState::Ready;
         shutdown_channel
-            .try_send(crate::health::notify_shutdown::Service::DataPlane)
+            .try_send(shared::notify_shutdown::Service::DataPlane)
             .unwrap();
 
         agent.perform_healthcheck().await;
