@@ -1,7 +1,7 @@
 use hyper::client::connect::Connect;
 use hyper::{client::HttpConnector, header, Body, Client, Method, Request};
 use serde_json::Value;
-use shared::server::health::UserProcessHealth;
+use shared::{server::health::UserProcessHealth, notify_shutdown::Service};
 use std::collections::VecDeque;
 use thiserror::Error;
 use tokio::sync::mpsc::{
@@ -10,10 +10,7 @@ use tokio::sync::mpsc::{
 use tokio::sync::oneshot::{
     channel as oneshot_channel, Receiver as OneshotReceiver, Sender as OneshotSender,
 };
-
 use crate::{ContextError, EnclaveContext};
-
-use super::notify_shutdown::Service;
 
 enum HealthcheckAgentState {
     Initializing,

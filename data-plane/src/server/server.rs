@@ -4,6 +4,7 @@ use super::http::{request_to_bytes, response_to_bytes};
 use super::tls::TlsServerBuilder;
 
 use crate::e3client::E3Client;
+use crate::env::client::{EnvironmentLoader, NeedCert};
 use crate::server::http::{build_internal_error_response, parse};
 use crate::{EnclaveContext, FeatureContext};
 
@@ -29,14 +30,14 @@ use super::layers::{
     forward::ForwardService,
 };
 
-pub async fn run<L: Listener + Send + Sync>(tcp_server: L, port: u16, context: FeatureContext)
+pub async fn run<L: Listener + Send + Sync>(tcp_server: L, port: u16, context: FeatureContext, env_loader: EnvironmentLoader<NeedCert>)
 where
     TlsError: From<<L as Listener>::Error>,
     <L as Listener>::Connection: ProxiedConnection + 'static,
 {
     let mut server = TlsServerBuilder::new()
         .with_server(tcp_server)
-        .with_attestable_cert()
+        .with_attestable_cert(env_loader)
         .await
         .expect("Failed to create tls server");
     let e3_client = Arc::new(E3Client::new());

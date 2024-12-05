@@ -1,18 +1,17 @@
-#[cfg(not(feature = "tls_termination"))]
 use crate::cert_provisioner_client::CertProvisionerClient;
-#[cfg(not(feature = "tls_termination"))]
 use crate::config_client::ConfigClient;
 use crate::{base_tls_client::ClientError, ContextError};
 use hyper::header::InvalidHeaderValue;
 use serde_json::json;
 use shared::server::config_server::requests::Secret;
-#[cfg(not(feature = "tls_termination"))]
 use std::future::Future;
 use std::{
     fs::{File, OpenOptions},
     io::Write,
 };
 use thiserror::Error;
+
+pub mod client;
 
 use crate::e3client::{CryptoRequest, CryptoResponse, E3Api, E3Client};
 
@@ -36,15 +35,12 @@ pub enum EnvError {
 
 #[derive(Clone)]
 pub struct Environment {
-    #[cfg(not(feature = "tls_termination"))]
     pub cert_provisioner_client: CertProvisionerClient,
-    #[cfg(not(feature = "tls_termination"))]
     pub config_client: ConfigClient,
     pub e3_client: E3Client,
 }
 
 impl Environment {
-    #[cfg(not(feature = "tls_termination"))]
     pub fn new() -> Environment {
         let cert_provisioner_client = CertProvisionerClient::new();
         let e3_client = E3Client::new();
@@ -111,8 +107,7 @@ impl Environment {
         }
     }
 
-    #[cfg(not(feature = "tls_termination"))]
-    pub async fn init_without_certs(self) -> crate::error::Result<()> {
+    pub async fn initialize_environment_variables(self) -> crate::error::Result<()> {
         use crate::EnclaveContext;
 
         let half_min = 1_000 * 30;
@@ -137,9 +132,6 @@ impl Environment {
         EnclaveContext::set(secrets_response.context.clone().into());
 
         self.init(secrets_response.clone().secrets).await?;
-
-        //Write vars to indicate enclave is initialised
-        let _ = Self::write_startup_complete_env_vars();
 
         Ok(())
     }
