@@ -4,7 +4,7 @@ use super::http::{request_to_bytes, response_to_bytes};
 use super::tls::TlsServerBuilder;
 
 use crate::e3client::E3Client;
-use crate::env::client::{EnvironmentLoader, NeedCert};
+use crate::env::{EnvironmentLoader, NeedCert};
 use crate::server::http::{build_internal_error_response, parse};
 use crate::{EnclaveContext, FeatureContext};
 

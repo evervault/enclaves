@@ -5,14 +5,9 @@ use once_cell::sync::OnceCell;
 #[cfg(feature = "enclave")]
 use tokio_rustls::rustls::sign::CertifiedKey;
 
-use openssl::pkey::PKey;
-use openssl::pkey::Private;
-use openssl::x509::X509;
 use shared::server::proxy_protocol::ProxiedConnection;
 use shared::server::Listener;
 use std::sync::Arc;
-use std::thread;
-use std::time::Duration;
 use tokio_rustls::rustls::server::WantsServerCert;
 use tokio_rustls::rustls::ConfigBuilder;
 use tokio_rustls::rustls::ServerConfig;
@@ -24,8 +19,7 @@ use tokio_rustls::TlsAcceptor;
 #[cfg(feature = "enclave")]
 use crate::acme;
 
-use crate::env::client::EnvironmentLoader;
-use crate::env::client::NeedCert;
+use crate::env::{EnvironmentLoader, NeedCert};
 use crate::server::error::ServerResult;
 use crate::server::error::TlsError;
 use crate::server::tls::cert_resolver::AttestableCertResolver;
