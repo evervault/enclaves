@@ -46,7 +46,7 @@ impl Environment {
     #[cfg(not(feature = "tls_termination"))]
     pub fn new() -> Environment {
         let cert_provisioner_client = CertProvisionerClient::new();
-        let e3_client = E3Client::new();
+        let e3_client = E3Client::new(None);
         let config_client = ConfigClient::new();
         Environment {
             cert_provisioner_client,

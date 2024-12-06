@@ -3,9 +3,10 @@ use hyper::header::HeaderValue;
 use hyper::{Body, Response};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use serde_json::value::Value;
+use shared::server::diagnostic::DiagnosticSender;
 use std::ops::Deref;
-use tokio::sync::mpsc;
 use tokio_rustls::rustls::ServerName;
 use tokio_rustls::TlsConnector;
 
@@ -86,12 +87,16 @@ pub trait E3Api {
 pub struct E3Client {
     base_client: BaseClient,
     token_client: TokenClient,
-    hc_sender: Option<DiagnosticSender>,
+    diag_sender: Option<DiagnosticSender>,
 }
 
-impl Recordable for E3Client {
-    fn recorder(&self) -> Option<DiagnosticSender> {
-        self.hc_sender.clone()
+impl Diagnosable for E3Client {
+    fn sender(&self) -> Option<DiagnosticSender> {
+        self.diag_sender.clone()
+    }
+
+    fn label() -> String {
+        "E3Client".to_string()
     }
 }
 
@@ -99,11 +104,11 @@ use crate::base_tls_client::tls_client_config::get_tls_client_config;
 use crate::base_tls_client::{AuthType, BaseClient, ClientError, OpenServerCertVerifier};
 use crate::configuration;
 use crate::crypto::token::TokenClient;
-use crate::health::agent::{Diagnostic, DiagnosticSender, Record, RecordError, Recordable};
+use crate::health::diagnostic::{Diagnosable, Diagnose};
 use crate::stats_client::StatsClient;
 
 impl E3Client {
-    pub fn new(hc_sender: Option<DiagnosticSender>) -> Self {
+    pub fn new(diag_sender: Option<DiagnosticSender>) -> Self {
         let verifier = std::sync::Arc::new(OpenServerCertVerifier);
         let tls_connector =
             TlsConnector::from(std::sync::Arc::new(get_tls_client_config(verifier)));
@@ -114,7 +119,7 @@ impl E3Client {
         Self {
             base_client: BaseClient::new(tls_connector, server_name, shared::ENCLAVE_CRYPTO_PORT),
             token_client: TokenClient::new(),
-            hc_sender,
+            diag_sender,
         }
     }
 
@@ -156,9 +161,9 @@ impl E3Api for E3Client {
             )
             .await
             .inspect_err(|e| {
-                self.diagnostic(Diagnostic {
-                    label: "non".to_string(),
-                });
+                self.diagnostic(json!({
+                    "decryption_err": e.to_string(),
+                }))
             })?;
 
         StatsClient::record_decrypt();
@@ -192,7 +197,13 @@ impl E3Api for E3Client {
                 payload.try_into_body()?,
                 request_headers,
             )
-            .await?;
+            .await
+            .inspect_err(|e| {
+                self.diagnostic(json!({
+                    "encryption_err": e.to_string(),
+                }))
+            })?;
+
         StatsClient::record_encrypt();
         self.parse_response(response).await
     }

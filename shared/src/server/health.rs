@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use super::diagnostic::Diagnostic;
+
 /// This is for representing healthcheck verions across the control-plane <-> data-plane http
 /// boundary. It's not tied to v0/v1 enclaves release. There are many v1 enclaves that will
 /// report v0 healthchecks until they are updated.
@@ -119,6 +121,7 @@ pub enum DataPlaneState {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DataPlaneDiagnostic {
     pub user_process: UserProcessHealth,
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 impl DataPlaneDiagnostic {
