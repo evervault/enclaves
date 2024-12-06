@@ -159,8 +159,10 @@ async fn start_data_plane(
     log::debug!("Data plane TCP server created");
 
     log::info!("TLS Termination enabled in dataplane. Running tls server.");
-    if let Err(e) = data_plane::server::server::run(server, data_plane_port, context, env_loader).await {
-      log::error!("Failed to run data plane - {e}");
+    if let Err(e) =
+        data_plane::server::server::run(server, data_plane_port, context, env_loader).await
+    {
+        log::error!("Failed to run data plane - {e}");
     }
 }
 
