@@ -14,8 +14,6 @@ use tokio_rustls::rustls::ServerConfig;
 use tokio_rustls::server::TlsStream;
 use tokio_rustls::TlsAcceptor;
 
-// use super::inter_ca_retreiver;
-
 #[cfg(feature = "enclave")]
 use crate::acme;
 
@@ -81,7 +79,10 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
     ) -> ServerResult<TlsServer<S>> {
         log::info!("Creating TLSServer with attestable cert");
 
-        let (env_loader, inter_ca_cert, inter_ca_key_pair) = env_loader.load_cert().await.unwrap();
+        let (env_loader, inter_ca_cert, inter_ca_key_pair) = env_loader
+            .load_cert()
+            .await
+            .map_err(|err| TlsError::CertProvisionerError(err.to_string()))?;
 
         #[cfg(feature = "enclave")]
         let _: Option<CertifiedKey> = enclave_trusted_cert().await;

@@ -35,15 +35,15 @@ pub async fn run<L: Listener + Send + Sync>(
     port: u16,
     context: FeatureContext,
     env_loader: EnvironmentLoader<NeedCert>,
-) where
+) -> Result<(), TlsError>
+where
     TlsError: From<<L as Listener>::Error>,
     <L as Listener>::Connection: ProxiedConnection + 'static,
 {
     let mut server = TlsServerBuilder::new()
         .with_server(tcp_server)
         .with_attestable_cert(env_loader)
-        .await
-        .expect("Failed to create tls server");
+        .await?;
     let e3_client = Arc::new(E3Client::new());
 
     let (tx, rx): (
@@ -64,7 +64,7 @@ pub async fn run<L: Listener + Send + Sync>(
         Ok(context) => Arc::new(context),
         Err(e) => {
             log::error!("Failed to read enclave context in data plane server - {e}");
-            return;
+            return Err(e.into());
         }
     };
     let service_builder = tower::ServiceBuilder::new();
@@ -154,6 +154,8 @@ pub async fn run<L: Listener + Send + Sync>(
             }
         });
     }
+    #[allow(unreachable_code)]
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
