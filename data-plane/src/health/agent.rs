@@ -1,7 +1,8 @@
+use crate::{ContextError, EnclaveContext};
 use hyper::client::connect::Connect;
 use hyper::{client::HttpConnector, header, Body, Client, Method, Request};
 use serde_json::Value;
-use shared::server::health::UserProcessHealth;
+use shared::{notify_shutdown::Service, server::health::UserProcessHealth};
 use std::collections::VecDeque;
 use thiserror::Error;
 use tokio::sync::mpsc::{
@@ -10,10 +11,6 @@ use tokio::sync::mpsc::{
 use tokio::sync::oneshot::{
     channel as oneshot_channel, Receiver as OneshotReceiver, Sender as OneshotSender,
 };
-
-use crate::{ContextError, EnclaveContext};
-
-use super::notify_shutdown::Service;
 
 enum HealthcheckAgentState {
     Initializing,
@@ -625,7 +622,7 @@ mod test {
         );
         agent.state = super::HealthcheckAgentState::Ready;
         shutdown_channel
-            .try_send(crate::health::notify_shutdown::Service::DataPlane)
+            .try_send(shared::notify_shutdown::Service::DataPlane)
             .unwrap();
 
         agent.perform_healthcheck().await;

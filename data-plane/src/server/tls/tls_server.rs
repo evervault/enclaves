@@ -5,29 +5,22 @@ use once_cell::sync::OnceCell;
 #[cfg(feature = "enclave")]
 use tokio_rustls::rustls::sign::CertifiedKey;
 
-use openssl::pkey::PKey;
-use openssl::pkey::Private;
-use openssl::x509::X509;
 use shared::server::proxy_protocol::ProxiedConnection;
 use shared::server::Listener;
 use std::sync::Arc;
-use std::thread;
-use std::time::Duration;
 use tokio_rustls::rustls::server::WantsServerCert;
 use tokio_rustls::rustls::ConfigBuilder;
 use tokio_rustls::rustls::ServerConfig;
 use tokio_rustls::server::TlsStream;
 use tokio_rustls::TlsAcceptor;
 
-use super::inter_ca_retreiver;
-
 #[cfg(feature = "enclave")]
 use crate::acme;
 
-use crate::env::Environment;
+use crate::env::{EnvironmentLoader, NeedCert};
 use crate::server::error::ServerResult;
 use crate::server::error::TlsError;
-use rand::Rng;
+use crate::server::tls::cert_resolver::AttestableCertResolver;
 
 pub struct TlsServer<S: Listener + Send + Sync> {
     tls_acceptor: TlsAcceptor,
@@ -80,49 +73,29 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
             .with_no_client_auth()
     }
 
-    pub async fn with_attestable_cert(self) -> ServerResult<TlsServer<S>> {
+    pub async fn with_attestable_cert(
+        self,
+        env_loader: EnvironmentLoader<NeedCert>,
+    ) -> ServerResult<TlsServer<S>> {
         log::info!("Creating TLSServer with attestable cert");
-        let (ca_cert, ca_private_key) = Self::get_ca_with_retry().await;
-        log::debug!("Received intermediate CA from cert provisioner. Using it with TLS Server.");
+
+        let (env_loader, inter_ca_cert, inter_ca_key_pair) = env_loader
+            .load_cert()
+            .await
+            .map_err(|err| TlsError::CertProvisionerError(err.to_string()))?;
 
         #[cfg(feature = "enclave")]
         let _: Option<CertifiedKey> = enclave_trusted_cert().await;
 
-        //Once intermediate cert and trusted cert retrieved, write cage initialised vars
-        Environment::write_startup_complete_env_vars()?;
+        // Once intermediate cert and trusted cert retrieved, write cage initialised vars
+        env_loader.finalize_env().unwrap();
 
-        let attestable_cert_resolver =
-            super::cert_resolver::AttestableCertResolver::new(ca_cert, ca_private_key)?;
+        let inter_ca_resolver = AttestableCertResolver::new(inter_ca_cert, inter_ca_key_pair)?;
         let mut tls_config =
-            Self::get_base_config().with_cert_resolver(Arc::new(attestable_cert_resolver));
+            Self::get_base_config().with_cert_resolver(Arc::new(inter_ca_resolver));
         tls_config.alpn_protocols.push(b"http/1.1".to_vec());
         tls_config.alpn_protocols.push(b"h2".to_vec());
         Ok(TlsServer::new(tls_config, self.tcp_server))
-    }
-
-    async fn get_ca_with_retry() -> (X509, PKey<Private>) {
-        let inter_ca_retriever = inter_ca_retreiver::InterCaRetreiver::new();
-        let mut attempts = 0;
-        loop {
-            match inter_ca_retriever.get_intermediate_ca().await {
-                Err(e) if attempts < 7 => {
-                    let mut rng = rand::thread_rng();
-                    let exp_duration =
-                        Duration::from_millis(((2 ^ attempts) * 100) + rng.gen_range(50..150));
-                    thread::sleep(exp_duration);
-                    log::error!(
-                        "Error from provisioner sleeping for {} ms, error: {e}",
-                        exp_duration.as_millis()
-                    );
-                    attempts += 1;
-                }
-                Err(e) => {
-                    log::error!("Error from provisioner sleeping for 20 seconds: {e}");
-                    thread::sleep(Duration::from_secs(20));
-                }
-                Ok(ca) => break ca,
-            }
-        }
     }
 }
 

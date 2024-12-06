@@ -23,6 +23,7 @@ pub const PARENT_IP: &str = "172.20.0.8";
 
 pub mod acme;
 pub mod logging;
+pub mod notify_shutdown;
 pub mod rpc;
 pub mod server;
 pub mod stats;

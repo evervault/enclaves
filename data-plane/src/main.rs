@@ -1,22 +1,22 @@
-use data_plane::health::notify_shutdown::{NotifyShutdown, Service};
+#[cfg(feature = "network_egress")]
+use data_plane::dns::{egressproxy::EgressProxy, enclavedns::EnclaveDnsProxy};
+use data_plane::{
+    crypto::api::CryptoApi,
+    env::{init_environment_loader, EnvironmentLoader},
+    health::build_health_check_server,
+    stats::StatsProxy,
+    stats_client::StatsClient,
+    time::ClockSync,
+    FeatureContext,
+};
 #[cfg(not(feature = "tls_termination"))]
 use shared::server::Listener;
-use shared::server::CID::Enclave;
-use shared::{print_version, server::get_vsock_server_with_proxy_protocol};
-
-use data_plane::crypto::api::CryptoApi;
-#[cfg(feature = "network_egress")]
-use data_plane::dns::egressproxy::EgressProxy;
-#[cfg(feature = "network_egress")]
-use data_plane::dns::enclavedns::EnclaveDnsProxy;
-#[cfg(not(feature = "tls_termination"))]
-use data_plane::env::Environment;
-use data_plane::health::build_health_check_server;
-use data_plane::stats::StatsProxy;
-use data_plane::stats_client::StatsClient;
-use data_plane::time::ClockSync;
-use data_plane::FeatureContext;
-use shared::ENCLAVE_CONNECT_PORT;
+use shared::{
+    notify_shutdown::{NotifyShutdown, Service},
+    print_version,
+    server::{get_vsock_server_with_proxy_protocol, CID::Enclave},
+    ENCLAVE_CONNECT_PORT,
+};
 use tokio::sync::mpsc::Sender;
 use tokio::time::Duration;
 
@@ -79,10 +79,8 @@ fn main() {
             return;
         };
 
-        let data_plane_fut = start(data_plane_port, shutdown_notifier);
-
         tokio::select! {
-          _ = data_plane_fut => {},
+          _ = start(data_plane_port, shutdown_notifier) => {},
           _ = health_check_server.run() => {}
         };
     });
@@ -103,6 +101,15 @@ async fn start(data_plane_port: u16, shutdown_notifier: Sender<Service>) {
     } else {
         log::info!("Running data plane with egress enabled");
     }
+
+    let env_loader = init_environment_loader();
+    let env_loader = match env_loader.load_env_vars().await {
+        Ok(env_loader) => env_loader,
+        Err(e) => {
+            log::error!("An error occurred initializing the enclave environment - {e:?}");
+            return;
+        }
+    };
 
     // Schedule non-critical stats proxy
     tokio::spawn(async move {
@@ -131,13 +138,19 @@ async fn start(data_plane_port: u16, shutdown_notifier: Sender<Service>) {
         );
     }
 
-    start_data_plane(data_plane_port, context)
+    start_data_plane(data_plane_port, context, env_loader)
         .notify_shutdown(Service::DataPlane, shutdown_notifier.clone())
         .await;
 }
 
-#[allow(unused_variables)]
-async fn start_data_plane(data_plane_port: u16, context: FeatureContext) {
+#[cfg(feature = "tls_termination")]
+use data_plane::env::NeedCert;
+#[cfg(feature = "tls_termination")]
+async fn start_data_plane(
+    data_plane_port: u16,
+    context: FeatureContext,
+    env_loader: EnvironmentLoader<NeedCert>,
+) {
     log::info!("Data plane starting up. Forwarding traffic to {data_plane_port}");
     let server = match get_vsock_server_with_proxy_protocol(ENCLAVE_CONNECT_PORT, Enclave).await {
         Ok(server) => server,
@@ -145,42 +158,39 @@ async fn start_data_plane(data_plane_port: u16, context: FeatureContext) {
     };
     log::debug!("Data plane TCP server created");
 
-    #[cfg(feature = "tls_termination")]
+    log::info!("TLS Termination enabled in dataplane. Running tls server.");
+    if let Err(e) =
+        data_plane::server::server::run(server, data_plane_port, context, env_loader).await
     {
-        log::info!("TLS Termination enabled in dataplane. Running tls server.");
-        data_plane::server::server::run(server, data_plane_port, context).await;
+        log::error!("Failed to run data plane - {e}");
     }
-    #[cfg(not(feature = "tls_termination"))]
-    run_tcp_passthrough(server, data_plane_port).await;
 }
 
 #[cfg(not(feature = "tls_termination"))]
-use shared::server::proxy_protocol::ProxiedConnection;
+use data_plane::env::Finalize;
 #[cfg(not(feature = "tls_termination"))]
-async fn run_tcp_passthrough<L: Listener>(mut server: L, port: u16)
-where
-    <L as Listener>::Connection: ProxiedConnection + 'static,
-{
-    use shared::utils::pipe_streams;
-    use tokio::io::AsyncWriteExt;
-    log::info!("Piping TCP streams directly to user process");
-    let should_forward_proxy_protocol = match FeatureContext::get() {
-        Ok(context) => context.forward_proxy_protocol,
-        Err(e) => {
-            log::error!("Failed to access context in TCP Passthrough - {e}");
-            return;
-        }
+use shared::{server::proxy_protocol::ProxiedConnection, utils::pipe_streams};
+#[cfg(not(feature = "tls_termination"))]
+use tokio::io::AsyncWriteExt;
+#[cfg(not(feature = "tls_termination"))]
+async fn start_data_plane(
+    data_plane_port: u16,
+    context: FeatureContext,
+    env_loader: EnvironmentLoader<Finalize>,
+) {
+    log::info!("Data plane starting up. Forwarding traffic to {data_plane_port}");
+    let mut server = match get_vsock_server_with_proxy_protocol(ENCLAVE_CONNECT_PORT, Enclave).await
+    {
+        Ok(server) => server,
+        Err(error) => return log::error!("Error creating server: {error}"),
     };
-
-    let env_result = Environment::new().init_without_certs().await;
-    if let Err(e) = env_result {
-        log::error!(
-            "An error occurred initializing the enclave environment — {:?}",
-            e
-        );
-        // If the environment fails to initialize, we should exit.
+    log::debug!("Data plane TCP server created");
+    if let Err(e) = env_loader.finalize_env() {
+        log::error!("Errored while finalizing environment - {e:?}");
         return;
     }
+
+    log::info!("Piping TCP streams directly to user process");
 
     loop {
         let incoming_conn = match server.accept().await {
@@ -195,19 +205,19 @@ where
         };
 
         tokio::spawn(async move {
-            let mut customer_stream = match tokio::net::TcpStream::connect(("0.0.0.0", port)).await
-            {
-                Ok(customer_stream) => customer_stream,
-                Err(e) => {
-                    log::error!(
-                        "An error occurred while connecting to the customer process — {}",
-                        e
-                    );
-                    return;
-                }
-            };
+            let mut customer_stream =
+                match tokio::net::TcpStream::connect(("0.0.0.0", data_plane_port)).await {
+                    Ok(customer_stream) => customer_stream,
+                    Err(e) => {
+                        log::error!(
+                            "An error occurred while connecting to the customer process — {}",
+                            e
+                        );
+                        return;
+                    }
+                };
 
-            if incoming_conn.has_proxy_protocol() && should_forward_proxy_protocol {
+            if incoming_conn.has_proxy_protocol() && context.forward_proxy_protocol {
                 // flush proxy protocol bytes to customer process
                 let proxy_protocol = incoming_conn.proxy_protocol().unwrap();
                 if let Err(e) = customer_stream.write_all(proxy_protocol.as_bytes()).await {

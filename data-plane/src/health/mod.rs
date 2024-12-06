@@ -1,11 +1,10 @@
 mod agent;
-pub mod notify_shutdown;
 
 use agent::UserProcessHealthcheckSender;
 
 use hyper::header;
 use hyper::{service::service_fn, Body, Response};
-use notify_shutdown::Service;
+use shared::notify_shutdown::Service;
 use shared::server::get_vsock_server;
 use shared::server::health::{DataPlaneDiagnostic, DataPlaneState, UserProcessHealth};
 #[cfg(not(feature = "enclave"))]
