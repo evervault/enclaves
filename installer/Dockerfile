@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 alpine
+FROM --platform=linux/amd64 alpine:3.20.3
 
 RUN mkdir -p /packages
 RUN apk update ; apk add xz make gcc build-base bash linux-headers curl pkgconfig bison flex
