@@ -2,11 +2,11 @@ use hyper::{self, Body};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_json::{self};
+use shared::server::diagnostic::DiagnosticSender;
 use shared::server::error::ServerResult;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::mpsc;
 
 use hyper::{
     service::{make_service_fn, service_fn},
@@ -16,13 +16,11 @@ use hyper::{
 use crate::base_tls_client::ClientError;
 use crate::e3client::{CryptoRequest, CryptoResponse, E3Api, E3Client};
 use crate::error::Error;
-use crate::health::agent::{Diagnostic, DiagnosticSender};
 use crate::ContextError;
 
 #[cfg(feature = "enclave")]
 use super::attest;
 
-#[derive(Clone)]
 pub struct CryptoApi {
     e3_client: E3Client,
 }
@@ -70,23 +68,23 @@ fn build_response(status: u16, body: String) -> hyper::Response<hyper::Body> {
 }
 
 impl CryptoApi {
-    pub fn new(hc_sender: DiagnosticSender) -> Self {
+    pub fn new(diag_sender: DiagnosticSender) -> Self {
         Self {
-            e3_client: E3Client::new(Some(hc_sender)),
+            e3_client: E3Client::new(Some(diag_sender)),
         }
     }
 
-    pub async fn listen(hc_sender: DiagnosticSender) -> ServerResult<()> {
+    pub async fn listen(diag_sender: DiagnosticSender) -> ServerResult<()> {
         log::info!("Crypto API started");
 
         let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9999);
 
         let service = make_service_fn(move |_| {
-            let hc_sender = Arc::clone(&hc_sender);
+            let diag_sender = Arc::clone(&diag_sender);
 
             async move {
                 Ok::<_, hyper::Error>(service_fn(move |req| {
-                    Self::api(CryptoApi::new(Arc::clone(&hc_sender)), req)
+                    Self::api(CryptoApi::new(Arc::clone(&diag_sender)), req)
                 }))
             }
         });

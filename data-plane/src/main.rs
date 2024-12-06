@@ -1,11 +1,16 @@
+<<<<<<< HEAD
 use data_plane::health::notify_shutdown::{NotifyShutdown, Service};
 use std::sync::{Arc, Mutex};
 
 use data_plane::health::agent::{Diagnostic, DiagnosticSender};
+=======
+use shared::server::diagnostic::{Diagnostic, DiagnosticSender};
+>>>>>>> 6374d1b (squash)
 #[cfg(not(feature = "tls_termination"))]
 use shared::server::Listener;
 use shared::server::CID::Enclave;
 use shared::{print_version, server::get_vsock_server_with_proxy_protocol};
+use std::sync::Arc;
 
 use data_plane::crypto::api::CryptoApi;
 #[cfg(feature = "network_egress")]
@@ -71,8 +76,8 @@ fn main() {
         }
     };
 
-    let (hc_sender, hc_receiver) = mpsc::unbounded_channel::<Diagnostic>();
-    let hc_sender = Arc::new(Mutex::new(hc_sender));
+    let (diag_sender, diag_recv) = mpsc::unbounded_channel::<Diagnostic>();
+    let diag_sender = Arc::new(diag_sender);
 
     runtime.block_on(async move {
         let Ok((health_check_server, shutdown_notifier)) = build_health_check_server(
@@ -97,13 +102,13 @@ fn main() {
 
 async fn start(data_plane_port: u16, shutdown_notifier: Sender<Service>) {
         tokio::join!(
-            start(data_plane_port, hc_sender),
-            start_health_check_server(data_plane_port, ctx.healthcheck)
+            start(data_plane_port, diag_sender),
+            start_health_check_server(data_plane_port, ctx.healthcheck, diag_recv),
         );
 }
 
 #[cfg(not(feature = "network_egress"))]
-async fn start(data_plane_port: u16, hc_sender: DiagnosticSender) {
+async fn start(data_plane_port: u16, diag_sender: DiagnosticSender) {
     use data_plane::{crypto::api::CryptoApi, stats::StatsProxy};
 
     StatsClient::init();
@@ -119,7 +124,7 @@ async fn start(data_plane_port: u16, hc_sender: DiagnosticSender) {
     log::info!("Running data plane with egress disabled");
     let (_, e3_api_result, stats_result, _) = tokio::join!(
         start_data_plane(data_plane_port, context),
-        CryptoApi::listen(hc_sender),
+        CryptoApi::listen(diag_sender),
         StatsProxy::listen(),
         ClockSync::run(ENCLAVE_CLOCK_SYNC_INTERVAL)
     );
@@ -133,10 +138,7 @@ async fn start(data_plane_port: u16, hc_sender: DiagnosticSender) {
     }
 }
 
-#[cfg(feature = "network_egress")]
-async fn start(data_plane_port: u16) {
-    use data_plane::{crypto::api::CryptoApi, stats::StatsProxy};
-
+async fn start(data_plane_port: u16, shutdown_notifier: Sender<Service>) {
     StatsClient::init();
     let context = match FeatureContext::get() {
         Ok(context) => context,
