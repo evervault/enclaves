@@ -1,9 +1,11 @@
 use control_plane::clients::{cert_provisioner, mtls_config};
 use control_plane::dns::{ExternalAsyncDnsResolver, InternalAsyncDnsResolver};
+use control_plane::orchestration::Orchestration;
 use control_plane::stats_client::StatsClient;
 use control_plane::stats_proxy::StatsProxy;
 use control_plane::{config_server, tls_proxy};
 use shared::{print_version, utils::pipe_streams, ENCLAVE_CONNECT_PORT};
+use tls_parser::nom::Or;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::process::Command;
 use storage_client_interface::s3;
@@ -251,11 +253,7 @@ fn listen_for_shutdown_signal() {
                 // Wait for 55 seconds before terminating enclave - ECS waits 55 seconds to kill the container
                 sleep(Duration::from_millis(55000)).await;
 
-                let output = Command::new("sh")
-                    .arg("-c")
-                    .arg("nitro-cli terminate-enclave --all")
-                    .output()
-                    .expect("failed to terminate enclave");
+                let output = Orchestration::shutdown_all_enclaves().expect("failed to terminate enclave");
 
                 log::info!(
                     "Terminated enclave: {}",

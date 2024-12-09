@@ -35,12 +35,36 @@ pub fn get_aws_profile() -> String {
     std::env::var("AWS_PROFILE").unwrap_or_else(|_| "ev-local-customers".to_string())
 }
 
+
 pub fn get_aws_region() -> aws_types::region::Region {
     let region = std::env::var("AWS_REGION")
         .ok()
         .unwrap_or_else(|| "us-east-1".to_string());
     aws_types::region::Region::new(region)
 }
+
+#[derive(Clone)]
+pub struct EnclaveRunConfig {
+    pub num_cpus: String,
+    pub ram_size_mib: String,
+    pub debug_mode: String,
+}
+
+impl EnclaveRunConfig {
+    pub fn new(
+        num_cpus: String,
+        ram_size_mib: String,
+        debug_mode: String,
+    ) -> EnclaveRunConfig {
+        EnclaveRunConfig {
+            num_cpus,
+            ram_size_mib,
+            debug_mode,
+        }
+    }
+}
+
+
 #[derive(Clone)]
 pub struct EnclaveContext {
     pub uuid: String,
@@ -112,6 +136,13 @@ pub fn get_app_uuid() -> String {
 
 pub fn get_team_uuid() -> String {
     std::env::var("EV_TEAM_UUID").expect("EV_TEAM_UUID is not set in env")
+}
+
+pub fn get_enclave_run_config() -> EnclaveRunConfig {
+    let num_cpus = std::env::var("ENCLAVE_NUM_CPUS").unwrap_or_else(|_| "2".to_string());
+    let ram_size_mib = std::env::var("ENCLAVE_RAM_SIZE_MIB").unwrap_or_else(|_| "512".to_string());
+    let debug_mode = std::env::var("ENCLAVE_DEBUG_MODE").unwrap_or_else(|_| "false".to_string());
+    EnclaveRunConfig::new(num_cpus, ram_size_mib, debug_mode)
 }
 
 pub fn get_cert_provisoner_host() -> String {
