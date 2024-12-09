@@ -75,7 +75,7 @@ async fn main() -> Result<()> {
             provisioner_proxy_result,
             acme_proxy_result,
             _,
-            _,
+            enclave_boot_result,
         ) = tokio::join!(
             tcp_server(),
             e3_proxy.listen(),
@@ -109,6 +109,10 @@ async fn main() -> Result<()> {
 
         if let Err(err) = acme_proxy_result {
             log::error!("Error running acme proxy on host: {err:?}");
+        }
+
+        if let Err(err) = enclave_boot_result {
+            log::error!("Error booting enclave on host: {err:?}");
         }
     }
 
@@ -253,14 +257,10 @@ fn listen_for_shutdown_signal() {
                 // Wait for 55 seconds before terminating enclave - ECS waits 55 seconds to kill the container
                 sleep(Duration::from_millis(55000)).await;
 
-                let output = Orchestration::shutdown_all_enclaves()
-                    .await
-                    .expect("failed to terminate enclave");
-
-                log::info!(
-                    "Terminated enclave: {}",
-                    String::from_utf8_lossy(&output.stdout)
-                );
+                match Orchestration::shutdown_all_enclaves().await {
+                    Ok(output) => log::info!("Terminated enclave successfully: {}", output),
+                    Err(err) => log::error!("Error terminating enclave: {err:?}"),
+                }
             }
             None => {
                 log::error!("Signal watcher returned None.");
