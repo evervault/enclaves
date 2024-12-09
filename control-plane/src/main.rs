@@ -5,9 +5,7 @@ use control_plane::stats_client::StatsClient;
 use control_plane::stats_proxy::StatsProxy;
 use control_plane::{config_server, tls_proxy};
 use shared::{print_version, utils::pipe_streams, ENCLAVE_CONNECT_PORT};
-use tls_parser::nom::Or;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::process::Command;
 use storage_client_interface::s3;
 use tokio::io::AsyncWriteExt;
 use tokio::time::{sleep, Duration};
@@ -77,6 +75,7 @@ async fn main() -> Result<()> {
             provisioner_proxy_result,
             acme_proxy_result,
             _,
+            _,
         ) = tokio::join!(
             tcp_server(),
             e3_proxy.listen(),
@@ -84,7 +83,8 @@ async fn main() -> Result<()> {
             config_server.listen(),
             provisioner_proxy.listen(),
             acme_proxy.listen(),
-            StatsProxy::listen()
+            StatsProxy::listen(),
+            Orchestration::start_enclave()
         );
 
         if let Err(err) = tcp_result {
@@ -253,7 +253,9 @@ fn listen_for_shutdown_signal() {
                 // Wait for 55 seconds before terminating enclave - ECS waits 55 seconds to kill the container
                 sleep(Duration::from_millis(55000)).await;
 
-                let output = Orchestration::shutdown_all_enclaves().expect("failed to terminate enclave");
+                let output = Orchestration::shutdown_all_enclaves()
+                    .await
+                    .expect("failed to terminate enclave");
 
                 log::info!(
                     "Terminated enclave: {}",

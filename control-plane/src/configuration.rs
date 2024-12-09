@@ -35,7 +35,6 @@ pub fn get_aws_profile() -> String {
     std::env::var("AWS_PROFILE").unwrap_or_else(|_| "ev-local-customers".to_string())
 }
 
-
 pub fn get_aws_region() -> aws_types::region::Region {
     let region = std::env::var("AWS_REGION")
         .ok()
@@ -51,11 +50,7 @@ pub struct EnclaveRunConfig {
 }
 
 impl EnclaveRunConfig {
-    pub fn new(
-        num_cpus: String,
-        ram_size_mib: String,
-        debug_mode: String,
-    ) -> EnclaveRunConfig {
+    pub fn new(num_cpus: String, ram_size_mib: String, debug_mode: String) -> EnclaveRunConfig {
         EnclaveRunConfig {
             num_cpus,
             ram_size_mib,
@@ -63,7 +58,6 @@ impl EnclaveRunConfig {
         }
     }
 }
-
 
 #[derive(Clone)]
 pub struct EnclaveContext {
