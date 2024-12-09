@@ -32,7 +32,7 @@ impl Orchestration {
             .arg("nitro-cli terminate-enclave --all")
             .output()
             .await
-            .map_err(|e| OrchestrationError::Io(e))
+            .map_err(OrchestrationError::Io)
     }
 
     pub async fn start_enclave() -> Result<(), OrchestrationError> {
@@ -45,7 +45,7 @@ impl Orchestration {
         let enclaves: Value = serde_json::from_str(&running_enclaves)?;
         let v = vec![];
         let enclaves_array = enclaves.as_array().unwrap_or(&v);
-        if enclaves_array.len() > 0 {
+        if !enclaves_array.is_empty() {
             info!("There's an enclave already running on this host. Terminating it...");
             Self::shutdown_all_enclaves().await?;
             info!("Enclave terminated. Waiting 10s...");
@@ -104,13 +104,10 @@ impl Orchestration {
             .await?;
 
         if !output.status.success() {
-            return Err(OrchestrationError::CommandFailed(
-                format!(
-                    "Command {:?} failed with exit status: {}",
-                    args, output.status
-                )
-                .into(),
-            ));
+            return Err(OrchestrationError::CommandFailed(format!(
+                "Command {:?} failed with exit status: {}",
+                args, output.status
+            )));
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
