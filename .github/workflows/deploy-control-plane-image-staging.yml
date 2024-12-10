@@ -1,13 +1,13 @@
-on:
-  push:
-    paths:
-      - control-plane/**
-      - shared/**
-      - .github/workflows/deploy-control-plane-image-staging.yml
-      - scripts/start-cage.sh
-      - scripts/health-check.sh
-    branches:
-      - main
+on: [push]
+  # push:
+  #   paths:
+  #     - control-plane/**
+  #     - shared/**
+  #     - .github/workflows/deploy-control-plane-image-staging.yml
+  #     - scripts/start-cage.sh
+  #     - scripts/health-check.sh
+  #   branches:
+  #     - main
 name: Deploy new control plane image
 env:
   LINUX_TARGET: x86_64-unknown-linux-musl
