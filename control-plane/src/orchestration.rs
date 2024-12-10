@@ -18,6 +18,8 @@ pub enum OrchestrationError {
     SerdeError(#[from] serde_json::Error),
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[error(transparent)]
+    VarError(#[from] std::env::VarError),
 }
 
 static EMPTY_VEC: Vec<Value> = Vec::new();
@@ -56,7 +58,7 @@ impl Orchestration {
     }
 
     pub async fn start_enclave() -> Result<(), OrchestrationError> {
-        let run_config = get_enclave_run_config();
+        let run_config = get_enclave_run_config()?;
 
         info!("[HOST] Checking for running enclaves...");
 

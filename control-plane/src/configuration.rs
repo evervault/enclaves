@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{env::VarError, str::FromStr};
 
 use openssl::{
     ec::EcKey,
@@ -132,11 +132,11 @@ pub fn get_team_uuid() -> String {
     std::env::var("EV_TEAM_UUID").expect("EV_TEAM_UUID is not set in env")
 }
 
-pub fn get_enclave_run_config() -> EnclaveRunConfig {
-    let num_cpus = std::env::var("ENCLAVE_NUM_CPUS").unwrap_or_else(|_| "2".to_string());
-    let ram_size_mib = std::env::var("ENCLAVE_RAM_SIZE_MIB").unwrap_or_else(|_| "512".to_string());
-    let debug_mode = std::env::var("ENCLAVE_DEBUG_MODE").unwrap_or_else(|_| "false".to_string());
-    EnclaveRunConfig::new(num_cpus, ram_size_mib, debug_mode)
+pub fn get_enclave_run_config() -> Result<EnclaveRunConfig, VarError> {
+    let num_cpus = std::env::var("ENCLAVE_NUM_CPUS")?;
+    let ram_size_mib = std::env::var("ENCLAVE_RAM_SIZE_MIB")?;
+    let debug_mode = std::env::var("ENCLAVE_DEBUG_MODE")?;
+    Ok(EnclaveRunConfig::new(num_cpus, ram_size_mib, debug_mode))
 }
 
 pub fn get_cert_provisoner_host() -> String {
