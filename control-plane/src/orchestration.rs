@@ -31,6 +31,7 @@ enum NitroCommand {
     TerminateEnclave,
     DescribeEnclaves,
     RunEnclave,
+    Console,
 }
 
 impl NitroCommand {
@@ -39,6 +40,7 @@ impl NitroCommand {
             NitroCommand::TerminateEnclave => "terminate-enclave",
             NitroCommand::DescribeEnclaves => "describe-enclaves",
             NitroCommand::RunEnclave => "run-enclave",
+            NitroCommand::Console => "console",
         }
     }
 }
@@ -103,19 +105,22 @@ impl Orchestration {
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
 
         if run_config.debug_mode == "true" {
-            info!("Attaching headless console for running enclaves...");
-            let running_enclaves = Self::run_command_capture_stdout(&[
-                NITRO_CLI,
-                NitroCommand::DescribeEnclaves.as_str(),
-            ])
-            .await?;
-            let enclaves: Value = serde_json::from_str(&running_enclaves)?;
-            let enclaves_array = enclaves.as_array().unwrap_or(&EMPTY_VEC).clone();
-            for enclave in enclaves_array {
-                let id = enclave["EnclaveID"].as_str().unwrap().to_string();
+            Self::send_debug_logs_to_stdout().await?;
+        }
+        Ok(())
+    }
 
+    async fn send_debug_logs_to_stdout() -> Result<(), OrchestrationError> {
+        info!("Attaching headless console for running enclaves...");
+        let running_enclaves =
+            Self::run_command_capture_stdout(&[NITRO_CLI, NitroCommand::DescribeEnclaves.as_str()])
+                .await?;
+        let enclaves: Value = serde_json::from_str(&running_enclaves)?;
+        let enclaves_array = enclaves.as_array().unwrap_or(&EMPTY_VEC).clone();
+        for enclave in enclaves_array {
+            if let Some(id) = enclave["EnclaveID"].as_str() {
                 let mut child = Command::new(NITRO_CLI)
-                    .args(["console", "--enclave-id", &id])
+                    .args([NitroCommand::Console.as_str(), "--enclave-id", id])
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped())
                     .spawn()?;
