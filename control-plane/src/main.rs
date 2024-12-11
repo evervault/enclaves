@@ -1,11 +1,11 @@
 use control_plane::clients::{cert_provisioner, mtls_config};
 use control_plane::dns::{ExternalAsyncDnsResolver, InternalAsyncDnsResolver};
+use control_plane::orchestration::Orchestration;
 use control_plane::stats_client::StatsClient;
 use control_plane::stats_proxy::StatsProxy;
 use control_plane::{config_server, tls_proxy};
 use shared::{print_version, utils::pipe_streams, ENCLAVE_CONNECT_PORT};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::process::Command;
 use storage_client_interface::s3;
 use tokio::io::AsyncWriteExt;
 use tokio::time::{sleep, Duration};
@@ -75,6 +75,7 @@ async fn main() -> Result<()> {
             provisioner_proxy_result,
             acme_proxy_result,
             _,
+            enclave_boot_result,
         ) = tokio::join!(
             tcp_server(),
             e3_proxy.listen(),
@@ -82,7 +83,8 @@ async fn main() -> Result<()> {
             config_server.listen(),
             provisioner_proxy.listen(),
             acme_proxy.listen(),
-            StatsProxy::listen()
+            StatsProxy::listen(),
+            Orchestration::start_enclave()
         );
 
         if let Err(err) = tcp_result {
@@ -108,6 +110,10 @@ async fn main() -> Result<()> {
         if let Err(err) = acme_proxy_result {
             log::error!("Error running acme proxy on host: {err:?}");
         }
+
+        if let Err(err) = enclave_boot_result {
+            log::error!("Error booting enclave on host: {err:?}");
+        }
     }
 
     #[cfg(feature = "network_egress")]
@@ -128,6 +134,7 @@ async fn main() -> Result<()> {
             provisioner_result,
             acme_proxy_result,
             _,
+            enclave_boot_result,
         ) = tokio::join!(
             tcp_server(),
             dns_proxy_server.listen(),
@@ -137,7 +144,8 @@ async fn main() -> Result<()> {
             config_server.listen(),
             provisioner_proxy.listen(),
             acme_proxy.listen(),
-            StatsProxy::listen()
+            StatsProxy::listen(),
+            Orchestration::start_enclave()
         );
 
         if let Err(tcp_err) = tcp_result {
@@ -170,6 +178,10 @@ async fn main() -> Result<()> {
 
         if let Err(err) = acme_proxy_result {
             log::error!("Error running acme proxy on host: {err:?}");
+        }
+
+        if let Err(err) = enclave_boot_result {
+            log::error!("Error booting enclave on host: {err:?}");
         }
     }
 
@@ -251,16 +263,10 @@ fn listen_for_shutdown_signal() {
                 // Wait for 55 seconds before terminating enclave - ECS waits 55 seconds to kill the container
                 sleep(Duration::from_millis(55000)).await;
 
-                let output = Command::new("sh")
-                    .arg("-c")
-                    .arg("nitro-cli terminate-enclave --all")
-                    .output()
-                    .expect("failed to terminate enclave");
-
-                log::info!(
-                    "Terminated enclave: {}",
-                    String::from_utf8_lossy(&output.stdout)
-                );
+                match Orchestration::shutdown_all_enclaves().await {
+                    Ok(output) => log::info!("Terminated enclave successfully: {}", output),
+                    Err(err) => log::error!("Error terminating enclave: {err:?}"),
+                }
             }
             None => {
                 log::error!("Signal watcher returned None.");

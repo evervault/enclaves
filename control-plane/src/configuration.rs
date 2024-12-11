@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{env::VarError, str::FromStr};
 
 use openssl::{
     ec::EcKey,
@@ -41,6 +41,24 @@ pub fn get_aws_region() -> aws_types::region::Region {
         .unwrap_or_else(|| "us-east-1".to_string());
     aws_types::region::Region::new(region)
 }
+
+#[derive(Clone)]
+pub struct EnclaveRunConfig {
+    pub num_cpus: String,
+    pub ram_size_mib: String,
+    pub debug_mode: String,
+}
+
+impl EnclaveRunConfig {
+    pub fn new(num_cpus: String, ram_size_mib: String, debug_mode: String) -> EnclaveRunConfig {
+        EnclaveRunConfig {
+            num_cpus,
+            ram_size_mib,
+            debug_mode,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct EnclaveContext {
     pub uuid: String,
@@ -112,6 +130,13 @@ pub fn get_app_uuid() -> String {
 
 pub fn get_team_uuid() -> String {
     std::env::var("EV_TEAM_UUID").expect("EV_TEAM_UUID is not set in env")
+}
+
+pub fn get_enclave_run_config() -> Result<EnclaveRunConfig, VarError> {
+    let num_cpus = std::env::var("ENCLAVE_NUM_CPUS")?;
+    let ram_size_mib = std::env::var("ENCLAVE_RAM_SIZE_MIB")?;
+    let debug_mode = std::env::var("ENCLAVE_DEBUG_MODE")?;
+    Ok(EnclaveRunConfig::new(num_cpus, ram_size_mib, debug_mode))
 }
 
 pub fn get_cert_provisoner_host() -> String {
