@@ -134,6 +134,7 @@ async fn main() -> Result<()> {
             provisioner_result,
             acme_proxy_result,
             _,
+            enclave_boot_result,
         ) = tokio::join!(
             tcp_server(),
             dns_proxy_server.listen(),
@@ -143,7 +144,8 @@ async fn main() -> Result<()> {
             config_server.listen(),
             provisioner_proxy.listen(),
             acme_proxy.listen(),
-            StatsProxy::listen()
+            StatsProxy::listen(),
+            Orchestration::start_enclave()
         );
 
         if let Err(tcp_err) = tcp_result {
@@ -176,6 +178,10 @@ async fn main() -> Result<()> {
 
         if let Err(err) = acme_proxy_result {
             log::error!("Error running acme proxy on host: {err:?}");
+        }
+
+        if let Err(err) = enclave_boot_result {
+            log::error!("Error booting enclave on host: {err:?}");
         }
     }
 
