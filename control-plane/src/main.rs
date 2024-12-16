@@ -62,127 +62,36 @@ async fn main() -> Result<()> {
 
     let config_server = config_server::ConfigServer::new(cert_provisioner_client, acme_s3_client);
 
-    #[cfg(not(feature = "network_egress"))]
-    {
-        listen_for_shutdown_signal();
-        let mut health_check_server = health::HealthCheckServer::new().await?;
+    listen_for_shutdown_signal();
 
-        let (
-            tcp_result,
-            e3_result,
-            health_check_result,
-            config_server_result,
-            provisioner_proxy_result,
-            acme_proxy_result,
-            _,
-            enclave_boot_result,
-        ) = tokio::join!(
-            tcp_server(),
-            e3_proxy.listen(),
-            health_check_server.start(),
-            config_server.listen(),
-            provisioner_proxy.listen(),
-            acme_proxy.listen(),
-            StatsProxy::listen(),
-            Orchestration::start_enclave()
-        );
+    tokio::spawn(tcp_server());
 
-        if let Err(err) = tcp_result {
-            log::error!("Error running TCP server on host: {err:?}");
-        };
+    tokio::spawn(e3_proxy.listen());
 
-        if let Err(err) = e3_result {
-            log::error!("Error running E3 proxy on host: {err:?}");
+    tokio::spawn(async move {
+        if let Err(e) = config_server.listen().await {
+            log::error!("Couldn't start config server - {e}");
         }
+    });
 
-        if let Err(err) = health_check_result {
-            log::error!("Error running health check server on host: {err:?}");
-        }
+    tokio::spawn(provisioner_proxy.listen());
 
-        if let Err(err) = config_server_result {
-            log::error!("Error running config server on host: {err:?}");
-        }
+    tokio::spawn(acme_proxy.listen());
 
-        if let Err(err) = provisioner_proxy_result {
-            log::error!("Error running provisioner proxy on host: {err:?}");
-        }
+    tokio::spawn(StatsProxy::listen());
 
-        if let Err(err) = acme_proxy_result {
-            log::error!("Error running acme proxy on host: {err:?}");
-        }
-
-        if let Err(err) = enclave_boot_result {
-            log::error!("Error booting enclave on host: {err:?}");
-        }
-    }
+    tokio::spawn(Orchestration::start_enclave());
 
     #[cfg(feature = "network_egress")]
     {
-        listen_for_shutdown_signal();
-        let mut health_check_server = health::HealthCheckServer::new().await?;
         let parsed_ip = control_plane::dnsproxy::read_dns_server_ips_from_env_var()
             .unwrap_or_else(|| control_plane::dnsproxy::DNS_SERVERS.clone());
 
         let dns_proxy_server = control_plane::dnsproxy::DnsProxy::new(parsed_ip);
-        let (
-            tcp_result,
-            dns_result,
-            egress_result,
-            e3_result,
-            health_check_result,
-            config_server_result,
-            provisioner_result,
-            acme_proxy_result,
-            _,
-            enclave_boot_result,
-        ) = tokio::join!(
-            tcp_server(),
-            dns_proxy_server.listen(),
-            control_plane::egressproxy::EgressProxy::listen(),
-            e3_proxy.listen(),
-            health_check_server.start(),
-            config_server.listen(),
-            provisioner_proxy.listen(),
-            acme_proxy.listen(),
-            StatsProxy::listen(),
-            Orchestration::start_enclave()
-        );
 
-        if let Err(tcp_err) = tcp_result {
-            log::error!("An error occurred in the tcp server - {tcp_err:?}");
-        }
+        tokio::spawn(dns_proxy_server.listen());
 
-        if let Err(dns_err) = dns_result {
-            log::error!("An error occurred in the dns server - {dns_err:?}");
-        }
-
-        if let Err(egress_err) = egress_result {
-            log::error!("An error occurred in the egress server - {egress_err:?}");
-        }
-
-        if let Err(e3_err) = e3_result {
-            log::error!("An error occurred in the e3 server - {e3_err:?}");
-        }
-
-        if let Err(err) = health_check_result {
-            log::error!("Error running health check server on host: {err:?}");
-        }
-
-        if let Err(err) = config_server_result {
-            log::error!("Error running config server on host: {err:?}");
-        }
-
-        if let Err(err) = provisioner_result {
-            log::error!("Error running provisioner proxy on host: {err:?}");
-        }
-
-        if let Err(err) = acme_proxy_result {
-            log::error!("Error running acme proxy on host: {err:?}");
-        }
-
-        if let Err(err) = enclave_boot_result {
-            log::error!("Error booting enclave on host: {err:?}");
-        }
+        tokio::spawn(control_plane::egressproxy::EgressProxy::listen());
     }
 
     Ok(())

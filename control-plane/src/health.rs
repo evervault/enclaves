@@ -10,16 +10,12 @@ use shared::server::{
     Listener,
 };
 use shared::ENCLAVE_HEALTH_CHECK_PORT;
-use std::net::SocketAddr;
 use std::sync::OnceLock;
+use std::{net::SocketAddr, str};
 
 pub static IS_DRAINING: OnceLock<bool> = OnceLock::new();
 
 pub const CONTROL_PLANE_HEALTH_CHECK_PORT: u16 = 3032;
-
-pub struct HealthCheckServer {
-    tcp_server: TcpServer,
-}
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -101,23 +97,22 @@ async fn health_check_data_plane() -> Result<HealthCheckVersion, ServerError> {
     Ok(hc)
 }
 
-impl HealthCheckServer {
-    pub async fn new() -> ServerResult<Self> {
-        let tcp_server = TcpServer::bind(SocketAddr::from((
-            [0, 0, 0, 0],
-            CONTROL_PLANE_HEALTH_CHECK_PORT,
-        )))
-        .await?;
-        Ok(HealthCheckServer { tcp_server })
-    }
+pub struct HealthCheckServer;
 
-    pub async fn start(&mut self) -> ServerResult<()> {
+impl HealthCheckServer {
+    pub async fn start() -> ServerResult<()> {
         log::info!(
             "Control plane health-check server running on port {CONTROL_PLANE_HEALTH_CHECK_PORT}"
         );
 
+        let mut tcp_server = TcpServer::bind(SocketAddr::from((
+            [0, 0, 0, 0],
+            CONTROL_PLANE_HEALTH_CHECK_PORT,
+        )))
+        .await?;
+
         loop {
-            let stream = self.tcp_server.accept().await?;
+            let stream = tcp_server.accept().await?;
             let service = hyper::service::service_fn(move |request: Request<Body>| async move {
                 match request
                     .headers()
