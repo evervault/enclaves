@@ -34,6 +34,7 @@ openssl = { version = "0.10.48", features = ["vendored"] }
 base64 = "0.13.0"
 storage-client-interface = "0.3.0"
 log = { version = "0.4.19", features = ["max_level_debug"] }
+rand_chacha = "0.3.1"
 
 [dev-dependencies]
 tokio-test = "0.4.2"
