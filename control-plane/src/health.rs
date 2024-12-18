@@ -127,20 +127,7 @@ impl HealthCheckServer {
         loop {
             let stream = tcp_server.accept().await?;
 
-            let cp_state = if let Ok(exited_service) = self.shutdown_receiver.try_recv() {
-                self.exited_services.push(exited_service);
-                ControlPlaneState::Error(format!(
-                    "Critical Control Plane services have exited: {}",
-                    self.serialize_exited_services()
-                ))
-            } else if !self.exited_services.is_empty() {
-                ControlPlaneState::Error(format!(
-                    "Critical Control Plane services have exited: {}",
-                    self.serialize_exited_services()
-                ))
-            } else {
-                ControlPlaneState::Ok
-            };
+            let cp_state = self.get_control_plane_state();
 
             let service = hyper::service::service_fn({
                 let cp_state = cp_state.clone();
@@ -172,6 +159,23 @@ impl HealthCheckServer {
             {
                 log::error!("Health check error: {error}");
             }
+        }
+    }
+
+    fn get_control_plane_state(&mut self) -> ControlPlaneState {
+        if let Ok(exited_service) = self.shutdown_receiver.try_recv() {
+            self.exited_services.push(exited_service);
+            ControlPlaneState::Error(format!(
+                "Critical Control Plane services have exited: {}",
+                self.serialize_exited_services()
+            ))
+        } else if !self.exited_services.is_empty() {
+            ControlPlaneState::Error(format!(
+                "Critical Control Plane services have exited: {}",
+                self.serialize_exited_services()
+            ))
+        } else {
+            ControlPlaneState::Ok
         }
     }
 

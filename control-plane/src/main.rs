@@ -97,13 +97,16 @@ async fn main() -> Result<()> {
             .notify_shutdown(Service::AcmeProxy, shutdown_sender.clone()),
     );
 
-    tokio::spawn(async move {
-        if let Err(e) = config_server
-            .listen()
-            .notify_shutdown(Service::ConfigServer, shutdown_sender.clone())
-            .await
-        {
-            log::error!("Error starting config server - {e:?}");
+    tokio::spawn({
+        let shutdown_sender = shutdown_sender.clone();
+        async move {
+            if let Err(e) = config_server
+                .listen()
+                .notify_shutdown(Service::ConfigServer, shutdown_sender)
+                .await
+            {
+                log::error!("Error starting config server - {e:?}");
+            }
         }
     });
 
