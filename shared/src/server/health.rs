@@ -76,10 +76,11 @@ pub trait HealthCheck {
     fn status_code(&self) -> u16;
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ControlPlaneState {
     Draining,
     Ok,
+    Error(String),
 }
 
 impl HealthCheck for ControlPlaneState {
@@ -87,6 +88,7 @@ impl HealthCheck for ControlPlaneState {
         match self {
             ControlPlaneState::Ok => 200,
             ControlPlaneState::Draining => 500,
+            ControlPlaneState::Error(_) => 500,
         }
     }
 }

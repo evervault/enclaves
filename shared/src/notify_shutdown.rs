@@ -10,6 +10,10 @@ pub enum Service {
     ClockSync,
     DnsProxy,
     EgressProxy,
+    E3Proxy,
+    ProvisionerProxy,
+    AcmeProxy,
+    ConfigServer,
 }
 
 impl std::fmt::Display for Service {
@@ -20,6 +24,10 @@ impl std::fmt::Display for Service {
             Self::ClockSync => "clock-sync",
             Self::DnsProxy => "dns-proxy",
             Self::EgressProxy => "egress-proxy",
+            Self::E3Proxy => "e3-proxy",
+            Self::ProvisionerProxy => "provisioner-proxy",
+            Self::AcmeProxy => "acme-proxy",
+            Self::ConfigServer => "config-server",
         };
         f.write_str(service_label)
     }

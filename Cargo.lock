@@ -894,6 +894,7 @@ dependencies = [
  "openssl",
  "ppp",
  "rand",
+ "rand_chacha",
  "rustls-pemfile",
  "semver",
  "serde",
