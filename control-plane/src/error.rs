@@ -1,3 +1,4 @@
+use shared::server::sni::SNIError;
 use thiserror::Error;
 use trust_dns_resolver::error::ResolveError;
 
@@ -38,6 +39,8 @@ pub enum ServerError {
     AcmeError(#[from] shared::acme::error::AcmeError),
     #[error("Invalid DNS Config provided - at least 2 valid DNS Servers must be provided")]
     InvalidDnsConfig,
+    #[error(transparent)]
+    SNIError(#[from] SNIError),
 }
 
 pub type Result<T> = std::result::Result<T, ServerError>;
