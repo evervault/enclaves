@@ -71,7 +71,7 @@ where
 
     // Only apply attestation layer in enclave mode
     #[cfg(feature = "enclave")]
-    let service_builder = service_builder.layer(AttestLayer);
+    let service_builder = service_builder.layer(AttestLayer::new(feature_context.clone()));
 
     // layers are invoked in the order that they're registered to the service
     let service = service_builder

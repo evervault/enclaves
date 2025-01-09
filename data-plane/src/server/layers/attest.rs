@@ -18,6 +18,12 @@ pub struct AttestLayer {
     feature_context: Arc<FeatureContext>,
 }
 
+impl AttestLayer {
+    pub fn new(feature_context: Arc<FeatureContext>) -> Self {
+        Self { feature_context }
+    }
+}
+
 impl<S> Layer<S> for AttestLayer {
     type Service = AttestService<S>;
 
