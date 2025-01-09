@@ -4,21 +4,28 @@ use hyper::Body;
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use tower::{Layer, Service};
 
 use crate::cache::ATTESTATION_DOC;
 use crate::crypto::attest;
 use crate::server::http::build_internal_error_response;
 use crate::server::tls::TRUSTED_PUB_CERT;
+use crate::FeatureContext;
 
 #[derive(Clone)]
-pub struct AttestLayer;
+pub struct AttestLayer {
+    feature_context: Arc<FeatureContext>,
+}
 
 impl<S> Layer<S> for AttestLayer {
     type Service = AttestService<S>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        AttestService { inner }
+        AttestService {
+            feature_context: self.feature_context.clone(),
+            inner,
+        }
     }
 }
 
@@ -29,6 +36,7 @@ struct AttestationResponse {
 
 #[derive(Clone)]
 pub struct AttestService<S> {
+    feature_context: Arc<FeatureContext>,
     inner: S,
 }
 
@@ -86,10 +94,20 @@ where
             };
 
             let response_payload = serde_json::to_string(&response).expect("Infallible");
+            let cors_origin = self
+                .feature_context
+                .attestation_cors
+                .as_ref()
+                .map_or("*", |cors| cors.origin.as_str());
+
             let attestation_response = Response::builder()
                 .status(200)
                 .header(hyper::http::header::CONTENT_TYPE, "application/json")
                 .header(hyper::http::header::CONTENT_LENGTH, response_payload.len())
+                .header(
+                    hyper::http::header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                    cors_origin,
+                )
                 .body(Body::from(response_payload))
                 .unwrap_or_else(|e| build_internal_error_response(Some(e.to_string())));
 
