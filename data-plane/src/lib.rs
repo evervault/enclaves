@@ -149,6 +149,11 @@ impl From<ProvisionerContext> for EnclaveContext {
 }
 
 #[derive(Clone, Deserialize, Debug)]
+pub struct AttestationCors {
+    pub origin: String,
+}
+
+#[derive(Clone, Deserialize, Debug)]
 pub struct FeatureContext {
     pub api_key_auth: bool,
     pub healthcheck: Option<String>,
@@ -157,6 +162,7 @@ pub struct FeatureContext {
     pub trx_logging_enabled: bool,
     pub forward_proxy_protocol: bool,
     pub trusted_headers: Vec<String>,
+    pub attestation_cors: Option<AttestationCors>,
     #[cfg(feature = "network_egress")]
     pub egress: EgressConfig,
 }
@@ -196,7 +202,7 @@ mod test {
     #[cfg(not(feature = "network_egress"))]
     #[test]
     fn test_config_deserialization_without_proxy_protocol() {
-        let raw_feature_context = r#"{ "api_key_auth": true, "trx_logging_enabled": false, "forward_proxy_protocol": false, "trusted_headers": [] }"#;
+        let raw_feature_context = r#"{ "api_key_auth": true, "attestation_cors": { "origin, "test.com" }, "trx_logging_enabled": false, "forward_proxy_protocol": false, "trusted_headers": [] }"#;
         let parsed = serde_json::from_str(raw_feature_context);
         assert!(parsed.is_ok());
         let feature_context: FeatureContext = parsed.unwrap();
@@ -204,6 +210,11 @@ mod test {
         assert_eq!(feature_context.trx_logging_enabled, false);
         assert_eq!(feature_context.forward_proxy_protocol, false);
         assert!(feature_context.healthcheck.is_none());
+        assert!(feature_context.attestation_cors.is_some());
+        assert_eq!(
+            feature_context.attestation_cors.unwrap().origin,
+            "test.com".to_string()
+        );
     }
 
     #[cfg(not(feature = "network_egress"))]
@@ -217,6 +228,7 @@ mod test {
         assert_eq!(feature_context.trx_logging_enabled, false);
         assert_eq!(feature_context.forward_proxy_protocol, false);
         assert_eq!(feature_context.healthcheck, Some("/health".into()));
+        assert!(feature_context.attestation_cors.is_none());
     }
 
     #[cfg(feature = "network_egress")]
