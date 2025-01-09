@@ -73,6 +73,8 @@ where
             return Box::pin(inner.call(req));
         }
 
+        let feature_context = self.feature_context.clone();
+
         Box::pin(async move {
             let attestation_doc_key: String = "attestation_doc".to_string();
             let mut cache = ATTESTATION_DOC.lock().await;
@@ -100,8 +102,7 @@ where
             };
 
             let response_payload = serde_json::to_string(&response).expect("Infallible");
-            let cors_origin = self
-                .feature_context
+            let cors_origin = feature_context
                 .attestation_cors
                 .as_ref()
                 .map_or("*", |cors| cors.origin.as_str());
