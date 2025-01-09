@@ -202,7 +202,7 @@ mod test {
     #[cfg(not(feature = "network_egress"))]
     #[test]
     fn test_config_deserialization_without_proxy_protocol() {
-        let raw_feature_context = r#"{ "api_key_auth": true, "attestation_cors": { "origin, "test.com" }, "trx_logging_enabled": false, "forward_proxy_protocol": false, "trusted_headers": [] }"#;
+        let raw_feature_context = r#"{ "api_key_auth": true, "attestation_cors": { "origin", "test.com" }, "trx_logging_enabled": false, "forward_proxy_protocol": false, "trusted_headers": [] }"#;
         let parsed = serde_json::from_str(raw_feature_context);
         assert!(parsed.is_ok());
         let feature_context: FeatureContext = parsed.unwrap();
