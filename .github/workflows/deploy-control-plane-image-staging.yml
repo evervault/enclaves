@@ -30,7 +30,7 @@ jobs:
           shared-key: "standard-cache"
       - name: Test control plane
         run: cargo test -p control-plane
-  
+
   get-release-semver:
     needs: [last_test]
     runs-on: ubuntu-latest
@@ -78,8 +78,8 @@ jobs:
       - name: Configure Staging AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_STAGING }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}
+          aws-access-key-id: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_KEY_ID_STAGING }}
+          aws-secret-access-key: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_SECRET_KEY_STAGING }}
           aws-region: us-east-1
       - name: Login to Amazon ECR
         id: login-ecr
@@ -126,8 +126,8 @@ jobs:
       - name: Configure Staging AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_STAGING }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_STAGING }}
+          aws-access-key-id: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_KEY_ID_STAGING }}
+          aws-secret-access-key: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_SECRET_KEY_STAGING }}
           aws-region: us-east-1
       - name: Login to Amazon ECR
         id: login-ecr
