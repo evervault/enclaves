@@ -77,17 +77,30 @@ impl EgressProxy {
             log::info!("Blocking request to ip: {:?}  - {err}", external_request.ip);
             return Ok(());
         };
-        let hostname = get_hostname(external_request.data.clone())?;
-        log::info!(
-            "{}",
-            serde_json::json!({
-                "message": "Connecting to external host",
-                "ip": external_request.ip,
-                "port": external_request.port,
-                "hostname": hostname
-            })
-            .to_string()
-        );
+
+        if let Ok(hostname) = get_hostname(external_request.data.clone()) {
+            log::info!(
+                "{}",
+                serde_json::json!({
+                    "message": "Connecting to external host",
+                    "ip": external_request.ip,
+                    "port": external_request.port,
+                    "hostname": hostname
+                })
+                .to_string()
+            );
+        } else {
+            log::info!(
+                "{}",
+                serde_json::json!({
+                    "message": "Connecting to external host without SNI present",
+                    "ip": external_request.ip,
+                    "port": external_request.port,
+                })
+                .to_string()
+            );
+        }
+
         let mut remote_stream =
             TcpStream::connect((external_request.ip, external_request.port)).await?;
         remote_stream.write_all(&external_request.data).await?;
