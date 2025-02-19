@@ -16,7 +16,7 @@ where
 
 pub struct HexSlice<'a>(&'a [u8]);
 
-impl<'a> std::fmt::UpperHex for HexSlice<'a> {
+impl std::fmt::UpperHex for HexSlice<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for byte in self.0 {
             write!(f, "{byte:02X}")?;
@@ -25,7 +25,7 @@ impl<'a> std::fmt::UpperHex for HexSlice<'a> {
     }
 }
 
-impl<'a> std::fmt::LowerHex for HexSlice<'a> {
+impl std::fmt::LowerHex for HexSlice<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for byte in self.0 {
             write!(f, "{byte:02x}")?;
