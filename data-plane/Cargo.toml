@@ -80,3 +80,6 @@ network_egress = ["shared/network_egress"]
 enclave = ["dep:tokio-vsock", "shared/enclave", "dep:rlimit"]
 not_enclave = []
 release_logging = ["log/release_max_level_info"]
+
+[lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ['cfg(staging)'] }

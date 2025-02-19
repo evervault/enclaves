@@ -306,9 +306,8 @@ impl AttestableCertResolver {
                 vec![sni_header],
                 Some(nonce),
             )
-            .map_err(|err| {
+            .inspect_err(|_| {
                 log::error!("An error occurred while generating the self signed cert");
-                err
             })
             .ok()
             .map(|(_expiry, cert)| Arc::new(cert))?;
