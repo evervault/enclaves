@@ -133,7 +133,7 @@ impl AttestableCertResolver {
                 .split('.')
                 .rev()
                 .nth(2)
-                .map_or(false, |subdomain| ["cage", "enclave"].contains(&subdomain)),
+                .is_some_and(|subdomain| ["cage", "enclave"].contains(&subdomain)),
 
             None => false,
         }
