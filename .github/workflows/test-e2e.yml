@@ -17,7 +17,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools
-      - uses: dtolnay/rust-toolchain@1.79.0
+      - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-unknown-linux-musl
       - name: Build Cages Project
@@ -49,7 +49,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y musl-tools
       - uses: Swatinem/rust-cache@v2
-      - uses: dtolnay/rust-toolchain@1.79.0
+      - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-unknown-linux-musl
       - name: Build Cages Project
