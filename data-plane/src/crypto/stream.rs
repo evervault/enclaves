@@ -83,7 +83,7 @@ impl IncomingStreamDecoder {
             return Ok(Some(IncomingFrame::Plaintext(plaintext_bytes)));
         }
 
-        return match parser::parse_ciphertexts(potential_ciphertext) {
+        match parser::parse_ciphertexts(potential_ciphertext) {
             Ok((_, Some(mut ciphertext))) => {
                 ciphertext.set_leading_quote(quote_precedes_cipher);
                 src.advance(ciphertext.len());
@@ -111,7 +111,7 @@ impl IncomingStreamDecoder {
             Err(nom::Err::Incomplete(_)) => Err(IncomingStreamError::Incomplete(None)),
             Err(nom::Err::Error(_)) => Err(IncomingStreamError::NomError),
             Err(nom::Err::Failure(_)) => Err(IncomingStreamError::NomFailure),
-        };
+        }
     }
 }
 

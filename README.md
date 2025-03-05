@@ -15,12 +15,6 @@ The Evervault Enclaves product is open source with the aim of providing transpar
 The current state of this project does not allow for self-hosting. We plan on addressing this by abstracting away the Evervault-specific elements of the Enclaves product.
 
 ## Steps to get Enclaves running in local dev (macOSarm64)
-Add a `.cargo` directory to the project root, and create a `.cargo/config.toml` containing the following:
-
-```toml
-[target.x86_64-unknown-linux-musl]
-linker = "x86_64-linux-musl-gcc"
-```
 
 If you're using vscode you may want to append a check target to your workspace settings
 
@@ -31,12 +25,12 @@ If you're using vscode you may want to append a check target to your workspace s
 }
 ```
 
-Install the required packages for cross compilation:
+The crates can then be cross compiled using zigbuild. To install zigbuild, first [install ziglang](https://ziglang.org/learn/getting-started/#installing-zig).
+
+Once ziglang is installed, you can install zigbuild as a cargo plugin:
+
 ```sh
-brew tap SergioBenitez/osxct
-brew install FiloSottile/musl-cross/musl-cross # don't be alarmed if this takes a while https://github.com/FiloSottile/homebrew-musl-cross/issues/15
-rustup target add x86_64-unknown-linux-musl
-ln -s $(which x86_64-linux-musl-gcc) /usr/local/bin/musl-gcc
+cargo install --locked cargo-zigbuild
 ```
 
 Generate a cert and key for the data-plane:
@@ -70,12 +64,12 @@ source ./scripts/export-dev-env-vars.sh
 
 Compile:
 ```sh
-cargo build --release --target x86_64-unknown-linux-musl --features network_egress
+cargo zigbuild --release --target x86_64-unknown-linux-musl --features network_egress
 ```
 
 Compile the mock crypto crate:
 ```sh
-pushd e2e-tests/mock-crypto && cargo build --release --target x86_64-unknown-linux-musl && popd
+pushd e2e-tests/mock-crypto && cargo zigbuild --release --target x86_64-unknown-linux-musl && popd
 ```
 
 Build and run docker containers:
@@ -104,11 +98,6 @@ cargo run --features network_egress
 To build with the `enclave` feature flag, you will have to specify the target:
 ```sh
 sudo cargo clippy --features enclave --target x86_64-unknown-linux-musl
-```
-
-You may need to install `musl-cross` (Note: this will take a while, ~30+ minutes):
-```sh
-brew install FiloSottile/musl-cross/musl-cross
 ```
 
 You will also need the `x86_64-unknown-linux-musl` target:
