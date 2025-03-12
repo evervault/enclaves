@@ -83,10 +83,7 @@ impl NeedEnv {
     ) -> Result<GetSecretsResponseDataPlane, Error> {
         let half_min = 1_000 * 30;
         let cert_token = with_retries(500, 10, half_min, || async {
-            loader
-                .config_client
-                .get_cert_token()
-                .await
+            loader.config_client.get_cert_token().await
         })
         .await?;
 
