@@ -1,6 +1,6 @@
-const { expect } = require('chai');
-const axios = require('axios').default;
-const https = require('https');
+const { expect } = require("chai");
+const axios = require("axios").default;
+const https = require("https");
 const net = require("net");
 const CBOR = require("cbor-sync");
 
@@ -103,9 +103,12 @@ describe("POST data to enclave", () => {
   });
 
   it("returns the injected environment", async () => {
-    const result = await allowAllCerts.get("https://enclave.localhost:443/env", {
-      headers: { "api-key": "placeholder" },
-    });
+    const result = await allowAllCerts.get(
+      "https://enclave.localhost:443/env",
+      {
+        headers: { "api-key": "placeholder" },
+      }
+    );
     expect("123").to.deep.equal(result.data.ANOTHER_ENV_VAR);
   });
 
@@ -122,10 +125,10 @@ describe("POST data to enclave", () => {
       });
     const result = CBOR.decode(doc.data);
     expect(result).to.deep.equal({
-        pcr0: "000",
-        pcr1: "000",
-        pcr2: "000",
-        pcr8: "000",
+      pcr0: "000",
+      pcr1: "000",
+      pcr2: "000",
+      pcr8: "000",
     });
   });
 
@@ -143,7 +146,7 @@ describe("POST data to enclave", () => {
           secret: "ev:123",
         });
         //check transfer-encoding is not set
-        expect(result.headers['transfer-encoding']).to.be.undefined;
+        expect(result.headers["transfer-encoding"]).to.be.undefined;
       })
       .catch((err) => {
         console.error(err);
@@ -160,34 +163,32 @@ describe("Enclave is runnning", () => {
       sysClient.write("gauges");
     });
 
+    const expectedMetrics = new Set([
+      "evervault.enclaves.memory.total;enclave_uuid=enclave_123;app_uuid=app_12345678",
+      "evervault.enclaves.memory.avail;enclave_uuid=enclave_123;app_uuid=app_12345678",
+      "evervault.enclaves.cpu.one;enclave_uuid=enclave_123;app_uuid=app_12345678",
+      "evervault.enclaves.cpu.cores;enclave_uuid=enclave_123;app_uuid=app_12345678",
+      "evervault.enclaves.fd.allocated;enclave_uuid=enclave_123;app_uuid=app_12345678",
+      "evervault.enclaves.fd.max;enclave_uuid=enclave_123;app_uuid=app_12345678",
+      "evervault.enclaves.fd.free;enclave_uuid=enclave_123;app_uuid=app_12345678",
+    ]);
+
+    setTimeout(() => {
+      sysClient.destroy();
+      done(new Error("Test did not complete within 60s"));
+    }, 60_000);
+
     sysClient.on("data", function (data) {
-      try {
-        const result = data.toString().replace(/'/g, '"').replace(/END/g, "");
-        console.log("[SYSTEM]", result);
-        const stats = JSON.parse(result);
-        const keys = Object.keys(stats);
-        expect(keys).to.include(
-          "evervault.enclaves.memory.total;enclave_uuid=enclave_123;app_uuid=app_12345678"
-        );
-        expect(keys).to.include(
-          "evervault.enclaves.memory.avail;enclave_uuid=enclave_123;app_uuid=app_12345678"
-        );
-        expect(keys).to.include(
-          "evervault.enclaves.cpu.one;enclave_uuid=enclave_123;app_uuid=app_12345678"
-        );
-        expect(keys).to.include(
-          "evervault.enclaves.cpu.cores;enclave_uuid=enclave_123;app_uuid=app_12345678"
-        );
-        expect(keys).to.include(
-          "evervault.enclaves.fd.allocated;enclave_uuid=enclave_123;app_uuid=app_12345678"
-        );
-        expect(keys).to.include(
-          "evervault.enclaves.fd.max;enclave_uuid=enclave_123;app_uuid=app_12345678"
-        );
-        expect(keys).to.include(
-          "evervault.enclaves.fd.free;enclave_uuid=enclave_123;app_uuid=app_12345678"
-        );
-      } finally {
+      const result = data.toString().replace(/'/g, '"').replace(/END/g, "");
+      console.log("[SYSTEM]", result);
+      const stats = JSON.parse(result);
+      const keys = Object.keys(stats);
+      for (const key of keys) {
+        if (expectedMetrics.has(key)) {
+          expectedMetrics.delete(key);
+        }
+      }
+      if (expectedMetrics.size === 0) {
         sysClient.destroy();
         done();
       }
