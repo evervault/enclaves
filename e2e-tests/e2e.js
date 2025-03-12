@@ -180,17 +180,21 @@ describe("Enclave is runnning", () => {
 
     sysClient.on("data", function (data) {
       const result = data.toString().replace(/'/g, '"').replace(/END/g, "");
-      console.log("[SYSTEM]", result);
-      const stats = JSON.parse(result);
-      const keys = Object.keys(stats);
-      for (const key of keys) {
-        if (expectedMetrics.has(key)) {
-          expectedMetrics.delete(key);
+      try {
+        console.log("[SYSTEM]", result);
+        const stats = JSON.parse(result);
+        const keys = Object.keys(stats);
+        for (const key of keys) {
+          if (expectedMetrics.has(key)) {
+            expectedMetrics.delete(key);
+          }
         }
-      }
-      if (expectedMetrics.size === 0) {
-        sysClient.destroy();
-        done();
+        if (expectedMetrics.size === 0) {
+          sysClient.destroy();
+          done();
+        }
+      } catch (e) {
+        console.warn("failed to parse data as json:", result);
       }
     });
   });
