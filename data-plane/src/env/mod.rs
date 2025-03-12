@@ -87,7 +87,6 @@ impl NeedEnv {
                 .config_client
                 .get_cert_token()
                 .await
-                .map_err(crate::error::Error::from)
         })
         .await?;
 
