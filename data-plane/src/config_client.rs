@@ -1,10 +1,11 @@
+use crate::error::{self, Error};
 use async_trait::async_trait;
 use error::Result;
 use hyper::client::conn::{Connection as HyperConnection, SendRequest};
 use hyper::http::StatusCode;
 use hyper::{Body, Response};
-
 use serde::de::DeserializeOwned;
+use shared::bridge::{Bridge, BridgeClient, BridgeInterface, Direction};
 use shared::logging::TrxContext;
 use shared::server::config_server::requests::{
     ConfigServerPayload, DeleteObjectRequest, GetCertTokenResponseDataPlane, GetClockSyncResponse,
@@ -14,11 +15,6 @@ use shared::server::config_server::requests::{
 use shared::server::config_server::routes::ConfigServerPath;
 use tokio_retry::strategy::{jitter, ExponentialBackoff};
 use tokio_retry::Retry;
-
-use crate::connection;
-use crate::error::{self, Error};
-
-use connection::Connection;
 
 #[async_trait]
 pub trait StorageConfigClientInterface {
@@ -50,13 +46,13 @@ impl ConfigClient {
         &self,
     ) -> Result<(
         SendRequest<hyper::Body>,
-        HyperConnection<Connection, hyper::Body>,
+        HyperConnection<BridgeClient, hyper::Body>,
     )> {
-        let client_connection: Connection =
-            connection::get_socket(shared::ENCLAVE_CONFIG_PORT).await?;
-
+        let client_connection =
+            Bridge::get_client_connection(shared::ENCLAVE_CONFIG_PORT, Direction::EnclaveToHost)
+                .await?;
         let connection_info = hyper::client::conn::Builder::new()
-            .handshake::<Connection, hyper::Body>(client_connection)
+            .handshake::<BridgeClient, hyper::Body>(client_connection)
             .await
             .map_err(Error::Hyper)?;
 

@@ -2,7 +2,7 @@ use cadence::{BufferedUdpMetricSink, QueuingMetricSink, StatsdClient};
 use cadence_macros::{set_global_default, statsd_count};
 use shared::{publish_count, stats::StatsError};
 use std::net::UdpSocket;
-use shared::INTERNAL_VSOCK_PORT;
+use shared::INTERNAL_STATSD_PORT;
 use crate::configuration::EnclaveContext;
 
 pub struct StatsClient;
@@ -17,7 +17,7 @@ impl StatsClient {
     fn initialize_sink() -> Result<(), StatsError> {
         let target_ip = super::get_stats_target_ip();
         let socket = UdpSocket::bind("0.0.0.0:0")?;
-        let udp_sink = BufferedUdpMetricSink::from((target_ip, INTERNAL_VSOCK_PORT), socket)?;
+        let udp_sink = BufferedUdpMetricSink::from((target_ip, INTERNAL_STATSD_PORT), socket)?;
         let queuing_sink = QueuingMetricSink::from(udp_sink);
         let client = StatsdClient::from_sink("", queuing_sink);
         set_global_default(client);

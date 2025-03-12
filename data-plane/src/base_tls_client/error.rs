@@ -10,6 +10,8 @@ pub enum ClientError {
     SerdeError(#[from] serde_json::Error),
     #[error("Request to server failed with status: {0:?}")]
     FailedRequest(hyper::StatusCode),
+    #[error("Failed to open connection: {0}")]
+    ServerError(#[from] shared::server::error::ServerError),
     #[error("Client Error {0:?}")]
     General(String),
 }

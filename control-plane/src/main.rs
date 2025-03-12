@@ -82,16 +82,12 @@ async fn main() -> Result<()> {
             targets.push(external_target_addr);
         }
 
-        StatsProxy::spawn(shared::stats::INTERNAL_STATS_PROXY_ADDRESS, targets).await
+        StatsProxy::spawn(shared::INTERNAL_STATSD_PORT, targets).await
     });
 
     if external_metrics_enabled {
         tokio::spawn(async move {
-            StatsProxy::spawn(
-                shared::stats::EXTERNAL_STATS_PROXY_ADDRESS,
-                vec![external_target_addr],
-            )
-            .await
+            StatsProxy::spawn(shared::EXTERNAL_STATSD_PORT, vec![external_target_addr]).await
         });
     }
 

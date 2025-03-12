@@ -1,7 +1,5 @@
 use std::{io::{Error, Write}, sync::Mutex};
-use crate::{server::CID, INTERNAL_STATSD_PORT, EXTERNAL_STATSD_PORT};
 use cadence::{ext::{MultiLineWriter, SocketStats}, MetricError, MetricSink};
-use tokio_vsock::VsockStream;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -16,6 +14,8 @@ pub enum StatsError {
     FDUsageParseError,
     #[error("Couldn't read file descriptor info from /proc/sys/fs/file-nr")]
     FDUsageReadError,
+    #[error("Failed to create connection: {0}")]
+    ServerError(#[from] crate::server::error::ServerError)
 }
 
 #[macro_export]
@@ -54,17 +54,14 @@ macro_rules! publish_count_dynamic_label {
     };
 }
 
-pub const INTERNAL_STATS_PROXY_ADDRESS: (u16, CID) = (INTERNAL_STATSD_PORT, CID::Parent);
-pub const EXTERNAL_STATS_PROXY_ADDRESS: (u16, CID) = (EXTERNAL_STATSD_PORT, CID::Parent);
-
 #[derive(Debug)]
-pub struct VsockSink {
-  inner: VsockStream,
+pub struct LocalSink<T> {
+  inner: T,
   stats: SocketStats
 }
 
-impl VsockSink {
-  fn new(stats: SocketStats, stream: VsockStream) -> Self {
+impl<T: Write> LocalSink<T> {
+  fn new(stats: SocketStats, stream: T) -> Self {
     Self{ 
       stats,
       inner: stream
@@ -72,7 +69,7 @@ impl VsockSink {
   }
 }
 
-impl Write for VsockSink {
+impl<T: Write> Write for LocalSink<T> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.stats.update(self.inner.write(buf), buf.len())
     }
@@ -85,23 +82,23 @@ impl Write for VsockSink {
 const DEFAULT_BUFFER_SIZE: usize = 512;
 
 #[derive(Debug)]
-pub struct BufferedVsockStatsSink {
+pub struct BufferedLocalStatsSink<T: Write> {
   stats: SocketStats,
-  buffer: Mutex<MultiLineWriter<VsockSink>>
+  buffer: Mutex<MultiLineWriter<LocalSink<T>>>
 }
 
-impl std::convert::From<VsockStream> for BufferedVsockStatsSink {
-    fn from(value: VsockStream) -> Self {
+impl<T: Write> std::convert::From<T> for BufferedLocalStatsSink<T> {
+    fn from(value: T) -> Self {
         let stats = SocketStats::default();
-        let vsock_stream = VsockSink::new(stats.clone(), value);
+        let sink = LocalSink::new(stats.clone(), value);
         Self {
           stats,
-          buffer: Mutex::new(MultiLineWriter::new(vsock_stream, DEFAULT_BUFFER_SIZE))
+          buffer: Mutex::new(MultiLineWriter::new(sink, DEFAULT_BUFFER_SIZE))
         }
     }
 }
 
-impl MetricSink for BufferedVsockStatsSink {
+impl<T: Write> MetricSink for BufferedLocalStatsSink<T> {
     fn emit(&self, metric: &str) -> std::io::Result<usize> {
         let mut writer = self.buffer.lock().unwrap();
         writer.write(metric.as_bytes())

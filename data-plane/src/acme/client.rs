@@ -4,12 +4,10 @@ use crate::acme::error::AcmeError;
 use crate::configuration;
 use async_trait::async_trait;
 use hyper::client::conn::{Connection as HyperConnection, SendRequest};
-
+use shared::bridge::{Bridge, BridgeClient, BridgeInterface, Direction};
 use hyper::{Body, Response};
 use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore, ServerName};
 use tokio_rustls::{client::TlsStream, TlsConnector};
-
-use crate::connection::{self, Connection};
 
 #[async_trait]
 pub trait AcmeClientInterface: Default {
@@ -63,18 +61,18 @@ impl AcmeClient {
     ) -> Result<
         (
             SendRequest<hyper::Body>,
-            HyperConnection<TlsStream<Connection>, hyper::Body>,
+            HyperConnection<TlsStream<BridgeClient>, hyper::Body>,
         ),
         AcmeError,
     > {
-        let client_connection: Connection = connection::get_socket(self.port).await?;
+        let client_connection = Bridge::get_client_connection(self.port, Direction::EnclaveToHost).await?;
         let connection = self
             .tls_connector
             .connect(self.server_name.clone(), client_connection)
             .await?;
 
         let connection_info = hyper::client::conn::Builder::new()
-            .handshake::<TlsStream<Connection>, hyper::Body>(connection)
+            .handshake::<TlsStream<BridgeClient>, hyper::Body>(connection)
             .await?;
 
         Ok(connection_info)

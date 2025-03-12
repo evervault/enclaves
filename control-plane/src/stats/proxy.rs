@@ -1,5 +1,5 @@
 use crate::error::Result;
-use shared::server::{get_vsock_server, Listener, CID};
+use shared::{bridge::{Bridge, BridgeInterface, Direction}, server::Listener};
 use std::net::SocketAddr;
 use std::ops::Deref;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -7,9 +7,9 @@ use tokio::net::UdpSocket;
 
 pub struct StatsProxy;
 impl StatsProxy {
-    pub async fn spawn((port, cid): (u16, CID), target_addrs: Vec<SocketAddr>) -> Result<()> {
+    pub async fn spawn(port: u16, target_addrs: Vec<SocketAddr>) -> Result<()> {
         log::info!("Started control plane stats proxy");
-        let mut server = get_vsock_server(port, cid).await?;
+        let mut server = Bridge::get_listener(port, Direction::HostToEnclave).await?;
         let target_addrs = std::sync::Arc::new(target_addrs);
         loop {
             match server.accept().await {

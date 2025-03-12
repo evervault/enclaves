@@ -22,8 +22,10 @@ use shared::server::config_server::requests::{
 };
 use shared::server::config_server::requests::{JwkResponse, JwsResponse, SignatureType};
 use shared::server::config_server::routes::ConfigServerPath;
-use shared::server::CID::Parent;
-use shared::server::{get_vsock_server, Listener};
+use shared::{
+    bridge::{Bridge, BridgeInterface},
+    server::Listener,
+};
 use std::str::FromStr;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
@@ -49,7 +51,10 @@ impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> 
     }
 
     pub async fn listen(&self) -> ServerResult<()> {
-        let mut enclave_conn = get_vsock_server(shared::ENCLAVE_CONFIG_PORT, Parent).await?;
+        let mut enclave_conn = Bridge::get_listener(
+            shared::ENCLAVE_CONFIG_PORT,
+            shared::bridge::Direction::HostToEnclave,
+        ).await?;
 
         let server = conn::Http::new();
 

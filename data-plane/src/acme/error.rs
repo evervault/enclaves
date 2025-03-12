@@ -55,6 +55,8 @@ pub enum AcmeError {
     SystemTimeError(#[from] std::time::SystemTimeError),
     #[error("ACME Error {0:?}")]
     AcmeError(#[from] shared::acme::error::AcmeError),
+    #[error("Error creating connection to host: {0}")]
+    ServerError(#[from] shared::server::error::ServerError),
     #[error("ACME Error {0:?}")]
     General(String),
 }

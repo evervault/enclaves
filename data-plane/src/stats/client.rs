@@ -1,8 +1,8 @@
 use cadence::{QueuingMetricSink, StatsdClient};
 use cadence_macros::{set_global_default, statsd_count, statsd_gauge};
-use shared::server::get_vsock_client;
-use shared::stats::{BufferedVsockStatsSink, StatsError, INTERNAL_STATS_PROXY_ADDRESS};
-use shared::{publish_count, publish_count_dynamic_label, publish_gauge};
+use shared::bridge::{Bridge, BridgeInterface, Direction};
+use shared::stats::{BufferedLocalStatsSink, StatsError};
+use shared::{publish_count, publish_count_dynamic_label, publish_gauge, INTERNAL_STATSD_PORT};
 use std::fs;
 use std::time::Duration;
 
@@ -13,17 +13,20 @@ pub struct StatsClient;
 impl StatsClient {
     pub async fn init() {
         match Self::initialize_sink().await {
-          Err(e) => log::error!("Couldn't init statsd client: {e}"),
-          Ok(_) => Self::schedule_system_metrics_reporter(),
+            Err(e) => log::error!("Couldn't init statsd client: {e}"),
+            Ok(_) => Self::schedule_system_metrics_reporter(),
         }
     }
 
     async fn initialize_sink() -> Result<(), StatsError> {
-        let (stats_vsock_port, cid) = INTERNAL_STATS_PROXY_ADDRESS;
-        let stream = get_vsock_client(stats_vsock_port, cid)
-            .await
-            .unwrap();
-        let statsd_sink = BufferedVsockStatsSink::from(stream);
+        let stream =
+            Bridge::get_client_connection(INTERNAL_STATSD_PORT, Direction::EnclaveToHost).await?;
+        // Downgrade to std TcpStream required to be compatible with the trait bounds of cadence which requires `std::io::Write`
+        #[cfg(not(feature = "enclave"))]
+        let stream = stream
+            .into_std()
+            .expect("Failed to downgrade tokio tcp stream to std");
+        let statsd_sink = BufferedLocalStatsSink::from(stream);
         let queuing_sink = QueuingMetricSink::from(statsd_sink);
         let client = StatsdClient::from_sink("", queuing_sink);
         set_global_default(client);

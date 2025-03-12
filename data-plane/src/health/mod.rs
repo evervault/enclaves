@@ -4,14 +4,9 @@ use agent::UserProcessHealthcheckSender;
 
 use hyper::header;
 use hyper::{service::service_fn, Body, Response};
+use shared::bridge::{Bridge, BridgeInterface, BridgeServer};
 use shared::notify_shutdown::Service;
-use shared::server::get_vsock_server;
 use shared::server::health::{DataPlaneDiagnostic, DataPlaneState, UserProcessHealth};
-#[cfg(not(feature = "enclave"))]
-use shared::server::TcpServer;
-#[cfg(feature = "enclave")]
-use shared::server::VsockServer;
-use shared::server::CID::Enclave;
 use shared::{server::Listener, ENCLAVE_HEALTH_CHECK_PORT};
 use tokio::sync::mpsc::{Sender, UnboundedSender};
 
@@ -43,27 +38,29 @@ pub async fn build_health_check_server(
 ) -> shared::server::error::ServerResult<(HealthcheckServer, Sender<Service>)> {
     let (user_process_healthcheck_channel, shutdown_notifier) =
         spawn_customer_healthcheck_agent(customer_process_port, healthcheck, use_tls);
-    let health_check_server = HealthcheckServer::new(user_process_healthcheck_channel).await?;
+    let listener = Bridge::get_listener(
+        ENCLAVE_HEALTH_CHECK_PORT,
+        shared::bridge::Direction::EnclaveToHost,
+    )
+    .await?;
+    let health_check_server = HealthcheckServer::new(user_process_healthcheck_channel, listener);
     Ok((health_check_server, shutdown_notifier))
 }
 
 pub struct HealthcheckServer {
     user_process_healthcheck_channel: UnboundedSender<HealthcheckStatusRequest>,
-    #[cfg(feature = "enclave")]
-    listener: VsockServer,
-    #[cfg(not(feature = "enclave"))]
-    listener: TcpServer,
+    listener: BridgeServer,
 }
 
 impl HealthcheckServer {
-    async fn new(
+    fn new(
         user_process_healthcheck_channel: UnboundedSender<HealthcheckStatusRequest>,
-    ) -> shared::server::error::ServerResult<Self> {
-        let listener = get_vsock_server(ENCLAVE_HEALTH_CHECK_PORT, Enclave).await?;
-        Ok(Self {
+        listener: BridgeServer,
+    ) -> Self {
+        Self {
             listener,
             user_process_healthcheck_channel,
-        })
+        }
     }
 
     pub async fn run(mut self) {

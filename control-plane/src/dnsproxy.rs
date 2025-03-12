@@ -4,8 +4,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 use shared::server::egress::check_dns_allowed_for_domain;
 use shared::server::egress::{cache_ip_for_allowlist, EgressDestinations};
-use shared::server::CID::Parent;
-use shared::server::{get_vsock_server, Listener};
+use shared::{server::Listener, bridge::{Bridge, BridgeInterface}};
 use shared::DNS_PROXY_VSOCK_PORT;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -53,7 +52,7 @@ impl DnsProxy {
     }
 
     pub async fn listen(self) -> Result<()> {
-        let mut server = get_vsock_server(DNS_PROXY_VSOCK_PORT, Parent).await?;
+        let mut server = Bridge::get_listener(DNS_PROXY_VSOCK_PORT, shared::bridge::Direction::HostToEnclave).await?;
 
         let allowed_domains = shared::server::egress::get_egress_allow_list_from_env();
         let mut rng = ChaCha12Rng::from_entropy();

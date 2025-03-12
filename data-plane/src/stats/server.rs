@@ -1,9 +1,8 @@
 use bytes::Bytes;
-use shared::server::get_vsock_client;
-use shared::stats::EXTERNAL_STATS_PROXY_ADDRESS;
-use shared::ENCLAVE_STATSD_PORT;
-use tokio::net::UdpSocket;
+use shared::bridge::{Bridge, BridgeInterface, Direction};
+use shared::{ENCLAVE_STATSD_PORT, EXTERNAL_STATSD_PORT};
 use tokio::io::AsyncWriteExt;
+use tokio::net::UdpSocket;
 
 pub struct StatsProxy;
 
@@ -11,10 +10,10 @@ impl StatsProxy {
     pub async fn listen() -> Result<(), std::io::Error> {
         let socket = UdpSocket::bind(format!("127.0.0.1:{}", ENCLAVE_STATSD_PORT)).await?;
 
-        let (external_vsock_port, cid) = EXTERNAL_STATS_PROXY_ADDRESS;
-        let mut stream = get_vsock_client(external_vsock_port, cid)
-            .await
-            .unwrap();
+        let mut stream =
+            Bridge::get_client_connection(EXTERNAL_STATSD_PORT, Direction::EnclaveToHost)
+                .await
+                .unwrap();
 
         let mut buffer = [0; 512];
         loop {

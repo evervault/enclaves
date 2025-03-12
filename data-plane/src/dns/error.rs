@@ -19,4 +19,6 @@ pub enum DNSError {
     EgressError(#[from] EgressError),
     #[error("DNS lookup failed due to a timeout after: {0}")]
     DNSTimeout(#[from] tokio::time::error::Elapsed),
+    #[error("Failed to create connection to host: {0}")]
+    ServerError(#[from] shared::server::error::ServerError),
 }

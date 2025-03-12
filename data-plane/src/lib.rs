@@ -13,7 +13,6 @@ pub mod cache;
 pub mod cert_provisioner_client;
 pub mod config_client;
 pub mod configuration;
-pub mod connection;
 pub mod crypto;
 pub mod dns;
 pub mod e3client;
