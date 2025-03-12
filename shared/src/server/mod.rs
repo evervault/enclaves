@@ -36,11 +36,7 @@ pub trait Listener: Sized {
 
 #[cfg(feature = "enclave")]
 pub async fn get_vsock_server(port: u16, cid: CID) -> error::ServerResult<VsockServer> {
-    let context_id = match cid {
-        CID::Parent => PARENT_CID,
-        CID::Enclave => ENCLAVE_CID,
-    };
-    let listener = VsockServer::bind(context_id, port.into()).await?;
+    let listener = VsockServer::bind(cid.into(), port.into()).await?;
     Ok(listener)
 }
 
@@ -49,17 +45,24 @@ pub async fn get_vsock_server_with_proxy_protocol(
     port: u16,
     cid: CID,
 ) -> error::ServerResult<VsockServerWithProxyProtocol> {
-    let context_id = match cid {
-        CID::Parent => PARENT_CID,
-        CID::Enclave => ENCLAVE_CID,
-    };
-    let listener = VsockServerWithProxyProtocol::bind(context_id, port.into()).await?;
+    let listener =
+        VsockServerWithProxyProtocol::bind(cid.into(), port.into()).await?;
     Ok(listener)
 }
 
+#[derive(Clone, Copy, Debug)]
 pub enum CID {
     Parent,
     Enclave,
+}
+
+impl std::convert::From<CID> for u32 {
+    fn from(value: CID) -> Self {
+        match value {
+          CID::Parent => PARENT_CID,
+          CID::Enclave => ENCLAVE_CID,
+        }
+    }
 }
 
 #[cfg(not(feature = "enclave"))]
@@ -83,10 +86,7 @@ pub async fn get_vsock_server_with_proxy_protocol(
 fn get_local_ip(cid: CID) -> std::net::IpAddr {
     use std::net::Ipv4Addr;
     // Local docker setup
-    let ip = match cid {
-        CID::Parent => PARENT_IP,
-        CID::Enclave => ENCLAVE_IP,
-    };
+    let ip: u32 = cid.into();
     std::net::IpAddr::V4(ip.parse::<Ipv4Addr>().expect("Invalid IP address"))
 }
 
@@ -100,11 +100,7 @@ impl proxy_protocol::ProxiedConnection for TcpStream {}
 
 #[cfg(feature = "enclave")]
 pub async fn get_vsock_client(port: u16, cid: CID) -> Result<VsockStream, tokio::io::Error> {
-    let context_id = match cid {
-        CID::Parent => PARENT_CID,
-        CID::Enclave => ENCLAVE_CID,
-    };
-    VsockStream::connect(context_id, port.into()).await
+    VsockStream::connect(cid.into(), port.into()).await
 }
 
 #[cfg(feature = "enclave")]

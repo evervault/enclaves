@@ -1,26 +1,30 @@
-use cadence::StatsdClient;
-use cadence::{BufferedUdpMetricSink, QueuingMetricSink};
+use cadence::{QueuingMetricSink, StatsdClient};
 use cadence_macros::{set_global_default, statsd_count, statsd_gauge};
-use shared::stats::StatsError;
-use shared::{publish_count, publish_count_dynamic_label, publish_gauge, ENCLAVE_STATSD_PORT};
+use shared::server::get_vsock_client;
+use shared::stats::{BufferedVsockStatsSink, StatsError, INTERNAL_STATS_PROXY_ADDRESS};
+use shared::{publish_count, publish_count_dynamic_label, publish_gauge};
 use std::fs;
-use std::net::UdpSocket;
+use std::time::Duration;
 
 use crate::EnclaveContext;
 
 pub struct StatsClient;
 
 impl StatsClient {
-    pub fn init() {
-        if let Err(e) = Self::initialize_sink() {
-            log::error!("Couldn't init statsd client: {e}");
+    pub async fn init() {
+        match Self::initialize_sink().await {
+          Err(e) => log::error!("Couldn't init statsd client: {e}"),
+          Ok(_) => Self::schedule_system_metrics_reporter(),
         }
     }
 
-    fn initialize_sink() -> Result<(), StatsError> {
-        let socket = UdpSocket::bind("0.0.0.0:0")?;
-        let udp_sink = BufferedUdpMetricSink::from(("127.0.0.1", ENCLAVE_STATSD_PORT), socket)?;
-        let queuing_sink = QueuingMetricSink::from(udp_sink);
+    async fn initialize_sink() -> Result<(), StatsError> {
+        let (stats_vsock_port, cid) = INTERNAL_STATS_PROXY_ADDRESS;
+        let stream = get_vsock_client(stats_vsock_port, cid)
+            .await
+            .unwrap();
+        let statsd_sink = BufferedVsockStatsSink::from(stream);
+        let queuing_sink = QueuingMetricSink::from(statsd_sink);
         let client = StatsdClient::from_sink("", queuing_sink);
         set_global_default(client);
         Ok(())
@@ -66,13 +70,7 @@ impl StatsClient {
         }
     }
 
-    pub fn record_system_metrics() {
-        if let Err(e) = Self::try_record_system_metrics() {
-            log::error!("Couldn't get system metrics: {e}");
-        }
-    }
-
-    pub fn try_record_system_metrics() -> Result<(), StatsError> {
+    fn try_record_system_metrics() -> Result<(), StatsError> {
         let mem_info =
             sys_info::mem_info().map_err(|e| log::error!("Couldn't obtain mem info: {e}"));
         let cpu = sys_info::loadavg().map_err(|e| log::error!("Couldn't obtain cpu info: {e}"));
@@ -110,5 +108,24 @@ impl StatsClient {
         }
 
         Ok(())
+    }
+
+    fn schedule_system_metrics_reporter() {
+        // Take interval in seconds from the SYSTEM_STATS_INTERVAL variable, defaulting to every minute.
+        let interval = std::env::var("SYSTEM_STATS_INTERVAL")
+            .ok()
+            .and_then(|interval_str| interval_str.parse::<u64>().ok())
+            .unwrap_or(60);
+
+        tokio::task::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(interval));
+
+            loop {
+                interval.tick().await;
+                if let Err(e) = Self::try_record_system_metrics() {
+                    log::error!("Couldn't get system metrics: {e}");
+                }
+            }
+        });
     }
 }

@@ -25,7 +25,6 @@ tls-parser = { version = "0.11.0" }
 ppp = { version = "2.2.0" }
 tokio-rustls = { version = "0.24.1", features = ["dangerous_configuration"] }
 sys-info = "0.9.1"
-cadence = "0.29.0"
 httparse = "1.8.0"
 openssl = { workspace = true }
 base64 = "0.13.0"
@@ -35,6 +34,7 @@ ttl_cache = { version ="0.5.1", optional = true }
 dns-parser = { version = "0.8.0", optional = true }
 pin-project = "1"
 log = { version = "0.4.19", features = ["max_level_debug"] }
+cadence.workspace = true
 
 [dev-dependencies]
 tokio-test = "0.4.2"

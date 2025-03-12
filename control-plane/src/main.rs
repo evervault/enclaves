@@ -1,9 +1,10 @@
 use control_plane::clients::{cert_provisioner, mtls_config};
+use control_plane::configuration::get_external_metrics_enabled;
 use control_plane::dns::{ExternalAsyncDnsResolver, InternalAsyncDnsResolver};
 use control_plane::health::HealthCheckServer;
 use control_plane::orchestration::Orchestration;
-use control_plane::stats_client::StatsClient;
-use control_plane::stats_proxy::StatsProxy;
+use control_plane::stats::client::StatsClient;
+use control_plane::stats::proxy::StatsProxy;
 use control_plane::{config_server, tls_proxy};
 use shared::notify_shutdown::{NotifyShutdown, Service};
 use shared::{print_version, utils::pipe_streams, ENCLAVE_CONNECT_PORT};
@@ -71,7 +72,28 @@ async fn main() -> Result<()> {
 
     listen_for_shutdown_signal();
 
-    tokio::spawn(StatsProxy::listen());
+    let external_metrics_enabled = get_external_metrics_enabled();
+    let internal_target_addr = SocketAddr::new(control_plane::stats::get_stats_target_ip(), 8125);
+    let external_target_addr = SocketAddr::new(control_plane::stats::get_stats_target_ip(), 8126);
+
+    tokio::spawn(async move {
+        let mut targets = vec![internal_target_addr];
+        if external_metrics_enabled {
+            targets.push(external_target_addr);
+        }
+
+        StatsProxy::spawn(shared::stats::INTERNAL_STATS_PROXY_ADDRESS, targets).await
+    });
+
+    if external_metrics_enabled {
+        tokio::spawn(async move {
+            StatsProxy::spawn(
+                shared::stats::EXTERNAL_STATS_PROXY_ADDRESS,
+                vec![external_target_addr],
+            )
+            .await
+        });
+    }
 
     tokio::spawn(
         e3_proxy

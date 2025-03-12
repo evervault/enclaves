@@ -97,7 +97,7 @@ use crate::base_tls_client::tls_client_config::get_tls_client_config;
 use crate::base_tls_client::{AuthType, BaseClient, ClientError, OpenServerCertVerifier};
 use crate::configuration;
 use crate::crypto::token::TokenClient;
-use crate::stats_client::StatsClient;
+use crate::stats::client::StatsClient;
 
 impl E3Client {
     pub fn new() -> Self {
