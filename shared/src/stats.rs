@@ -1,5 +1,11 @@
-use std::{io::{Error, Write}, sync::Mutex};
-use cadence::{ext::{MultiLineWriter, SocketStats}, MetricError, MetricSink};
+use cadence::{
+    ext::{MultiLineWriter, SocketStats},
+    MetricError, MetricSink,
+};
+use std::{
+    io::{Error, Write},
+    sync::Mutex,
+};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -15,7 +21,7 @@ pub enum StatsError {
     #[error("Couldn't read file descriptor info from /proc/sys/fs/file-nr")]
     FDUsageReadError,
     #[error("Failed to create connection: {0}")]
-    ServerError(#[from] crate::server::error::ServerError)
+    ServerError(#[from] crate::server::error::ServerError),
 }
 
 #[macro_export]
@@ -56,17 +62,17 @@ macro_rules! publish_count_dynamic_label {
 
 #[derive(Debug)]
 pub struct LocalSink<T> {
-  inner: T,
-  stats: SocketStats
+    inner: T,
+    stats: SocketStats,
 }
 
 impl<T: Write> LocalSink<T> {
-  fn new(stats: SocketStats, stream: T) -> Self {
-    Self{ 
-      stats,
-      inner: stream
+    fn new(stats: SocketStats, stream: T) -> Self {
+        Self {
+            stats,
+            inner: stream,
+        }
     }
-  }
 }
 
 impl<T: Write> Write for LocalSink<T> {
@@ -83,8 +89,8 @@ const DEFAULT_BUFFER_SIZE: usize = 512;
 
 #[derive(Debug)]
 pub struct BufferedLocalStatsSink<T: Write> {
-  stats: SocketStats,
-  buffer: Mutex<MultiLineWriter<LocalSink<T>>>
+    stats: SocketStats,
+    buffer: Mutex<MultiLineWriter<LocalSink<T>>>,
 }
 
 impl<T: Write> std::convert::From<T> for BufferedLocalStatsSink<T> {
@@ -92,8 +98,8 @@ impl<T: Write> std::convert::From<T> for BufferedLocalStatsSink<T> {
         let stats = SocketStats::default();
         let sink = LocalSink::new(stats.clone(), value);
         Self {
-          stats,
-          buffer: Mutex::new(MultiLineWriter::new(sink, DEFAULT_BUFFER_SIZE))
+            stats,
+            buffer: Mutex::new(MultiLineWriter::new(sink, DEFAULT_BUFFER_SIZE)),
         }
     }
 }

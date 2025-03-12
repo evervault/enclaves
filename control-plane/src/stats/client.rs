@@ -1,9 +1,9 @@
+use crate::configuration::EnclaveContext;
 use cadence::{BufferedUdpMetricSink, QueuingMetricSink, StatsdClient};
 use cadence_macros::{set_global_default, statsd_count};
+use shared::INTERNAL_STATSD_PORT;
 use shared::{publish_count, stats::StatsError};
 use std::net::UdpSocket;
-use shared::INTERNAL_STATSD_PORT;
-use crate::configuration::EnclaveContext;
 
 pub struct StatsClient;
 

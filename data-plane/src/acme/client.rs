@@ -4,8 +4,8 @@ use crate::acme::error::AcmeError;
 use crate::configuration;
 use async_trait::async_trait;
 use hyper::client::conn::{Connection as HyperConnection, SendRequest};
-use shared::bridge::{Bridge, BridgeClient, BridgeInterface, Direction};
 use hyper::{Body, Response};
+use shared::bridge::{Bridge, BridgeClient, BridgeInterface, Direction};
 use tokio_rustls::rustls::{ClientConfig, OwnedTrustAnchor, RootCertStore, ServerName};
 use tokio_rustls::{client::TlsStream, TlsConnector};
 
@@ -65,7 +65,8 @@ impl AcmeClient {
         ),
         AcmeError,
     > {
-        let client_connection = Bridge::get_client_connection(self.port, Direction::EnclaveToHost).await?;
+        let client_connection =
+            Bridge::get_client_connection(self.port, Direction::EnclaveToHost).await?;
         let connection = self
             .tls_connector
             .connect(self.server_name.clone(), client_connection)

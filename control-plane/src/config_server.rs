@@ -54,7 +54,8 @@ impl<T: StorageClientInterface + Clone + Send + Sync + 'static> ConfigServer<T> 
         let mut enclave_conn = Bridge::get_listener(
             shared::ENCLAVE_CONFIG_PORT,
             shared::bridge::Direction::HostToEnclave,
-        ).await?;
+        )
+        .await?;
 
         let server = conn::Http::new();
 

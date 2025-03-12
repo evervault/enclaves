@@ -105,8 +105,8 @@ pub use enclave_bridge::{BridgeClient, BridgeServer, VSockBridge as Bridge};
 mod local_bridge {
     use super::*;
     use crate::server::TcpServer;
-    use tokio::net::TcpStream;
     use std::net::IpAddr;
+    use tokio::net::TcpStream;
 
     /// Local dev IP address for the enclave process. Defined in the docker-compose file in this repo.
     pub const ENCLAVE_IP: &str = "172.20.0.7";
@@ -136,7 +136,7 @@ mod local_bridge {
             direction: Direction,
         ) -> Result<Self::ClientConnection, ServerError> {
             let ip_addr: IpAddr = direction.get_client_cid().into();
-            Ok(TcpStream::connect((ip_addr, port.into())).await?)
+            Ok(TcpStream::connect((ip_addr, port)).await?)
         }
 
         async fn get_listener(
@@ -144,7 +144,7 @@ mod local_bridge {
             direction: Direction,
         ) -> Result<Self::Listener, ServerError> {
             let ip_addr: IpAddr = direction.get_server_cid().into();
-            TcpServer::bind((ip_addr, port.into())).await
+            TcpServer::bind((ip_addr, port)).await
         }
     }
 

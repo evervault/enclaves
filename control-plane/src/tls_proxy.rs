@@ -1,7 +1,10 @@
 use crate::dns;
 use crate::error::Result;
 use shared::server::sni::get_hostname;
-use shared::{bridge::{Bridge, BridgeInterface}, server::Listener};
+use shared::{
+    bridge::{Bridge, BridgeInterface},
+    server::Listener,
+};
 
 use std::net::SocketAddr;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -66,7 +69,8 @@ impl TlsProxy {
     }
 
     pub async fn listen(self) -> Result<()> {
-        let mut enclave_conn = Bridge::get_listener(self.vsock_port, shared::bridge::Direction::HostToEnclave).await?;
+        let mut enclave_conn =
+            Bridge::get_listener(self.vsock_port, shared::bridge::Direction::HostToEnclave).await?;
 
         log::info!(
             "Running TLS proxy to {:?} on {}",

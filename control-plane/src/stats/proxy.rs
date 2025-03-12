@@ -1,5 +1,8 @@
 use crate::error::Result;
-use shared::{bridge::{Bridge, BridgeInterface, Direction}, server::Listener};
+use shared::{
+    bridge::{Bridge, BridgeInterface, Direction},
+    server::Listener,
+};
 use std::net::SocketAddr;
 use std::ops::Deref;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -27,7 +30,7 @@ impl StatsProxy {
         #[allow(unreachable_code)]
         Ok(())
     }
-    
+
     async fn proxy_connection<T: AsyncRead + AsyncWrite + Unpin>(
         mut stream: T,
         target_addrs: std::sync::Arc<Vec<SocketAddr>>,
