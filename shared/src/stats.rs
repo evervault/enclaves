@@ -85,9 +85,6 @@ impl<T: Write> Write for LocalSink<T> {
     }
 }
 
-#[cfg(feature = "test-compat")]
-const DEFAULT_BUFFER_SIZE: usize = 128;
-#[cfg(not(feature = "test-compat"))]
 const DEFAULT_BUFFER_SIZE: usize = 512;
 
 #[derive(Debug)]
@@ -100,9 +97,15 @@ impl<T: Write> std::convert::From<T> for BufferedLocalStatsSink<T> {
     fn from(value: T) -> Self {
         let stats = SocketStats::default();
         let sink = LocalSink::new(stats.clone(), value);
+        
+        let buffer_size = std::env::var("STATS_BUFFER_SIZE")
+            .ok()
+            .and_then(|buffer_size| buffer_size.parse().ok())
+            .unwrap_or(DEFAULT_BUFFER_SIZE);
+
         Self {
             stats,
-            buffer: Mutex::new(MultiLineWriter::new(sink, DEFAULT_BUFFER_SIZE)),
+            buffer: Mutex::new(MultiLineWriter::new(sink, buffer_size)),
         }
     }
 }

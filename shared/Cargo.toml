@@ -49,5 +49,3 @@ crate-type = ["lib"]
 default = []
 network_egress = ["dep:once_cell", "dep:ttl_cache", "dep:dns-parser"]
 enclave = ["dep:tokio-vsock"]
-# This feature is used to change how certain features within the Enclave are configured to be easier to test e.g. reducing the buffer size of the statsd client
-test-compat = []

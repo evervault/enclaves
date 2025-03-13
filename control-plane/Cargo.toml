@@ -46,7 +46,6 @@ network_egress = ["shared/network_egress"]
 enclave = ["dep:tokio-vsock", "shared/enclave"]
 not_enclave = ["network_egress"]
 release_logging = ["log/release_max_level_info"]
-test-compat = ["shared/test-compat"]
 
 [lints.rust]
 unexpected_cfgs = { level = "allow", check-cfg = ['cfg(staging)'] }
