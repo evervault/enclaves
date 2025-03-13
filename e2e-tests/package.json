@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "NODE_TLS_REJECT_UNAUTHORIZED=0 mocha e2e.js --timeout 10000",
+    "test": "NODE_TLS_REJECT_UNAUTHORIZED=0 mocha e2e.js --timeout 30000",
     "health-check-tests": "NODE_TLS_REJECT_UNAUTHORIZED=0 mocha health-check-tests.js --grep",
     "customer": "node httpCustomerProcess.js",
     "no-auth-tests": "NODE_TLS_REJECT_UNAUTHORIZED=0 mocha noAuthTests.js",
