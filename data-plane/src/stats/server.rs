@@ -7,13 +7,11 @@ use tokio::net::UdpSocket;
 pub struct StatsProxy;
 
 impl StatsProxy {
-    pub async fn listen() -> Result<(), std::io::Error> {
+    pub async fn listen() -> Result<(), shared::server::error::ServerError> {
         let socket = UdpSocket::bind(format!("127.0.0.1:{}", ENCLAVE_STATSD_PORT)).await?;
 
         let mut stream =
-            Bridge::get_client_connection(EXTERNAL_STATSD_PORT, Direction::EnclaveToHost)
-                .await
-                .unwrap();
+            Bridge::get_client_connection(EXTERNAL_STATSD_PORT, Direction::EnclaveToHost).await?;
 
         let mut buffer = [0; 512];
         loop {

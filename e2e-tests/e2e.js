@@ -175,8 +175,12 @@ describe("Enclave is runnning", () => {
 
     setTimeout(() => {
       sysClient.destroy();
+      console.log(
+        "[FAILED TEST] Remaining metrics",
+        JSON.stringify(Array.from(expectedMetrics), undefined, 2)
+      );
       done(new Error("Test did not complete within 60s"));
-    }, 60_000);
+    }, 20_000);
 
     sysClient.on("data", function (data) {
       const result = data.toString().replace(/'/g, '"').replace(/END/g, "");

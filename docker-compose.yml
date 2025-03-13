@@ -36,7 +36,6 @@ services:
       - CUSTOMER_PROCESS=${CUSTOMER_PROCESS}
       - AWS_REGION=us-east-1
       - TEST_EGRESS_IP=${TEST_EGRESS_IP}
-      - SYSTEM_STATS_INTERVAL=5
   control-plane:
     build:
       dockerfile: control-plane.Dockerfile
@@ -63,4 +62,3 @@ services:
       - EV_API_KEY_AUTH=${EV_API_KEY_AUTH:?No api key auth set, failing fast}
       - CUSTOMER_PROCESS=${CUSTOMER_PROCESS}   
       - AWS_REGION=us-east-1    
-      - EXTERNAL_METRICS_ENABLED=true
