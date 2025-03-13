@@ -85,6 +85,9 @@ impl<T: Write> Write for LocalSink<T> {
     }
 }
 
+#[cfg(feature = "test-compat")]
+const DEFAULT_BUFFER_SIZE: usize = 128;
+#[cfg(not(feature = "test-compat"))]
 const DEFAULT_BUFFER_SIZE: usize = 512;
 
 #[derive(Debug)]
