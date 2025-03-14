@@ -158,11 +158,6 @@ describe("POST data to enclave", () => {
 describe("Enclave is runnning", () => {
   // Statsd tests are async and wait for data to be published by the Cage. Adding done callback to prevent early exit.
   it("system metrics are sent to statsD", (done) => {
-    const sysClient = new net.Socket();
-    sysClient.connect(8126, "127.0.0.1", function () {
-      sysClient.write("gauges");
-    });
-
     const expectedMetrics = new Set([
       "evervault.enclaves.memory.total;enclave_uuid=enclave_123;app_uuid=app_12345678",
       "evervault.enclaves.memory.avail;enclave_uuid=enclave_123;app_uuid=app_12345678",
@@ -173,7 +168,20 @@ describe("Enclave is runnning", () => {
       "evervault.enclaves.fd.free;enclave_uuid=enclave_123;app_uuid=app_12345678",
     ]);
 
-    setTimeout(() => {
+    const sysClient = new net.Socket();
+
+    let intervalId = null;
+    sysClient.connect(8126, "127.0.0.1", function () {
+      intervalId = setInterval(() => {
+        // Poll client for new metrics.
+        sysClient.write("gauges");
+      }, 1_000);
+    });
+
+    const timeoutId = setTimeout(() => {
+      if (intervalId != null) {
+        clearInterval(intervalId);
+      }
       sysClient.destroy();
       console.log(
         "[FAILED TEST] Remaining metrics",
@@ -195,6 +203,10 @@ describe("Enclave is runnning", () => {
         }
         if (expectedMetrics.size === 0) {
           sysClient.destroy();
+          clearTimeout(timeoutId);
+          if (intervalId != null) {
+            clearInterval(intervalId);
+          }
           done();
         }
       } catch (e) {

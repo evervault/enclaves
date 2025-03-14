@@ -5,7 +5,7 @@ use shared::{
 };
 use std::net::SocketAddr;
 use std::ops::Deref;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
 use tokio::net::UdpSocket;
 
 pub struct StatsProxy;
@@ -37,15 +37,18 @@ impl StatsProxy {
     ) -> Result<()> {
         let socket = UdpSocket::bind("0.0.0.0:0").await?;
         let mut request_buffer = [0; 512];
-        let packet_size = stream.read(&mut request_buffer).await?;
 
-        for addr in target_addrs.deref() {
-            if let Err(e) = socket.send_to(&request_buffer[..packet_size], addr).await {
-                log::error!("An error occurred while forwarding metrics to the remote server: {e}");
+        loop {
+            let packet_size = stream.read(&mut request_buffer).await?;
+            for addr in target_addrs.deref() {
+                if let Err(e) = socket.send_to(&request_buffer[..packet_size], addr).await {
+                    log::error!(
+                        "An error occurred while forwarding metrics to the remote server: {e}"
+                    );
+                }
             }
+            request_buffer.fill(0);
         }
-
-        stream.flush().await?;
         Ok(())
     }
 }
