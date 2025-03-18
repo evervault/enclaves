@@ -3,8 +3,8 @@ use shared::{
     bridge::{Bridge, BridgeInterface, Direction},
     server::Listener,
 };
-use std::ops::Deref;
 use std::net::SocketAddr;
+use std::ops::Deref;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
 use tokio::net::UdpSocket;
 
