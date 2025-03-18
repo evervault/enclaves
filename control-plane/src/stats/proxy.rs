@@ -3,8 +3,8 @@ use shared::{
     bridge::{Bridge, BridgeInterface, Direction},
     server::Listener,
 };
-use std::net::SocketAddr;
 use std::ops::Deref;
+use std::net::SocketAddr;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
 use tokio::net::UdpSocket;
 
@@ -40,6 +40,9 @@ impl StatsProxy {
 
         loop {
             let packet_size = stream.read(&mut request_buffer).await?;
+            if packet_size == 0 {
+                return Ok(());
+            }
             for addr in target_addrs.deref() {
                 if let Err(e) = socket.send_to(&request_buffer[..packet_size], addr).await {
                     log::error!(
@@ -49,6 +52,5 @@ impl StatsProxy {
             }
             request_buffer.fill(0);
         }
-        Ok(())
     }
 }

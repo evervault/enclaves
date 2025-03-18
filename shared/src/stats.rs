@@ -97,7 +97,7 @@ impl<T: Write> std::convert::From<T> for BufferedLocalStatsSink<T> {
     fn from(value: T) -> Self {
         let stats = SocketStats::default();
         let sink = LocalSink::new(stats.clone(), value);
-        
+
         let buffer_size = std::env::var("STATS_BUFFER_SIZE")
             .ok()
             .and_then(|buffer_size| buffer_size.parse().ok())
