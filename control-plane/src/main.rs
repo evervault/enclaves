@@ -6,7 +6,12 @@ use control_plane::stats_client::StatsClient;
 use control_plane::stats_proxy::StatsProxy;
 use control_plane::{config_server, tls_proxy};
 use shared::notify_shutdown::{NotifyShutdown, Service};
-use shared::{print_version, utils::pipe_streams, ENCLAVE_CONNECT_PORT};
+use shared::{
+    bridge::{Bridge, BridgeInterface, Direction},
+    print_version,
+    utils::pipe_streams,
+    ENCLAVE_CONNECT_PORT,
+};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use storage_client_interface::s3;
 use tokio::io::AsyncWriteExt;
@@ -18,7 +23,7 @@ use tokio::sync::mpsc::channel;
 
 use control_plane::{
     configuration::{self, Environment},
-    e3proxy, enclave_connection,
+    e3proxy,
     error::Result,
     health,
 };
@@ -156,7 +161,9 @@ async fn tcp_server() -> Result<()> {
         tokio::spawn(async move {
             log::debug!("Accepted incoming TCP stream — {client_socket_addr:?}");
             let enclave_stream =
-                match enclave_connection::get_connection_to_enclave(ENCLAVE_CONNECT_PORT).await {
+                match Bridge::get_client_connection(ENCLAVE_CONNECT_PORT, Direction::HostToEnclave)
+                    .await
+                {
                     Ok(enclave_stream) => enclave_stream,
                     Err(e) => {
                         log::error!("An error occurred while connecting to the enclave — {e:?}");

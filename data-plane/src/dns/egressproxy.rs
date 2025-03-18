@@ -1,11 +1,10 @@
 use super::error::DNSError;
 use crate::FeatureContext;
+use shared::bridge::{Bridge, BridgeInterface, Direction};
 use shared::rpc::request::ExternalRequest;
 use shared::server::egress::check_ip_allow_list;
 use shared::server::egress::EgressDestinations;
 use shared::server::error::ServerError;
-use shared::server::get_vsock_client;
-use shared::server::CID::Parent;
 use shared::utils::pipe_streams;
 use shared::EGRESS_PROXY_PORT;
 use shared::EGRESS_PROXY_VSOCK_PORT;
@@ -55,8 +54,9 @@ impl EgressProxy {
         let n = external_stream.read(&mut buf).await?;
         let customer_data = &mut buf[..n];
 
-        let mut data_plane_stream = get_vsock_client(EGRESS_PROXY_VSOCK_PORT, Parent).await?;
-
+        let mut data_plane_stream =
+            Bridge::get_client_connection(EGRESS_PROXY_VSOCK_PORT, Direction::EnclaveToHost)
+                .await?;
         let fd = external_stream.as_raw_fd();
         let (ip, port) = Self::get_destination(fd)?;
         check_ip_allow_list(ip.to_string(), &allowed_domains)?;

@@ -1,19 +1,18 @@
 use std::time::Duration;
 
 use bytes::Bytes;
-use shared::server::get_vsock_client;
-use shared::server::CID::Parent;
+use shared::bridge::{Bridge, BridgeInterface, Direction};
 use shared::{ENCLAVE_STATSD_PORT, STATS_VSOCK_PORT};
 use tokio::net::UdpSocket;
 use tokio::task;
 use tokio::{io::AsyncWriteExt, time};
 
-use crate::stats_client::StatsClient;
+use crate::{error::Error, stats_client::StatsClient};
 
 pub struct StatsProxy;
 
 impl StatsProxy {
-    pub async fn listen() -> Result<(), std::io::Error> {
+    pub async fn listen() -> Result<(), Error> {
         let socket = UdpSocket::bind(format!("127.0.0.1:{}", ENCLAVE_STATSD_PORT)).await?;
 
         Self::record_system_metrics();
@@ -37,8 +36,9 @@ impl StatsProxy {
         }
     }
 
-    async fn forward_stats(bytes: Bytes) -> Result<(), std::io::Error> {
-        let mut stream = get_vsock_client(STATS_VSOCK_PORT, Parent).await?;
+    async fn forward_stats(bytes: Bytes) -> Result<(), Error> {
+        let mut stream =
+            Bridge::get_client_connection(STATS_VSOCK_PORT, Direction::EnclaveToHost).await?;
         stream.write_all(&bytes).await?;
         stream.flush().await?;
 

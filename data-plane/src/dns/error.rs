@@ -1,4 +1,4 @@
-use shared::server::egress::EgressError;
+use shared::server::{egress::EgressError, error::ServerError};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -19,4 +19,6 @@ pub enum DNSError {
     EgressError(#[from] EgressError),
     #[error("DNS lookup failed due to a timeout after: {0}")]
     DNSTimeout(#[from] tokio::time::error::Elapsed),
+    #[error("An error occurred while connecting to the host process - {0}")]
+    BridgeNetworkingError(#[from] ServerError),
 }

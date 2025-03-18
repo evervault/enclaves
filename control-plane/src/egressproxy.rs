@@ -3,9 +3,11 @@ use shared::rpc::request::ExternalRequest;
 use shared::server::egress::check_ip_allow_list;
 use shared::server::egress::EgressDestinations;
 use shared::server::sni::get_hostname;
-use shared::server::CID::Parent;
-use shared::server::{get_vsock_server, Listener};
 use shared::utils::pipe_streams;
+use shared::{
+    bridge::{Bridge, BridgeInterface, Direction},
+    server::Listener,
+};
 use shared::{env_var_present_and_true, EGRESS_PROXY_VSOCK_PORT};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -25,13 +27,14 @@ lazy_static! {
 
 impl EgressProxy {
     pub async fn listen() -> Result<()> {
-        let mut server = match get_vsock_server(EGRESS_PROXY_VSOCK_PORT, Parent).await {
-            Ok(server) => server,
-            Err(e) => {
-                log::error!("Error starting egress proxy - {e:?}");
-                return Err(e.into());
-            }
-        };
+        let mut server =
+            match Bridge::get_listener(EGRESS_PROXY_VSOCK_PORT, Direction::HostToEnclave).await {
+                Ok(server) => server,
+                Err(e) => {
+                    log::error!("Error starting egress proxy - {e:?}");
+                    return Err(e.into());
+                }
+            };
         log::info!("Egress proxy started");
         let allowed_domains = shared::server::egress::get_egress_allow_list_from_env();
 

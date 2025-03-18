@@ -1,9 +1,8 @@
 use super::error::DNSError;
 use bytes::Bytes;
+use shared::bridge::{Bridge, BridgeInterface, Direction};
 use shared::server::egress::check_dns_allowed_for_domain;
 use shared::server::egress::{cache_ip_for_allowlist, EgressDestinations};
-use shared::server::get_vsock_client;
-use shared::server::CID::Parent;
 use shared::DNS_PROXY_VSOCK_PORT;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -140,7 +139,8 @@ impl EnclaveDnsDriver {
     /// Takes a DNS lookup as `Bytes` and sends forwards it over VSock to the host process to be sent to
     /// a public DNS Service
     async fn forward_dns_lookup(bytes: Bytes) -> Result<Bytes, DNSError> {
-        let mut stream = get_vsock_client(DNS_PROXY_VSOCK_PORT, Parent).await?;
+        let mut stream =
+            Bridge::get_client_connection(DNS_PROXY_VSOCK_PORT, Direction::EnclaveToHost).await?;
         stream.write_all(&bytes).await?;
         let mut buffer = [0; 512];
         let packet_size = stream.read(&mut buffer).await?;

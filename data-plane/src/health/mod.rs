@@ -4,14 +4,9 @@ use agent::UserProcessHealthcheckSender;
 
 use hyper::header;
 use hyper::{service::service_fn, Body, Response};
+use shared::bridge::{Bridge, BridgeInterface, BridgeServer, Direction};
 use shared::notify_shutdown::Service;
-use shared::server::get_vsock_server;
 use shared::server::health::{DataPlaneDiagnostic, DataPlaneState, UserProcessHealth};
-#[cfg(not(feature = "enclave"))]
-use shared::server::TcpServer;
-#[cfg(feature = "enclave")]
-use shared::server::VsockServer;
-use shared::server::CID::Enclave;
 use shared::{server::Listener, ENCLAVE_HEALTH_CHECK_PORT};
 use tokio::sync::mpsc::{Sender, UnboundedSender};
 
@@ -49,17 +44,15 @@ pub async fn build_health_check_server(
 
 pub struct HealthcheckServer {
     user_process_healthcheck_channel: UnboundedSender<HealthcheckStatusRequest>,
-    #[cfg(feature = "enclave")]
-    listener: VsockServer,
-    #[cfg(not(feature = "enclave"))]
-    listener: TcpServer,
+    listener: BridgeServer,
 }
 
 impl HealthcheckServer {
     async fn new(
         user_process_healthcheck_channel: UnboundedSender<HealthcheckStatusRequest>,
     ) -> shared::server::error::ServerResult<Self> {
-        let listener = get_vsock_server(ENCLAVE_HEALTH_CHECK_PORT, Enclave).await?;
+        let listener =
+            Bridge::get_listener(ENCLAVE_HEALTH_CHECK_PORT, Direction::EnclaveToHost).await?;
         Ok(Self {
             listener,
             user_process_healthcheck_channel,
