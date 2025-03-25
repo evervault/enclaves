@@ -1,5 +1,5 @@
-use crate::configuration::EnclaveContext;
 use super::INTERNAL_METRIC_PORT;
+use crate::configuration::EnclaveContext;
 use cadence::{BufferedUdpMetricSink, QueuingMetricSink, StatsdClient};
 use cadence_macros::{set_global_default, statsd_count};
 use shared::{publish_count, stats::StatsError};

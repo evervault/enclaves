@@ -20,7 +20,7 @@ use tokio::sync::mpsc::Receiver;
 pub static IS_DRAINING: OnceLock<bool> = OnceLock::new();
 
 pub fn is_draining() -> bool {
-  IS_DRAINING.get().is_some()
+    IS_DRAINING.get().is_some()
 }
 
 pub const CONTROL_PLANE_HEALTH_CHECK_PORT: u16 = 3032;

@@ -4,8 +4,8 @@ use data_plane::{
     crypto::api::CryptoApi,
     env::{init_environment_loader, EnvironmentLoader},
     health::build_health_check_server,
-    stats::proxy::StatsProxy,
     stats::client::StatsClient,
+    stats::proxy::StatsProxy,
     time::ClockSync,
     FeatureContext,
 };
@@ -89,7 +89,7 @@ fn main() {
 
 async fn start(data_plane_port: u16, shutdown_notifier: Sender<Service>) {
     if let Err(e) = StatsClient::init().await {
-      log::error!("Failed to register in-Enclave stats client - {e}");
+        log::error!("Failed to register in-Enclave stats client - {e}");
     }
     let context = match FeatureContext::get() {
         Ok(context) => context,

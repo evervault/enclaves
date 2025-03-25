@@ -24,7 +24,7 @@ pub enum StatsError {
     #[error("Couldn't read file descriptor info from /proc/sys/fs/file-nr")]
     FDUsageReadError,
     #[error("Failed to create connection: {0}")]
-    ServerError(#[from] server::error::ServerError)
+    ServerError(#[from] server::error::ServerError),
 }
 
 #[macro_export]
