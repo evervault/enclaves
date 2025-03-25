@@ -11,8 +11,7 @@ pub mod egressproxy;
 pub mod error;
 pub mod health;
 pub mod orchestration;
-pub mod stats_client;
-pub mod stats_proxy;
+pub mod stats;
 pub mod tls_proxy;
 
 #[cfg(test)]

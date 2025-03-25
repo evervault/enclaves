@@ -1,29 +1,56 @@
-use cadence::StatsdClient;
-use cadence::{BufferedUdpMetricSink, QueuingMetricSink};
+use cadence::{QueuingMetricSink, StatsdClient};
 use cadence_macros::{set_global_default, statsd_count, statsd_gauge};
-use shared::stats::StatsError;
-use shared::{publish_count, publish_count_dynamic_label, publish_gauge, ENCLAVE_STATSD_PORT};
-use std::fs;
-use std::net::UdpSocket;
+use shared::bridge::{Bridge, BridgeInterface};
+use shared::stats::{BufferedLocalStatsSink, StatsError};
+use shared::{
+    publish_count, publish_count_dynamic_label, publish_gauge, INTERNAL_STATS_BRIDGE_PORT,
+};
 
 use crate::EnclaveContext;
 
 pub struct StatsClient;
 
 impl StatsClient {
-    pub fn init() {
-        if let Err(e) = Self::initialize_sink() {
-            log::error!("Couldn't init statsd client: {e}");
-        }
+    pub async fn init() -> Result<(), StatsError> {
+        Self::initialize_sink().await?;
+        Self::schedule_system_metrics_reporter();
+        Ok(())
     }
 
-    fn initialize_sink() -> Result<(), StatsError> {
-        let socket = UdpSocket::bind("0.0.0.0:0")?;
-        let udp_sink = BufferedUdpMetricSink::from(("127.0.0.1", ENCLAVE_STATSD_PORT), socket)?;
-        let queuing_sink = QueuingMetricSink::from(udp_sink);
+    async fn initialize_sink() -> Result<(), StatsError> {
+        let stream = Bridge::get_client_connection(
+            INTERNAL_STATS_BRIDGE_PORT,
+            shared::bridge::Direction::EnclaveToHost,
+        )
+        .await?;
+        #[cfg(not(feature = "enclave"))]
+        let stream = stream
+            .into_std()
+            .expect("Failed to downgrade tokio stream to std");
+        let statsd_sink = BufferedLocalStatsSink::from(stream);
+        let queuing_sink = QueuingMetricSink::from(statsd_sink);
         let client = StatsdClient::from_sink("", queuing_sink);
         set_global_default(client);
         Ok(())
+    }
+
+    fn schedule_system_metrics_reporter() {
+        // Take interval in seconds from the SYSTEM_STATS_INTERVAL variable, defaulting to every minute.
+        let interval = std::env::var("SYSTEM_STATS_INTERVAL")
+            .ok()
+            .and_then(|interval_str| interval_str.parse::<u64>().ok())
+            .unwrap_or(60);
+
+        tokio::task::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(interval));
+
+            loop {
+                interval.tick().await;
+                if let Err(e) = Self::try_record_system_metrics() {
+                    log::error!("Couldn't get system metrics: {e}");
+                }
+            }
+        });
     }
 
     pub fn record_decrypt() {
@@ -33,7 +60,7 @@ impl StatsClient {
     }
 
     fn get_file_descriptor_info() -> Result<(u64, u64, u64), StatsError> {
-        let content = fs::read_to_string("/proc/sys/fs/file-nr")?;
+        let content = std::fs::read_to_string("/proc/sys/fs/file-nr")?;
         let parts: Vec<&str> = content.split_whitespace().collect();
 
         if parts.len() == 3 {

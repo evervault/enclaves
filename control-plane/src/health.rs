@@ -19,6 +19,10 @@ use tokio::sync::mpsc::Receiver;
 
 pub static IS_DRAINING: OnceLock<bool> = OnceLock::new();
 
+pub fn is_draining() -> bool {
+    IS_DRAINING.get().is_some()
+}
+
 pub const CONTROL_PLANE_HEALTH_CHECK_PORT: u16 = 3032;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -144,8 +148,7 @@ impl HealthCheckServer {
                         {
                             Some(b"ECS-HealthCheck") => {
                                 let cp_state = cp_state.clone();
-                                let is_draining = IS_DRAINING.get().is_some();
-                                run_ecs_health_check_service(is_draining, cp_state).await
+                                run_ecs_health_check_service(is_draining(), cp_state).await
                             }
                             _ => Response::builder()
                                 .status(400)

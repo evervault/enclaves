@@ -5,3 +5,5 @@ exclude = ["./e2e-tests/mock-crypto"]
 
 [workspace.dependencies]
 openssl = { version = "0.10.60", features = ["vendored"] }
+cadence = "1.5.0"
+cadence-macros = "1.5.0"

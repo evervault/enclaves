@@ -15,7 +15,7 @@ use crate::{
     config_client::{ConfigClient, StorageConfigClientInterface},
     e3client::{CryptoRequest, CryptoResponse, E3Api, E3Client},
     server::tls::trusted_cert_container::TRUSTED_CERT_STORE,
-    stats_client::StatsClient,
+    stats::client::StatsClient,
     EnclaveContext,
 };
 
