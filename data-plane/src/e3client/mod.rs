@@ -1,3 +1,8 @@
+use crate::base_tls_client::tls_client_config::get_tls_client_config;
+use crate::base_tls_client::{AuthType, BaseClient, ClientError, OpenServerCertVerifier};
+use crate::configuration;
+use crate::crypto::token::TokenClient;
+use crate::stats::client::StatsClient;
 use async_trait::async_trait;
 use hyper::header::HeaderValue;
 use hyper::{Body, Response};
@@ -5,13 +10,12 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::value::Value;
 use std::ops::Deref;
+use tokio_retry::strategy::{jitter, ExponentialBackoff};
+use tokio_retry::Retry;
 use tokio_rustls::rustls::ServerName;
 use tokio_rustls::TlsConnector;
 
 type E3Error = ClientError;
-
-use tokio_retry::strategy::{jitter, ExponentialBackoff};
-use tokio_retry::Retry;
 
 #[cfg(test)]
 pub mod mock;
@@ -92,12 +96,6 @@ impl std::default::Default for E3Client {
         Self::new()
     }
 }
-
-use crate::base_tls_client::tls_client_config::get_tls_client_config;
-use crate::base_tls_client::{AuthType, BaseClient, ClientError, OpenServerCertVerifier};
-use crate::configuration;
-use crate::crypto::token::TokenClient;
-use crate::stats_client::StatsClient;
 
 impl E3Client {
     pub fn new() -> Self {

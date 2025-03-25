@@ -9,6 +9,8 @@ use cadence::{
 };
 use thiserror::Error;
 
+use crate::server;
+
 #[derive(Debug, Error)]
 pub enum StatsError {
     #[error("Sys info error {0}")]
@@ -21,6 +23,8 @@ pub enum StatsError {
     FDUsageParseError,
     #[error("Couldn't read file descriptor info from /proc/sys/fs/file-nr")]
     FDUsageReadError,
+    #[error("Failed to create connection: {0}")]
+    ServerError(#[from] server::error::ServerError)
 }
 
 #[macro_export]
