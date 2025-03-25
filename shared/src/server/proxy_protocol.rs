@@ -1,4 +1,7 @@
-use super::error::{ServerError, ServerResult};
+use super::{
+    error::{ServerError, ServerResult},
+    Listener,
+};
 pub use ppp::v2::Header as PPHeader;
 use std::convert::TryFrom;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -142,6 +145,31 @@ impl<C: AsyncRead + AsyncWrite + Sync> ProxiedConnection for AcceptedConn<C> {
 
     fn has_proxy_protocol(&self) -> bool {
         self.proxy_protocol.is_some()
+    }
+}
+
+pub struct ProxyProtocolServer<T: super::Listener> {
+    inner: T,
+}
+
+#[async_trait::async_trait]
+impl<T: Listener + Send> Listener for ProxyProtocolServer<T>
+where
+    <T as Listener>::Error: Into<ServerError>,
+{
+    type Connection = AcceptedConn<<T as Listener>::Connection>;
+    type Error = ServerError;
+
+    async fn accept(&mut self) -> Result<Self::Connection, Self::Error> {
+        let conn = self.inner.accept().await.map_err(|e| e.into())?;
+        let accepted_conn = try_parse_proxy_protocol(conn).await?;
+        Ok(accepted_conn)
+    }
+}
+
+impl<T: Listener + Send> std::convert::From<T> for ProxyProtocolServer<T> {
+    fn from(value: T) -> Self {
+        Self { inner: value }
     }
 }
 

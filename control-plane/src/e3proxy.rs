@@ -1,8 +1,10 @@
 use crate::dns;
 use crate::dns::InternalAsyncDnsResolver;
 use crate::error::Result;
-use shared::server::CID::Parent;
-use shared::server::{get_vsock_server, Listener};
+use shared::{
+    bridge::{Bridge, BridgeInterface, Direction},
+    server::Listener,
+};
 use std::net::SocketAddr;
 #[cfg(not(feature = "enclave"))]
 use tokio::io::AsyncWriteExt;
@@ -40,7 +42,8 @@ impl E3Proxy {
     }
 
     pub async fn listen(self) -> Result<()> {
-        let mut enclave_conn = get_vsock_server(shared::ENCLAVE_CRYPTO_PORT, Parent).await?;
+        let mut enclave_conn =
+            Bridge::get_listener(shared::ENCLAVE_CRYPTO_PORT, Direction::HostToEnclave).await?;
 
         log::info!("Running e3 proxy on {}", shared::ENCLAVE_CRYPTO_PORT);
         loop {

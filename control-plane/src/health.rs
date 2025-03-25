@@ -1,4 +1,3 @@
-use crate::enclave_connection::get_connection_to_enclave;
 use crate::error::ServerError;
 use axum::http::HeaderValue;
 use hyper::{Body, Request, Response};
@@ -10,7 +9,10 @@ use shared::server::{
     tcp::TcpServer,
     Listener,
 };
-use shared::ENCLAVE_HEALTH_CHECK_PORT;
+use shared::{
+    bridge::{Bridge, BridgeInterface, Direction},
+    ENCLAVE_HEALTH_CHECK_PORT,
+};
 use std::net::SocketAddr;
 use std::sync::OnceLock;
 use tokio::sync::mpsc::Receiver;
@@ -68,7 +70,8 @@ pub async fn run_ecs_health_check_service(
 }
 
 async fn health_check_data_plane() -> Result<HealthCheckVersion, ServerError> {
-    let stream = get_connection_to_enclave(ENCLAVE_HEALTH_CHECK_PORT).await?;
+    let stream =
+        Bridge::get_client_connection(ENCLAVE_HEALTH_CHECK_PORT, Direction::HostToEnclave).await?;
 
     let (mut sender, connection) = hyper::client::conn::handshake(stream).await?;
 

@@ -12,16 +12,11 @@ pub const ENCLAVE_ACME_PORT: u16 = 7780;
 pub const ENCLAVE_STATSD_PORT: u16 = 8122;
 #[cfg(feature = "enclave")]
 pub const ENCLAVE_STATSD_PORT: u16 = 8125;
-#[cfg(feature = "enclave")]
 pub const ENCLAVE_CID: u32 = 2021;
-#[cfg(feature = "enclave")]
 pub const PARENT_CID: u32 = 3;
-#[cfg(not(feature = "enclave"))]
-pub const ENCLAVE_IP: &str = "172.20.0.7";
-#[cfg(not(feature = "enclave"))]
-pub const PARENT_IP: &str = "172.20.0.8";
 
 pub mod acme;
+pub mod bridge;
 pub mod logging;
 pub mod notify_shutdown;
 pub mod rpc;

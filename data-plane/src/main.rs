@@ -12,9 +12,10 @@ use data_plane::{
 #[cfg(not(feature = "tls_termination"))]
 use shared::server::Listener;
 use shared::{
+    bridge::{Bridge, BridgeInterface, Direction},
     notify_shutdown::{NotifyShutdown, Service},
     print_version,
-    server::{get_vsock_server_with_proxy_protocol, CID::Enclave},
+    server::proxy_protocol::ProxyProtocolServer,
     ENCLAVE_CONNECT_PORT,
 };
 use tokio::sync::mpsc::Sender;
@@ -152,8 +153,8 @@ async fn start_data_plane(
     env_loader: EnvironmentLoader<NeedCert>,
 ) {
     log::info!("Data plane starting up. Forwarding traffic to {data_plane_port}");
-    let server = match get_vsock_server_with_proxy_protocol(ENCLAVE_CONNECT_PORT, Enclave).await {
-        Ok(server) => server,
+    let server = match Bridge::get_listener(ENCLAVE_CONNECT_PORT, Direction::EnclaveToHost).await {
+        Ok(server) => ProxyProtocolServer::from(server),
         Err(error) => return log::error!("Error creating server: {error}"),
     };
     log::debug!("Data plane TCP server created");
@@ -179,11 +180,11 @@ async fn start_data_plane(
     env_loader: EnvironmentLoader<Finalize>,
 ) {
     log::info!("Data plane starting up. Forwarding traffic to {data_plane_port}");
-    let mut server = match get_vsock_server_with_proxy_protocol(ENCLAVE_CONNECT_PORT, Enclave).await
-    {
-        Ok(server) => server,
-        Err(error) => return log::error!("Error creating server: {error}"),
-    };
+    let mut server =
+        match Bridge::get_listener(ENCLAVE_CONNECT_PORT, Direction::EnclaveToHost).await {
+            Ok(server) => ProxyProtocolServer::from(server),
+            Err(error) => return log::error!("Error creating server: {error}"),
+        };
     log::debug!("Data plane TCP server created");
     if let Err(e) = env_loader.finalize_env() {
         log::error!("Errored while finalizing environment - {e:?}");

@@ -1,8 +1,10 @@
 use crate::configuration::get_external_metrics_enabled;
 use crate::error::Result;
-use shared::server::CID::Parent;
-use shared::server::{get_vsock_server, Listener};
 use shared::STATS_VSOCK_PORT;
+use shared::{
+    bridge::{Bridge, BridgeInterface, Direction},
+    server::Listener,
+};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::UdpSocket;
@@ -15,7 +17,7 @@ impl StatsProxy {
     pub async fn listen() -> Result<()> {
         log::info!("Started control plane stats proxy");
         let external_metrics_enabled = get_external_metrics_enabled();
-        let mut server = get_vsock_server(STATS_VSOCK_PORT, Parent).await?;
+        let mut server = Bridge::get_listener(STATS_VSOCK_PORT, Direction::HostToEnclave).await?;
 
         loop {
             match server.accept().await {
