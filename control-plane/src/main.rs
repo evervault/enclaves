@@ -151,13 +151,15 @@ fn schedule_statsd_proxies() {
         StatsProxy::spawn(shared::INTERNAL_STATS_BRIDGE_PORT, targets).await
     });
 
-    tokio::spawn(async move {
-        StatsProxy::spawn(
-            shared::EXTERNAL_STATS_BRIDGE_PORT,
-            vec![external_stats_target_addr],
-        )
-        .await
-    });
+    if external_metrics_enabled {
+        tokio::spawn(async move {
+            StatsProxy::spawn(
+                shared::EXTERNAL_STATS_BRIDGE_PORT,
+                vec![external_stats_target_addr],
+            )
+            .await
+        });
+    }
 }
 
 async fn tcp_server() -> Result<()> {
