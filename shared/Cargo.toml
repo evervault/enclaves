@@ -13,8 +13,22 @@ serde = { version = "1.0.200", features = ["derive"] }
 serde_derive = "1.0.119"
 serde_json = "1.0.61"
 thiserror = "1.0.25"
-hyper = { version = "0.14.4", features = ["server","http1","http2","tcp","stream","client"] }
-tokio = { version = "1.24.2", features = ["net", "macros", "rt", "rt-multi-thread", "io-util", "time"] }
+hyper = { version = "0.14.4", features = [
+  "server",
+  "http1",
+  "http2",
+  "tcp",
+  "stream",
+  "client",
+] }
+tokio = { version = "1.24.2", features = [
+  "net",
+  "macros",
+  "rt",
+  "rt-multi-thread",
+  "io-util",
+  "time",
+] }
 async-trait = "0.1.56"
 tokio-vsock = { version = "0.3.2", optional = true }
 lazy_static = "1.4.0"
@@ -25,13 +39,13 @@ tls-parser = { version = "0.11.0" }
 ppp = { version = "2.2.0" }
 tokio-rustls = { version = "0.24.1", features = ["dangerous_configuration"] }
 sys-info = "0.9.1"
-cadence = "0.29.0"
+cadence.workspace = true
 httparse = "1.8.0"
 openssl = { workspace = true }
 base64 = "0.13.0"
 env_logger = "0.10.0"
 once_cell = { version = "1.19.0", optional = true }
-ttl_cache = { version ="0.5.1", optional = true }
+ttl_cache = { version = "0.5.1", optional = true }
 dns-parser = { version = "0.8.0", optional = true }
 pin-project = "1"
 log = { version = "0.4.19", features = ["max_level_debug"] }
