@@ -5,7 +5,7 @@ edition = "2021"
 authors = ["Evervault <engineering@evervault.com>"]
 
 [dependencies]
-tokio = { version = "1.24.2", features = ["net", "macros", "rt", "rt-multi-thread", "io-util", "time", "fs"] }
+tokio = { version = "1.43.1", features = ["net", "macros", "rt", "rt-multi-thread", "io-util", "time", "fs"] }
 dashmap = "4.0.2"
 trust-dns-resolver = { version = "*" }
 dns-message-parser = { version = "~0.7.0" }
