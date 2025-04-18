@@ -171,6 +171,14 @@ async fn handle_websocket_request<S: AsyncRead + AsyncWrite + Unpin>(
 ) {
     let context_builder =
         init_request_context(&request, enclave_context.clone(), feature_context.clone());
+    
+    if !feature_context.api_key_auth {
+      log_non_http_trx(tx_for_connection, true, remote_ip, Some(context_builder));
+      let serialized_request = request_to_bytes(request).await;
+      let _ = pipe_to_customer_process(stream, &serialized_request, port).await;
+      return;
+    }
+
     let api_key = match request
         .headers()
         .get("api-key")
