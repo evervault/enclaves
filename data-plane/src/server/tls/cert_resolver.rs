@@ -262,7 +262,7 @@ impl AttestableCertResolver {
     ) -> ServerResult<SystemTime> {
         use crate::crypto::attest;
 
-        let attestation_doc = attest::get_attestation_doc(challenge, nonce).unwrap();
+        let attestation_doc = attest::get_attestation_doc(challenge, nonce, None).unwrap();
         let expiry = attest::get_expiry_time(&attestation_doc)?;
         let hex_encoded_ad = shared::utils::HexSlice::from(attestation_doc.as_slice());
         for hostname in hostnames {

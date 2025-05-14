@@ -49,6 +49,8 @@ pub enum CryptoApiError {
     SerializationError,
     #[error("Failed to read context - {0}")]
     ContextError(#[from] ContextError),
+    #[error("Error decoding base64 value — {0}")]
+    DecodeError(#[from] base64::DecodeError),
     #[error("Error — {0:?}")]
     Error(#[from] Error),
 }
@@ -150,7 +152,8 @@ impl CryptoApi {
         let ad_request: AttestationRequest = serde_json::from_value(body)?;
         let challenge = ad_request.challenge.map(|chal| chal.as_bytes().to_vec());
         let nonce = ad_request.nonce.map(|non| non.as_bytes().to_vec());
-        let doc = attest::get_attestation_doc(challenge, nonce)?;
+        let public_key = ad_request.public_key.and_then(|b64_der_encoded_pub_key| base64::decode(b64_der_encoded_pub_key).ok());
+        let doc = attest::get_attestation_doc(challenge, nonce, public_key)?;
         Ok(Body::from(doc))
     }
 
@@ -179,4 +182,5 @@ impl CryptoApi {
 pub struct AttestationRequest {
     nonce: Option<String>,
     challenge: Option<String>,
+    public_key: Option<String>,
 }

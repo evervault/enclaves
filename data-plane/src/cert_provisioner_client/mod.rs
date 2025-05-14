@@ -54,7 +54,7 @@ impl CertProvisionerClient {
         let token_bytes = token.as_bytes().to_vec();
 
         #[cfg(feature = "enclave")]
-        let attestation_doc = attest::get_attestation_doc(Some(token_bytes), None)
+        let attestation_doc = attest::get_attestation_doc(Some(token_bytes), None, None) 
             .map_err(|err| CertProvisionerError::General(err.to_string()))?;
 
         #[cfg(not(feature = "enclave"))]
