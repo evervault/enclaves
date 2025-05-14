@@ -182,6 +182,7 @@ impl CryptoApi {
 }
 
 #[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AttestationRequest {
     nonce: Option<String>,
     challenge: Option<String>,
