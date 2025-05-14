@@ -70,7 +70,7 @@ impl TokenClient {
         use crate::crypto::attest;
         use openssl::base64::encode_block;
 
-        let attestation_doc = attest::get_attestation_doc(None, Some(nonce))?;
+        let attestation_doc = attest::get_attestation_doc(None, Some(nonce), None)?;
         Ok(encode_block(&attestation_doc))
     }
 

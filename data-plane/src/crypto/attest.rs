@@ -66,6 +66,7 @@ impl std::convert::From<AttestationError> for hyper::Response<hyper::Body> {
 pub fn get_attestation_doc(
     challenge: Option<Vec<u8>>,
     nonce: Option<Vec<u8>>,
+    public_key: Option<Vec<u8>>,
 ) -> Result<Vec<u8>, AttestationError> {
     let nsm_conn = NsmConnection::try_new()?;
     let nonce = get_nonce(nonce, nsm_conn.fd())?;
@@ -73,7 +74,7 @@ pub fn get_attestation_doc(
     let nsm_request = nitro::api::Request::Attestation {
         user_data: challenge.map(ByteBuf::from),
         nonce: Some(ByteBuf::from(nonce)),
-        public_key: None,
+        public_key: public_key.map(ByteBuf::from),
     };
 
     match nitro::driver::nsm_process_request(nsm_conn.fd(), nsm_request) {
