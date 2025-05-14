@@ -154,7 +154,8 @@ impl CryptoApi {
         let nonce = ad_request.nonce.map(|non| non.as_bytes().to_vec());
         let public_key = ad_request
             .public_key
-            .and_then(|b64_der_encoded_pub_key| base64::decode(b64_der_encoded_pub_key).ok());
+            .map(|b64_der_encoded_pub_key| base64::decode(b64_der_encoded_pub_key))
+            .transpose()?;
         let doc = attest::get_attestation_doc(challenge, nonce, public_key)?;
         Ok(Body::from(doc))
     }
