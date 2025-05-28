@@ -80,8 +80,12 @@ where
         let log_tx_sender = self.tx_sender.clone();
         Box::pin(async move {
             let timer = std::time::SystemTime::now();
-            let mut base_context =
-                init_request_context(&req, enclave_context, feature_context.clone());
+            let mut base_context = init_request_context(
+                &req,
+                enclave_context,
+                feature_context.clone(),
+                RequestType::HTTP,
+            );
             // add context id as request header
             let request_id = base_context.get_trx_id();
             add_ev_ctx_to_headers(req.headers_mut(), &request_id);
@@ -124,13 +128,14 @@ pub fn init_request_context<
     req: &Request<Body>,
     enclave_context: C,
     feature_context: F,
+    req_type: RequestType,
 ) -> TrxContextBuilder {
     let mut trx_ctx = TrxContextBuilder::init_trx_context_with_enclave_details(
         &enclave_context.uuid,
         &enclave_context.name,
         &enclave_context.app_uuid,
         &enclave_context.team_uuid,
-        RequestType::HTTP,
+        req_type,
     );
     trx_ctx.add_req_to_trx_context(req, &feature_context.trusted_headers);
     trx_ctx

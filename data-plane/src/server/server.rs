@@ -169,8 +169,12 @@ async fn handle_websocket_request<S: AsyncRead + AsyncWrite + Unpin>(
     e3_client: Arc<E3Client>,
     port: u16,
 ) {
-    let context_builder =
-        init_request_context(&request, enclave_context.clone(), feature_context.clone());
+    let context_builder = init_request_context(
+        &request,
+        enclave_context.clone(),
+        feature_context.clone(),
+        RequestType::Websocket,
+    );
 
     if !feature_context.api_key_auth {
         log_non_http_trx(tx_for_connection, true, remote_ip, Some(context_builder));
