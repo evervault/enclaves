@@ -224,7 +224,7 @@ fn listen_for_shutdown_signal() {
         })
         .map_err(|err| {
             log::error!("Error setting up Sigterm handler: {err:?}");
-            std::io::Error::new(std::io::ErrorKind::Other, err)
+            std::io::Error::other(err)
         });
 
         match rx.recv().await {

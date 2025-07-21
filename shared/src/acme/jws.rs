@@ -182,7 +182,7 @@ pub fn jws(
         };
 
         let mut signer = Signer::new(MessageDigest::sha256(), &private_key)?;
-        signer.update(&format!("{}.{}", protected_b64, payload_b64).into_bytes())?;
+        signer.update(&format!("{protected_b64}.{payload_b64}").into_bytes())?;
         let der_encoded_sig = signer.sign_to_vec()?;
 
         if alg == "HS256" {
