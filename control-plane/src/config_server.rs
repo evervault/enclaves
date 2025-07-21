@@ -266,10 +266,7 @@ async fn handle_acme_storage_get_request<T: StorageClientInterface>(
     match parsed_result {
         Ok(request_body) => {
             let namespaced_key = namespace_key(request_body.key(), &enclave_context);
-            log::info!(
-                "Received get request in config server for {}",
-                namespaced_key
-            );
+            log::info!("Received get request in config server for {namespaced_key}");
             let object = match storage_client.get_object(namespaced_key).await {
                 Ok(object) => match object {
                     Some(object) => object,
@@ -279,7 +276,7 @@ async fn handle_acme_storage_get_request<T: StorageClientInterface>(
                     }
                 },
                 Err(err) => {
-                    log::error!("Failed to get object in storage client: {}", err);
+                    log::error!("Failed to get object in storage client: {err}");
                     return Ok(build_error_response(
                         "Failed to get object in storage client".to_string(),
                     ));
@@ -311,17 +308,14 @@ async fn handle_acme_storage_put_request<T: StorageClientInterface>(
     match parsed_result {
         Ok(request_body) => {
             let namespaced_key = namespace_key(request_body.key(), &enclave_context);
-            log::info!(
-                "Received post request in config server for {}",
-                namespaced_key
-            );
+            log::info!("Received post request in config server for {namespaced_key}");
             match storage_client
                 .put_object(namespaced_key, request_body.object())
                 .await
             {
                 Ok(_) => Ok(build_success_response(None)),
                 Err(err) => {
-                    log::error!("Failed to put object in storage client: {}", err);
+                    log::error!("Failed to put object in storage client: {err}");
                     Ok(build_error_response(
                         "Failed to put object in storage client".to_string(),
                     ))
@@ -343,14 +337,11 @@ async fn handle_acme_storage_delete_request<T: StorageClientInterface>(
     match parsed_result {
         Ok(request_body) => {
             let namespaced_key = namespace_key(request_body.key(), &enclave_context);
-            log::info!(
-                "Received delete request in config server for {}",
-                namespaced_key
-            );
+            log::info!("Received delete request in config server for {namespaced_key}");
             match storage_client.delete_object(namespaced_key).await {
                 Ok(_) => Ok(build_success_response(None)),
                 Err(err) => {
-                    log::error!("Failed to delete object in storage client: {}", err);
+                    log::error!("Failed to delete object in storage client: {err}");
                     Ok(build_error_response(
                         "Failed to delete object in storage client".to_string(),
                     ))
@@ -370,7 +361,7 @@ async fn handle_acme_signing_request(
 ) -> Response<Body> {
     match sign_acme_payload(req, acme_account_details, enclave_context).await {
         Ok(response) => response,
-        Err(err) => build_error_response(format!("Failed to sign JWS request. Err: {}", err)),
+        Err(err) => build_error_response(format!("Failed to sign JWS request. Err: {err}")),
     }
 }
 
@@ -426,7 +417,7 @@ async fn sign_acme_payload(
                         .map_err(ServerError::HyperHttp)
                 }
                 Err(err) => {
-                    log::error!("[ACME] Failed to sign request: {}", err);
+                    log::error!("[ACME] Failed to sign request: {err}");
                     Ok(build_error_response(
                         "Failed to sign JWS request".to_string(),
                     ))
@@ -442,7 +433,7 @@ async fn sign_acme_payload(
 async fn handle_acme_jwk_request(acme_account_details: AcmeAccountDetails) -> Response<Body> {
     match get_acme_jwk(acme_account_details).await {
         Ok(response) => response,
-        Err(err) => build_error_response(format!("Failed to get JWK. Err: {}", err)),
+        Err(err) => build_error_response(format!("Failed to get JWK. Err: {err}")),
     }
 }
 
