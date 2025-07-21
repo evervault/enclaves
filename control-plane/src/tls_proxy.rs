@@ -83,7 +83,7 @@ impl TlsProxy {
                     let mut buf = vec![0u8; 4096];
                     let n = conn.read(&mut buf).await?;
                     let initial_slice = &buf[..n];
-                    let hostname = get_hostname(initial_slice).ok(); // Clone the slice into a new Vec
+                    let hostname = get_hostname(initial_slice).ok();
 
                     match hostname {
                         Some(host) if self.valid_targets().contains(&host.as_str()) => {
