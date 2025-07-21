@@ -441,7 +441,7 @@ mod test {
         let ciphertext_bytes = build_ciphertext(None, None, false);
         // test leading and trailing quotes
         let contextful_bytes =
-            vec![b"\"".to_vec(), ciphertext_bytes.clone(), b"\"".to_vec()].concat();
+            [b"\"".to_vec(), ciphertext_bytes.clone(), b"\"".to_vec()].concat();
         let (_, parsed) =
             context_aware_ciphertext(contextful_bytes.as_ref()).expect("no parsing error");
         assert!(parsed.has_leading_quote());
@@ -450,7 +450,7 @@ mod test {
 
         // test only leading
         let contextful_bytes =
-            vec![b"\"".to_vec(), ciphertext_bytes.clone(), b" ".to_vec()].concat();
+            [b"\"".to_vec(), ciphertext_bytes.clone(), b" ".to_vec()].concat();
         let (_, parsed) =
             context_aware_ciphertext(contextful_bytes.as_ref()).expect("no parsing error");
         assert!(parsed.has_leading_quote());
@@ -458,7 +458,7 @@ mod test {
         assert!(!parsed.is_in_quotes());
 
         // test only trailing
-        let contextful_bytes = vec![ciphertext_bytes.clone(), b"\"".to_vec()].concat();
+        let contextful_bytes = [ciphertext_bytes.clone(), b"\"".to_vec()].concat();
         let (_, parsed) =
             context_aware_ciphertext(contextful_bytes.as_ref()).expect("no parsing error");
         assert!(!parsed.has_leading_quote());

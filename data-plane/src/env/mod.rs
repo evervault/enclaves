@@ -288,8 +288,8 @@ mod test {
         let ctr_clone = ctr.clone();
         let fallable_func = || async {
             let mut ctr_lock = ctr.lock().unwrap();
-            let value = (*ctr_lock).pop().unwrap();
-            value
+            
+            (*ctr_lock).pop().unwrap()
         };
 
         let result = super::with_retries(100, 3, 1_000, fallable_func).await;
@@ -311,8 +311,8 @@ mod test {
         let ctr_clone = ctr.clone();
         let fallable_func = || async {
             let mut ctr_lock = ctr.lock().unwrap();
-            let value = (*ctr_lock).pop().unwrap();
-            value
+            
+            (*ctr_lock).pop().unwrap()
         };
 
         let result = super::with_retries(100, 3, 1_000, fallable_func).await;

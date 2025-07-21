@@ -205,9 +205,9 @@ mod test {
         let parsed = serde_json::from_str(raw_feature_context);
         assert!(parsed.is_ok());
         let feature_context: FeatureContext = parsed.unwrap();
-        assert_eq!(feature_context.api_key_auth, true);
-        assert_eq!(feature_context.trx_logging_enabled, false);
-        assert_eq!(feature_context.forward_proxy_protocol, false);
+        assert!(feature_context.api_key_auth);
+        assert!(!feature_context.trx_logging_enabled);
+        assert!(!feature_context.forward_proxy_protocol);
         assert!(feature_context.healthcheck.is_none());
         assert!(feature_context.attestation_cors.is_some());
         assert_eq!(
@@ -223,9 +223,9 @@ mod test {
         let parsed = serde_json::from_str(raw_feature_context);
         assert!(parsed.is_ok());
         let feature_context: FeatureContext = parsed.unwrap();
-        assert_eq!(feature_context.api_key_auth, true);
-        assert_eq!(feature_context.trx_logging_enabled, false);
-        assert_eq!(feature_context.forward_proxy_protocol, false);
+        assert!(feature_context.api_key_auth);
+        assert!(!feature_context.trx_logging_enabled);
+        assert!(!feature_context.forward_proxy_protocol);
         assert_eq!(feature_context.healthcheck, Some("/health".into()));
         assert!(feature_context.attestation_cors.is_none());
     }
