@@ -1,7 +1,6 @@
 use thiserror::Error;
 use tls_parser::{
-    nom::Finish, parse_tls_extensions, parse_tls_plaintext, TlsExtension, TlsMessage,
-    TlsMessageHandshake,
+    parse_tls_extensions, parse_tls_plaintext, TlsExtension, TlsMessage, TlsMessageHandshake,
 };
 
 #[derive(Debug, Error)]
@@ -17,9 +16,8 @@ pub enum SNIError {
     ExtensionMissing,
 }
 
-pub fn get_hostname(data: Vec<u8>) -> Result<String, SNIError> {
-    let (_, parsed_request) = parse_tls_plaintext(&data)
-        .finish()
+pub fn get_hostname(data: &[u8]) -> Result<String, SNIError> {
+    let (_, parsed_request) = parse_tls_plaintext(data)
         .map_err(|tls_parse_err| SNIError::HostnameError(format!("{tls_parse_err:?}")))?;
 
     let client_hello = match &parsed_request.msg[0] {
@@ -31,9 +29,9 @@ pub fn get_hostname(data: Vec<u8>) -> Result<String, SNIError> {
         Some(raw_extensions) => raw_extensions,
         _ => return Err(SNIError::ExtensionMissing),
     };
+    
     let mut destination = "".to_string();
     let (_, extensions) = parse_tls_extensions(raw_extensions)
-        .finish()
         .map_err(|tls_parse_err| SNIError::HostnameError(format!("{tls_parse_err:?}")))?;
 
     for extension in extensions {
