@@ -70,7 +70,7 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
     ) -> Result<Arc<Directory<T>>, AcmeError> {
         let host = provider.hostname();
         let path = provider.directory_path();
-        let url = format!("https://{}{}", host, path);
+        let url = format!("https://{host}{path}");
 
         let request = hyper::Request::builder()
             .method("GET")
@@ -159,9 +159,7 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
             let resp_body = hyper::body::to_bytes(resp.into_body()).await?;
             let body_str = from_utf8(&resp_body)?;
             log::error!(
-                "Error response from authenticated request to {}: {}",
-                url,
-                body_str
+                "Error response from authenticated request to {url}: {body_str}"
             );
             Err(AcmeError::ClientError(body_str.to_string()))
         } else {
@@ -191,7 +189,7 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
             Some(payload) => serde_json::to_string(&payload)?,
         };
 
-        log::info!("[ACME] Sending authenticated request to {}", url);
+        log::info!("[ACME] Sending authenticated request to {url}");
 
         let resp_result = self
             .authenticated_request_raw(method, url, &payload_parsed, account_id, provider)
@@ -199,9 +197,7 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
 
         if let Err(err) = &resp_result {
             log::error!(
-                "[ACME] Error sending authenticated request to {}: Error: {}",
-                url,
-                err
+                "[ACME] Error sending authenticated request to {url}: Error: {err}"
             );
             return resp_result;
         };

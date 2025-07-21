@@ -40,6 +40,7 @@ pub fn is_websocket_request(req: &hyper::Request<hyper::Body>) -> bool {
         .is_some_and(|upgrade_proto| upgrade_proto == "websocket")
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum Incoming {
     HttpRequest(hyper::Request<hyper::Body>),
     NonHttpRequest(Vec<u8>),

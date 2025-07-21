@@ -187,10 +187,10 @@ where
                             req_info.headers.insert(key, value);
                         }
                         (Err(e), _) => {
-                            eprintln!("Failed to parse header key: {:?}", e);
+                            eprintln!("Failed to parse header key: {e:?}");
                         }
                         (_, Err(e)) => {
-                            eprintln!("Failed to parse header value: {:?}", e);
+                            eprintln!("Failed to parse header value: {e:?}");
                         }
                     }
                 });

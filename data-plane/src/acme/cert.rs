@@ -86,8 +86,7 @@ impl AcmeCertificateRetreiver {
                     };
 
                     log::info!(
-                        "[ACME] No valid lock on ACME ordering, creating lock and certificate. {} attempt(s) made.",
-                        attempts
+                        "[ACME] No valid lock on ACME ordering, creating lock and certificate. {attempts} attempt(s) made."
                     );
 
                     //No Lock on order - create lock - create Certificate - encrypt Certificate - persist Certificate - delete lock
@@ -207,8 +206,7 @@ impl AcmeCertificateRetreiver {
                     log::info!("[ACME] Certificate has already being renewed by other instance.");
                     if let Err(err) = Self::write_certificate_to_rwlock(cert) {
                         log::error!(
-                            "[ACME] Error writing renewed certificate to trusted certificate store: {:?}",
-                            err)
+                            "[ACME] Error writing renewed certificate to trusted certificate store: {err:?}")
                     } else {
                         return;
                     }
@@ -224,7 +222,7 @@ impl AcmeCertificateRetreiver {
                     .renew_certificate_and_update_store(key.clone(), &enclave_context)
                     .await
                 {
-                    log::error!("[ACME] Error renewing certificate: {:?}", e);
+                    log::error!("[ACME] Error renewing certificate: {e:?}");
                     last_error = Some(e);
                 } else {
                     log::info!("[ACME] Certificate renewed successfully.");
@@ -237,8 +235,7 @@ impl AcmeCertificateRetreiver {
 
             let days_till_renewal = if let Some(e) = last_error {
                 log::error!(
-                    "[ACME] Error renewing certificate after retries: {:?}. Scheduling next renewal for tomorrow.",
-                    e
+                    "[ACME] Error renewing certificate after retries: {e:?}. Scheduling next renewal for tomorrow."
                 );
                 utils::ONE_DAY_IN_SECONDS
             } else {
@@ -327,9 +324,7 @@ impl AcmeCertificateRetreiver {
             if let Err(e) = raw_acme_certificate {
                 StatsClient::record_cert_order(provider.get_stats_key(), false);
                 log::error!(
-                    "[ACME] Error ordering certificate: {:?}. Provider: {:?}",
-                    e,
-                    provider
+                    "[ACME] Error ordering certificate: {e:?}. Provider: {provider:?}"
                 );
                 return Err(e);
             } else {
@@ -384,7 +379,7 @@ impl AcmeCertificateRetreiver {
         key: PKey<Private>,
         provider: Provider,
     ) -> Result<RawAcmeCertificate, AcmeError> {
-        log::info!("[ACME] Initializing acme account. Provider: {:?}", provider);
+        log::info!("[ACME] Initializing acme account. Provider: {provider:?}");
 
         let acme_account = match self.acme_account {
             Some(ref acme_account) => acme_account.clone(),
@@ -422,7 +417,7 @@ impl AcmeCertificateRetreiver {
                 "Token not found in challenge returned".into(),
             ))?;
 
-            let path = format!("acme-challenges/{}", token);
+            let path = format!("acme-challenges/{token}");
 
             let token_value =
                 challenge
@@ -513,8 +508,7 @@ impl AcmeCertificateRetreiver {
             }
             Err(e) => {
                 log::error!(
-                    "[ACME] Error acquiring write lock on trusted certificate store: {:?}",
-                    e
+                    "[ACME] Error acquiring write lock on trusted certificate store: {e:?}"
                 );
                 Err(AcmeError::General(
                     "Error acquiring write lock on trusted certificate store".into(),

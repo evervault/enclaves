@@ -88,7 +88,7 @@ impl StatsClient {
     pub fn record_cert_order(provider: &str, success: bool) {
         if let Ok(context) = EnclaveContext::get() {
             let success_key = if success { "success" } else { "failure" };
-            let key = format!("{}.{}.count", provider, success_key);
+            let key = format!("{provider}.{success_key}.count");
             publish_count_dynamic_label!(key.as_str(), 1, context);
         }
     }
