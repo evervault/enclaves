@@ -267,11 +267,11 @@ mod tests {
         assert!(parse_result.is_ok());
         let mut accepted_conn = parse_result.unwrap();
         // no proxy protocol parsed for this connection
-        assert_eq!(accepted_conn.has_proxy_protocol(), false);
+        assert!(!accepted_conn.has_proxy_protocol());
         let mut read_buf = Vec::with_capacity(20);
         // reading to EOF should return us everything from the socket including the incomplete proxy protocol
         accepted_conn.read_to_end(&mut read_buf).await.unwrap();
-        let entire_content = vec![buf, dummy_data].concat();
+        let entire_content = [buf, dummy_data].concat();
         assert_eq!(&entire_content[..], &read_buf[..]);
     }
 }

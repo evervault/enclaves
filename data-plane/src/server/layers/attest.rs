@@ -86,7 +86,7 @@ where
                     let doc = match attest::get_attestation_doc(challenge.cloned(), None, None) {
                         Ok(ad) => ad,
                         Err(e) => {
-                            log::error!("Failed to generate attestation doc. Error: {:?}", e);
+                            log::error!("Failed to generate attestation doc. Error: {e:?}");
                             return Ok(build_internal_error_response(None));
                         }
                     };

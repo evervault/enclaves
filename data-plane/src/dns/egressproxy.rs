@@ -167,10 +167,7 @@ mod tests {
             allow_all: true,
             ips: vec![],
         };
-        assert_eq!(
-            check_domain_allow_list("app.evervault.com".to_string(), &egress_domains).unwrap(),
-            ()
-        );
+        assert!(check_domain_allow_list("app.evervault.com".to_string(), &egress_domains).is_ok());
     }
     #[test]
     fn test_valid_exact_domain() {
@@ -180,10 +177,7 @@ mod tests {
             allow_all: false,
             ips: vec![],
         };
-        assert_eq!(
-            check_domain_allow_list("app.evervault.com".to_string(), &egress_domains).unwrap(),
-            ()
-        );
+        assert!(check_domain_allow_list("app.evervault.com".to_string(), &egress_domains).is_ok(),);
     }
     #[test]
     fn test_valid_wildcard_domain() {
@@ -193,10 +187,7 @@ mod tests {
             allow_all: false,
             ips: vec![],
         };
-        assert_eq!(
-            check_domain_allow_list("app.evervault.com".to_string(), &egress_domains).unwrap(),
-            ()
-        );
+        assert!(check_domain_allow_list("app.evervault.com".to_string(), &egress_domains).is_ok(),);
     }
     #[test]
     fn test_invalid_domain() {

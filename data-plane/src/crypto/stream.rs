@@ -250,7 +250,7 @@ mod tests {
         let frame2 = reader.next().await.transpose().unwrap(); // don't expect errors
         assert!(matches!(frame2, Some(IncomingFrame::Plaintext(_)))); // Frame 2 contains the remainder of the payload
         let frame3 = reader.next().await.transpose().unwrap(); // expect None
-        assert!(matches!(frame3, None));
+        assert!(frame3.is_none());
     }
 
     #[tokio::test]

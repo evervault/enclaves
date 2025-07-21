@@ -177,7 +177,7 @@ async fn tcp_server() -> Result<()> {
         let (mut connection, client_socket_addr) = match tcp_listener.accept().await {
             Ok(conn) => conn,
             Err(e) => {
-                log::error!("Failed to accept incoming TCP stream - {:?}", e);
+                log::error!("Failed to accept incoming TCP stream - {e:?}");
                 continue;
             }
         };
@@ -224,7 +224,7 @@ fn listen_for_shutdown_signal() {
         })
         .map_err(|err| {
             log::error!("Error setting up Sigterm handler: {err:?}");
-            std::io::Error::new(std::io::ErrorKind::Other, err)
+            std::io::Error::other(err)
         });
 
         match rx.recv().await {
@@ -240,7 +240,7 @@ fn listen_for_shutdown_signal() {
                 sleep(Duration::from_millis(55000)).await;
 
                 match Orchestration::shutdown_all_enclaves().await {
-                    Ok(output) => log::info!("Terminated enclave successfully: {}", output),
+                    Ok(output) => log::info!("Terminated enclave successfully: {output}"),
                     Err(err) => log::error!("Error terminating enclave: {err:?}"),
                 }
             }

@@ -45,7 +45,7 @@ impl StorageLock {
 
     pub async fn read_from_storage(name: String) -> Result<Option<Self>, AcmeError> {
         let config_client = ConfigClient::new();
-        let get_lock_response = config_client.get_object(format!("{}.lock", name)).await?;
+        let get_lock_response = config_client.get_object(format!("{name}.lock")).await?;
         match get_lock_response {
             Some(response) => {
                 let mut lock: StorageLock = serde_json::from_str(&response.body())?;

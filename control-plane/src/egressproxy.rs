@@ -81,7 +81,7 @@ impl EgressProxy {
             return Ok(());
         };
 
-        if let Ok(hostname) = get_hostname(external_request.data.clone()) {
+        if let Ok(hostname) = get_hostname(&external_request.data) {
             log::info!(
                 "{}",
                 serde_json::json!({
@@ -90,7 +90,6 @@ impl EgressProxy {
                     "port": external_request.port,
                     "hostname": hostname
                 })
-                .to_string()
             );
         } else {
             log::info!(
@@ -100,7 +99,6 @@ impl EgressProxy {
                     "ip": external_request.ip,
                     "port": external_request.port,
                 })
-                .to_string()
             );
         }
 

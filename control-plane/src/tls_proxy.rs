@@ -83,18 +83,17 @@ impl TlsProxy {
                     let mut buf = vec![0u8; 4096];
                     let n = conn.read(&mut buf).await?;
                     let initial_slice = &buf[..n];
-                    let hostname = get_hostname(initial_slice.to_vec()).ok(); // Clone the slice into a new Vec
+                    let hostname = get_hostname(initial_slice).ok();
 
                     match hostname {
                         Some(host) if self.valid_targets().contains(&host.as_str()) => {
-                            log::info!("SNI header found for {}. Valid host, forwarding traffic from data plane.", host);
+                            log::info!("SNI header found for {host}. Valid host, forwarding traffic from data plane.");
                             let initial_bytes = initial_slice.to_vec(); // Clone the slice into a new Vec
                             (conn, host, initial_bytes)
                         }
                         Some(host) => {
                             log::error!(
-                                "SNI header found for invalid host {}. Shutting down connection",
-                                host
+                                "SNI header found for invalid host {host}. Shutting down connection"
                             );
                             Self::shutdown_conn(conn).await;
                             continue;
@@ -112,16 +111,16 @@ impl TlsProxy {
                 }
             };
             let target_clone = target.clone();
-            log::info!("Forwarding stream to {}", target);
+            log::info!("Forwarding stream to {target}");
             let target_ip = match self.get_ip_target_host(target).await {
                 Ok(Some(ip)) => ip,
                 Ok(None) => {
-                    log::error!("No IP returned for {}", target_clone);
+                    log::error!("No IP returned for {target_clone}");
                     Self::shutdown_conn(connection).await;
                     continue;
                 }
                 Err(e) => {
-                    log::error!("Error obtaining IP for {} — {e:?}", target_clone);
+                    log::error!("Error obtaining IP for {target_clone} — {e:?}");
                     Self::shutdown_conn(connection).await;
                     continue;
                 }
@@ -131,23 +130,20 @@ impl TlsProxy {
                 let mut target_stream = match tokio::net::TcpStream::connect(target_ip).await {
                     Ok(stream) => stream,
                     Err(e) => {
-                        log::error!("Failed to connect to {} — {e:?}", target_clone);
+                        log::error!("Failed to connect to {target_clone} — {e:?}");
                         Self::shutdown_conn(connection).await;
                         return;
                     }
                 };
 
                 if let Err(e) = target_stream.write_all(&initial_bytes).await {
-                    log::error!("Failed to send initial data to {} — {e:?}", target_clone);
+                    log::error!("Failed to send initial data to {target_clone} — {e:?}");
                     Self::shutdown_conn(connection).await;
                     return;
                 }
 
                 if let Err(e) = shared::utils::pipe_streams(connection, target_stream).await {
-                    log::error!(
-                        "Error streaming from Data Plane to {} — {e:?}",
-                        target_clone
-                    );
+                    log::error!("Error streaming from Data Plane to {target_clone} — {e:?}");
                 }
             });
         }
@@ -158,7 +154,7 @@ impl TlsProxy {
 
     #[cfg(feature = "enclave")]
     async fn get_ip_target_host(&self, target: String) -> Result<Option<SocketAddr>> {
-        let target_host_dns_name = format!("{}.", target);
+        let target_host_dns_name = format!("{target}.");
         let port = self.targets.port;
         dns::get_ip_for_host_with_dns_resolver(
             &self.dns_resolver,
