@@ -323,9 +323,7 @@ impl AcmeCertificateRetreiver {
 
             if let Err(e) = raw_acme_certificate {
                 StatsClient::record_cert_order(provider.get_stats_key(), false);
-                log::error!(
-                    "[ACME] Error ordering certificate: {e:?}. Provider: {provider:?}"
-                );
+                log::error!("[ACME] Error ordering certificate: {e:?}. Provider: {provider:?}");
                 return Err(e);
             } else {
                 StatsClient::record_cert_order(provider.get_stats_key(), true);

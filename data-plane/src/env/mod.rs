@@ -288,7 +288,7 @@ mod test {
         let ctr_clone = ctr.clone();
         let fallable_func = || async {
             let mut ctr_lock = ctr.lock().unwrap();
-            
+
             (*ctr_lock).pop().unwrap()
         };
 
@@ -311,7 +311,7 @@ mod test {
         let ctr_clone = ctr.clone();
         let fallable_func = || async {
             let mut ctr_lock = ctr.lock().unwrap();
-            
+
             (*ctr_lock).pop().unwrap()
         };
 

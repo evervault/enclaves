@@ -158,9 +158,7 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
         if !resp.status().is_success() {
             let resp_body = hyper::body::to_bytes(resp.into_body()).await?;
             let body_str = from_utf8(&resp_body)?;
-            log::error!(
-                "Error response from authenticated request to {url}: {body_str}"
-            );
+            log::error!("Error response from authenticated request to {url}: {body_str}");
             Err(AcmeError::ClientError(body_str.to_string()))
         } else {
             if let Some(nonce) = extract_nonce_from_response(&resp)? {
@@ -196,9 +194,7 @@ impl<T: AcmeClientInterface + std::default::Default> Directory<T> {
             .await;
 
         if let Err(err) = &resp_result {
-            log::error!(
-                "[ACME] Error sending authenticated request to {url}: Error: {err}"
-            );
+            log::error!("[ACME] Error sending authenticated request to {url}: Error: {err}");
             return resp_result;
         };
 
