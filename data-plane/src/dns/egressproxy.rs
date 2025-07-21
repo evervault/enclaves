@@ -47,13 +47,9 @@ impl EgressProxy {
     }
 
     async fn handle_egress_connection(
-        mut external_stream: TcpStream,
+        external_stream: TcpStream,
         allowed_domains: EgressDestinations,
     ) -> Result<(), DNSError> {
-        let mut buf = vec![0u8; 4096];
-        let n = external_stream.read(&mut buf).await?;
-        let customer_data = &mut buf[..n];
-
         let mut data_plane_stream =
             Bridge::get_client_connection(EGRESS_PROXY_VSOCK_PORT, Direction::EnclaveToHost)
                 .await?;
@@ -63,7 +59,7 @@ impl EgressProxy {
 
         let external_request = ExternalRequest {
             ip,
-            data: customer_data.to_vec(),
+            data: vec![],
             port,
         }
         .to_bytes()?;
