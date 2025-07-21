@@ -294,6 +294,6 @@ mod tests {
         let verifier = openssl::sign::Verifier::new(MessageDigest::sha256(), &ec).unwrap();
 
         let valid = verifier.verify(&ecdsa_sig.to_der().unwrap()).unwrap();
-        assert!(valid == false);
+        assert!(!valid);
     }
 }

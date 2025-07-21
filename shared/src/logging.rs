@@ -612,6 +612,6 @@ mod test {
             .path_and_query(&base_query)
             .build()
             .unwrap();
-        assert_eq!(format!("/{}", base_query), build_log_uri(&uri));
+        assert_eq!(format!("/{base_query}"), build_log_uri(&uri));
     }
 }
