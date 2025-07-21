@@ -12,7 +12,7 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::os::fd::AsRawFd;
 use std::os::fd::RawFd;
 use thiserror::Error;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 
@@ -50,6 +50,10 @@ impl EgressProxy {
         external_stream: TcpStream,
         allowed_domains: EgressDestinations,
     ) -> Result<(), DNSError> {
+        let mut buf = vec![0u8; 4096];
+        let n = external_stream.try_read(&mut buf)?;
+        let customer_data = &mut buf[..n];
+
         let mut data_plane_stream =
             Bridge::get_client_connection(EGRESS_PROXY_VSOCK_PORT, Direction::EnclaveToHost)
                 .await?;
@@ -59,7 +63,7 @@ impl EgressProxy {
 
         let external_request = ExternalRequest {
             ip,
-            data: vec![],
+            data: customer_data.to_vec(),
             port,
         }
         .to_bytes()?;
@@ -163,7 +167,10 @@ mod tests {
             allow_all: true,
             ips: vec![],
         };
-        assert!(check_domain_allow_list("app.evervault.com".to_string(), &egress_domains).is_ok());
+        assert_eq!(
+            check_domain_allow_list("app.evervault.com".to_string(), &egress_domains).unwrap(),
+            ()
+        );
     }
     #[test]
     fn test_valid_exact_domain() {
@@ -173,7 +180,10 @@ mod tests {
             allow_all: false,
             ips: vec![],
         };
-        assert!(check_domain_allow_list("app.evervault.com".to_string(), &egress_domains).is_ok(),);
+        assert_eq!(
+            check_domain_allow_list("app.evervault.com".to_string(), &egress_domains).unwrap(),
+            ()
+        );
     }
     #[test]
     fn test_valid_wildcard_domain() {
@@ -183,7 +193,10 @@ mod tests {
             allow_all: false,
             ips: vec![],
         };
-        assert!(check_domain_allow_list("app.evervault.com".to_string(), &egress_domains).is_ok(),);
+        assert_eq!(
+            check_domain_allow_list("app.evervault.com".to_string(), &egress_domains).unwrap(),
+            ()
+        );
     }
     #[test]
     fn test_invalid_domain() {
