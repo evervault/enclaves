@@ -27,10 +27,7 @@ fn try_update_fd_limit(soft_limit: u64, hard_limit: u64) {
         eprintln!("Failed to set enclave file descriptor limit on startup - {e:?}");
     }
     if let Ok((soft_limit, hard_limit)) = rlimit::getrlimit(rlimit::Resource::NOFILE) {
-        println!(
-            "RLIMIT_NOFILE: SoftLimit={}, HardLimit={}",
-            soft_limit, hard_limit
-        );
+        println!("RLIMIT_NOFILE: SoftLimit={soft_limit}, HardLimit={hard_limit}");
     }
 }
 

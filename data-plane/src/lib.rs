@@ -237,9 +237,9 @@ mod test {
         let parsed = serde_json::from_str(raw_feature_context);
         assert!(parsed.is_ok());
         let feature_context: FeatureContext = parsed.unwrap();
-        assert_eq!(feature_context.api_key_auth, true);
-        assert_eq!(feature_context.trx_logging_enabled, false);
-        assert_eq!(feature_context.forward_proxy_protocol, true);
+        assert!(feature_context.api_key_auth);
+        assert!(!feature_context.trx_logging_enabled);
+        assert!(feature_context.forward_proxy_protocol);
         assert_eq!(
             feature_context.trusted_headers,
             vec!["X-Error-Code".to_string()]
@@ -258,9 +258,9 @@ mod test {
         let parsed = serde_json::from_str(raw_feature_context);
         assert!(parsed.is_ok());
         let feature_context: FeatureContext = parsed.unwrap();
-        assert_eq!(feature_context.api_key_auth, true);
-        assert_eq!(feature_context.trx_logging_enabled, false);
-        assert_eq!(feature_context.forward_proxy_protocol, true);
+        assert!(feature_context.api_key_auth);
+        assert!(!feature_context.trx_logging_enabled);
+        assert!(feature_context.forward_proxy_protocol);
         let trusted_headers: Vec<String> = Vec::new();
         assert_eq!(feature_context.trusted_headers, trusted_headers);
         assert_eq!(
