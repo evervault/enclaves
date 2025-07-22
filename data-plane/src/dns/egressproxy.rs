@@ -12,7 +12,7 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::os::fd::AsRawFd;
 use std::os::fd::RawFd;
 use thiserror::Error;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 
@@ -46,12 +46,29 @@ impl EgressProxy {
         Ok(())
     }
 
+    async fn try_read_with_timeout(
+        external_stream: &mut TcpStream,
+        buf: &mut [u8],
+    ) -> Result<usize, DNSError> {
+        match tokio::time::timeout(
+            std::time::Duration::from_millis(5),
+            external_stream.read(buf),
+        )
+        .await
+        {
+            Ok(Ok(bytes_read)) => Ok(bytes_read),
+            Ok(Err(e)) => Err(e.into()),
+            Err(_) => Ok(0),
+        }
+    }
+
     async fn handle_egress_connection(
-        external_stream: TcpStream,
+        mut external_stream: TcpStream,
         allowed_domains: EgressDestinations,
     ) -> Result<(), DNSError> {
         let mut buf = vec![0u8; 4096];
-        let n = external_stream.try_read(&mut buf)?;
+        let n = Self::try_read_with_timeout(&mut external_stream, &mut buf).await?;
+
         let customer_data = &mut buf[..n];
 
         let mut data_plane_stream =
