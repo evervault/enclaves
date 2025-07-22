@@ -66,9 +66,8 @@ impl EgressProxy {
         mut external_stream: TcpStream,
         allowed_domains: EgressDestinations,
     ) -> Result<(), DNSError> {
-        let mut buf = vec![0u8; 4096];
+        let mut buf = [0u8; 4096];
         let n = Self::try_read_with_timeout(&mut external_stream, &mut buf).await?;
-
         let customer_data = &mut buf[..n];
 
         let mut data_plane_stream =
