@@ -1,4 +1,4 @@
-name: Release data-plane binary staging
+name: Deploy new data plane binary to staging
 
 on:
   push:
@@ -13,6 +13,9 @@ env:
   RUST_BACKTRACE: 1
   LINUX_TARGET: x86_64-unknown-linux-musl
   STAGE: staging
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   get-release-semver:
@@ -54,10 +57,9 @@ jobs:
           targets: x86_64-unknown-linux-musl
 
       - name: Configure Staging AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_KEY_ID_STAGING }}
-          aws-secret-access-key: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_SECRET_KEY_STAGING }}
+          role-to-assume: ${{ secrets.ENCLAVES_PUBLIC_AWS_ROLE_STAGING }}
           aws-region: us-east-1
 
       - uses: Swatinem/rust-cache@v2

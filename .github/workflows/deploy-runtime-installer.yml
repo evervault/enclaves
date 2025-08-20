@@ -12,10 +12,13 @@ on:
     secrets:
       aws-cloudfront-distribution-id:
         required: true
-      aws-access-key-id:
+      ENCLAVES_PUBLIC_AWS_ROLE_PRODUCTION:
         required: true
-      aws-secret-access-key:
+      ENCLAVES_PUBLIC_AWS_ROLE_STAGING:
         required: true
+permissions:
+  id-token: write
+  contents: read
 jobs:
   build-runtime-bundle:
     runs-on: ubuntu-latest
@@ -42,11 +45,10 @@ jobs:
       - uses: actions/download-artifact@v4.1.7
         with:
           name: runtime-dependencies-${{github.sha}}.zip
-      - name: Configure Production AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.aws-access-key-id }}
-          aws-secret-access-key: ${{ secrets.aws-secret-access-key }}
+          role-to-assume: ${{ inputs.stage == 'production' && secrets.ENCLAVES_PUBLIC_AWS_ROLE_PRODUCTION || secrets.ENCLAVES_PUBLIC_AWS_ROLE_STAGING }}
           aws-region: us-east-1
       - name: Upload installer bundle to S3
         env:
@@ -59,11 +61,10 @@ jobs:
     needs: [build-runtime-bundle, upload-runtime-bundle]
     steps:
       - uses: actions/checkout@v4
-      - name: Configure Production AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.aws-access-key-id }}
-          aws-secret-access-key: ${{ secrets.aws-secret-access-key }}
+          role-to-assume: ${{ inputs.stage == 'production' && secrets.ENCLAVES_PUBLIC_AWS_ROLE_PRODUCTION || secrets.ENCLAVES_PUBLIC_AWS_ROLE_STAGING }}
           aws-region: us-east-1
       - name: Update latest record for installer
         env:

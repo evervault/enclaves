@@ -11,6 +11,10 @@ on:
 name: Deploy new control plane image
 env:
   LINUX_TARGET: x86_64-unknown-linux-musl
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   last_test:
     runs-on: ubuntu-latest
@@ -76,10 +80,9 @@ jobs:
       - name: Move control-plane binary to root
         run: cp ./target/${{ env.LINUX_TARGET }}/release/control-plane ./control-plane
       - name: Configure Staging AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_KEY_ID_STAGING }}
-          aws-secret-access-key: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_SECRET_KEY_STAGING }}
+          role-to-assume: ${{ secrets.ENCLAVES_PUBLIC_AWS_ROLE_STAGING }}
           aws-region: us-east-1
       - name: Login to Amazon ECR
         id: login-ecr
@@ -124,10 +127,9 @@ jobs:
       - name: Move control-plane binary to root
         run: cp ./target/${{ env.LINUX_TARGET }}/release/control-plane ./control-plane
       - name: Configure Staging AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_KEY_ID_STAGING }}
-          aws-secret-access-key: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_SECRET_KEY_STAGING }}
+          role-to-assume: ${{ secrets.ENCLAVES_PUBLIC_AWS_ROLE_STAGING }}
           aws-region: us-east-1
       - name: Login to Amazon ECR
         id: login-ecr
