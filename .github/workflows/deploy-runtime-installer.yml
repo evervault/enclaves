@@ -12,9 +12,7 @@ on:
     secrets:
       aws-cloudfront-distribution-id:
         required: true
-      ENCLAVES_PUBLIC_AWS_ROLE_PRODUCTION:
-        required: true
-      ENCLAVES_PUBLIC_AWS_ROLE_STAGING:
+      ENCLAVES_PUBLIC_AWS_ROLE:
         required: true
 permissions:
   id-token: write
@@ -48,7 +46,7 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ inputs.stage == 'production' && secrets.ENCLAVES_PUBLIC_AWS_ROLE_PRODUCTION || secrets.ENCLAVES_PUBLIC_AWS_ROLE_STAGING }}
+          role-to-assume: ${{ secrets.ENCLAVES_PUBLIC_AWS_ROLE }}
           aws-region: us-east-1
       - name: Upload installer bundle to S3
         env:
@@ -64,7 +62,7 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ inputs.stage == 'production' && secrets.ENCLAVES_PUBLIC_AWS_ROLE_PRODUCTION || secrets.ENCLAVES_PUBLIC_AWS_ROLE_STAGING }}
+          role-to-assume: ${{ secrets.ENCLAVES_PUBLIC_AWS_ROLE }}
           aws-region: us-east-1
       - name: Update latest record for installer
         env:

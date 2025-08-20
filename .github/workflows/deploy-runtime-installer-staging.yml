@@ -17,6 +17,5 @@ jobs:
       stage: "staging"
       version: 1
     secrets:
-      ENCLAVES_PUBLIC_AWS_ROLE_PRODUCTION: ${{ secrets.ENCLAVES_PUBLIC_AWS_ROLE_PRODUCTION }}
-      ENCLAVES_PUBLIC_AWS_ROLE_STAGING: ${{ secrets.ENCLAVES_PUBLIC_AWS_ROLE_STAGING }}
+      ENCLAVES_PUBLIC_AWS_ROLE: ${{ secrets.ENCLAVES_PUBLIC_AWS_ROLE }}
       aws-cloudfront-distribution-id: ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_STAGING }}
