@@ -1,4 +1,4 @@
-name: Deploy new data plane binary to staging
+name: Release data-plane binary staging
 
 on:
   push:
