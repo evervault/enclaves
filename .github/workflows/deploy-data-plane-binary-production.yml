@@ -1,4 +1,4 @@
-name: Deploy new data plane binary to production
+name: Release data-plane binary production
 
 on:
   push:
