@@ -37,7 +37,7 @@ jobs:
       - name: Configure Production AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.ENCLAVES_PUBLIC_AWS_ROLE_PRODUCTION }}
+          role-to-assume: ${{ secrets.AWS_ENCLAVES_PRODUCTION_OIDC_ROLE_ARN }}
           aws-region: us-east-1
 
       - uses: Swatinem/rust-cache@v2
@@ -107,7 +107,7 @@ jobs:
       - name: Configure Production AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.ENCLAVES_PUBLIC_AWS_ROLE_PRODUCTION }}
+          role-to-assume: ${{ secrets.AWS_ENCLAVES_PRODUCTION_OIDC_ROLE_ARN }}
           aws-region: us-east-1
 
       - name: Upload data-plane to S3 (${{ matrix.feature }})
@@ -131,7 +131,7 @@ jobs:
       - name: Configure Production AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.ENCLAVES_PUBLIC_AWS_ROLE_PRODUCTION }}
+          role-to-assume: ${{ secrets.AWS_ENCLAVES_PRODUCTION_OIDC_ROLE_ARN }}
           aws-region: us-east-1
 
       - name: Upload version tag to latest

@@ -82,7 +82,7 @@ jobs:
       - name: Configure Staging AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.ENCLAVES_PUBLIC_AWS_ROLE_STAGING }}
+          role-to-assume: ${{ secrets.AWS_ENCLAVES_STAGING_OIDC_ROLE_ARN }}
           aws-region: us-east-1
       - name: Login to Amazon ECR
         id: login-ecr
@@ -129,7 +129,7 @@ jobs:
       - name: Configure Staging AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.ENCLAVES_PUBLIC_AWS_ROLE_STAGING }}
+          role-to-assume: ${{ secrets.AWS_ENCLAVES_STAGING_OIDC_ROLE_ARN }}
           aws-region: us-east-1
       - name: Login to Amazon ECR
         id: login-ecr
