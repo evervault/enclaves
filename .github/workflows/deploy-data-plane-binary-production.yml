@@ -9,6 +9,9 @@ env:
   RUST_BACKTRACE: 1
   LINUX_TARGET: x86_64-unknown-linux-musl
   STAGE: production
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   get-version:
@@ -32,10 +35,9 @@ jobs:
           sh ./scripts/insert-data-plane-version.sh ${{ needs.get-version.outputs.version }}
 
       - name: Configure Production AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_SECRET_KEY }}
+          role-to-assume: ${{ secrets.AWS_ENCLAVES_PRODUCTION_OIDC_ROLE_ARN }}
           aws-region: us-east-1
 
       - uses: Swatinem/rust-cache@v2
@@ -103,10 +105,9 @@ jobs:
           ]
     steps:
       - name: Configure Production AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_SECRET_KEY }}
+          role-to-assume: ${{ secrets.AWS_ENCLAVES_PRODUCTION_OIDC_ROLE_ARN }}
           aws-region: us-east-1
 
       - name: Upload data-plane to S3 (${{ matrix.feature }})
@@ -128,10 +129,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Configure Production AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_SECRET_KEY }}
+          role-to-assume: ${{ secrets.AWS_ENCLAVES_PRODUCTION_OIDC_ROLE_ARN }}
           aws-region: us-east-1
 
       - name: Upload version tag to latest

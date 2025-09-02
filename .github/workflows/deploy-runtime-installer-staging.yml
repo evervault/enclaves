@@ -6,6 +6,9 @@ on:
       - "installer/**"
     branches:
       - "main"
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   build-and-deploy:
@@ -14,6 +17,5 @@ jobs:
       stage: "staging"
       version: 1
     secrets:
-      aws-access-key-id: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_KEY_ID_STAGING }}
-      aws-secret-access-key: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_SECRET_KEY_STAGING }}
-      aws-cloudfront-distribution-id: ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_STAGING }}
+      AWS_ENCLAVES_OIDC_ROLE_ARN: ${{ secrets.AWS_ENCLAVES_STAGING_OIDC_ROLE_ARN }}
+      AWS_CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_STAGING }}

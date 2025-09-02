@@ -6,6 +6,9 @@ on:
 name: Deploy new control plane image to production
 env:
   LINUX_TARGET: x86_64-unknown-linux-musl
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   get-version:
@@ -56,10 +59,9 @@ jobs:
       - name: Move control-plane binary to root
         run: cp ./target/${{ env.LINUX_TARGET }}/release/control-plane ./control-plane
       - name: Configure Production AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_SECRET_KEY }}
+          role-to-assume: ${{ secrets.AWS_ENCLAVES_PRODUCTION_OIDC_ROLE_ARN}}
           aws-region: us-east-1
       - name: Login to Amazon ECR
         id: login-ecr
@@ -100,10 +102,9 @@ jobs:
       - name: Move control-plane binary to root
         run: cp ./target/${{ env.LINUX_TARGET }}/release/control-plane ./control-plane
       - name: Configure Production AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_SECRET_KEY }}
+          role-to-assume: ${{ secrets.AWS_ENCLAVES_PRODUCTION_OIDC_ROLE_ARN }}
           aws-region: us-east-1
       - name: Login to Amazon ECR
         id: login-ecr
@@ -138,10 +139,9 @@ jobs:
 
     steps:
       - name: Configure Production AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.ENCLAVES_PUBLIC_AWS_ACCESS_SECRET_KEY }}
+          role-to-assume: ${{ secrets.AWS_ENCLAVES_PRODUCTION_OIDC_ROLE_ARN }}
           aws-region: us-east-1
       - name: Login to Amazon ECR
         id: login-ecr
