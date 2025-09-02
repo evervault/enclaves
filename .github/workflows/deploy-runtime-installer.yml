@@ -10,7 +10,7 @@ on:
         required: true
         type: string
     secrets:
-      aws-cloudfront-distribution-id:
+      AWS_CLOUDFRONT_DISTRIBUTION_ID:
         required: true
       AWS_ENCLAVES_OIDC_ROLE_ARN:
         required: true
@@ -75,4 +75,4 @@ jobs:
       - name: Cloudfront Cache Invalidation
         run:
           aws cloudfront create-invalidation --distribution-id ${{
-          secrets.aws-cloudfront-distribution-id }} --paths "/runtime/versions"
+          secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID }} --paths "/runtime/versions"

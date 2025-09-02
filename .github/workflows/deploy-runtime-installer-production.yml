@@ -27,4 +27,4 @@ jobs:
       version: ${{ needs.get-version.outputs.version }}
     secrets:
       AWS_ENCLAVES_OIDC_ROLE_ARN: ${{ secrets.AWS_ENCLAVES_PRODUCTION_OIDC_ROLE_ARN }}
-      aws-cloudfront-distribution-id: ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION }}
+      AWS_CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION }}
