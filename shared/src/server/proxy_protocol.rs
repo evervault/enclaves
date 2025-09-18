@@ -139,7 +139,7 @@ pub trait ProxiedConnection: Sync {
 }
 
 impl<C: AsyncRead + AsyncWrite + Sync> ProxiedConnection for AcceptedConn<C> {
-    fn proxy_protocol(&self) -> Option<&PPHeader> {
+    fn proxy_protocol(&self) -> Option<&PPHeader<'_>> {
         self.proxy_protocol.as_ref()
     }
 
