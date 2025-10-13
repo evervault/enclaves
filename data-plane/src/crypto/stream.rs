@@ -35,8 +35,8 @@ pub type CiphertextCandidate<'a> = (&'a [u8], &'a [u8]);
 
 impl IncomingStreamDecoder {
     pub fn find_next_ciphertext_candidate(
-        src: &[u8],
-    ) -> Result<Option<CiphertextCandidate>, IncomingStreamError> {
+        src: &'_[u8],
+    ) -> Result<Option<CiphertextCandidate<'_>>, IncomingStreamError> {
         match parser::find_ciphertext_prefix(src) {
             Err(nom::Err::Incomplete(_)) => Ok(None),
             Err(nom::Err::Error(_)) => Err(IncomingStreamError::NomError),

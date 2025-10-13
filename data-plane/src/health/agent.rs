@@ -4,7 +4,6 @@ use hyper::{client::HttpConnector, header, Body, Client, Method, Request};
 use serde_json::Value;
 use shared::{notify_shutdown::Service, server::health::UserProcessHealth};
 use std::collections::VecDeque;
-use thiserror::Error;
 use tokio::sync::mpsc::{
     channel, unbounded_channel, Receiver, Sender, UnboundedReceiver, UnboundedSender,
 };
@@ -51,14 +50,6 @@ pub struct HealthcheckAgent<C> {
 }
 
 const DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT: usize = 10;
-
-#[derive(Error, Debug)]
-enum UserProcessHealthCheckError {
-    #[error("There was an error checking the initialization state of the user process - {0}")]
-    InitializationCheck(#[from] ContextError),
-    #[error("There was an error sending the healthcheck request to the user process - {0}")]
-    HealthcheckRequest(#[from] hyper::Error),
-}
 
 impl HealthcheckAgent<hyper_rustls::HttpsConnector<HttpConnector>> {
     pub fn build_tls_agent(
