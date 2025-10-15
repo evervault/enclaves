@@ -1,13 +1,13 @@
-FROM node:16-alpine3.18
+FROM node:18-alpine3.21
 
 ENV DATA_PLANE_EXECUTABLE_PATH=/data-plane
 ENV DATA_PLANE_SERVICE_PATH=/etc/service/data-plane
 ENV START_EV_SERVICES_PATH=/etc/service/ev-services-entrypoint
 
-RUN apk update &&\
+RUN apk update && apk upgrade &&\
     apk add runit && apk add curl && \
     rm -rf /var/cache/apk/*
-RUN apk add iptables
+RUN apk update && apk upgrade && apk add iptables
 
 COPY ./target/x86_64-unknown-linux-musl/release/data-plane $DATA_PLANE_EXECUTABLE_PATH
 RUN chmod +x $DATA_PLANE_EXECUTABLE_PATH

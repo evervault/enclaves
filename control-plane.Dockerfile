@@ -1,4 +1,4 @@
-FROM node:16-alpine3.18
+FROM node:18-alpine3.21
 
 ENV CONTROL_PLANE_EXECUTABLE_PATH=/control-plane
 ENV CONTROL_PLANE_SERVICE_PATH=/etc/service/control-plane
@@ -26,7 +26,7 @@ ENV EV_APP_UUID $EV_APP_UUID
 ARG EV_API_KEY
 ENV EV_API_KEY $EV_API_KEY
 
-RUN apk update &&\
+RUN apk update && apk upgrade &&\
     apk add runit && apk add curl && \
     rm -rf /var/cache/apk/*
 
