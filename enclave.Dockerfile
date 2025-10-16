@@ -1,4 +1,4 @@
-FROM node:18-alpine3.21
+FROM node:18-alpine3.22
 
 ENV DATA_PLANE_EXECUTABLE_PATH=/data-plane
 ENV DATA_PLANE_SERVICE_PATH=/etc/service/data-plane
