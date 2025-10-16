@@ -131,6 +131,10 @@ echo "************************"
 echo "* building iproute2 *"
 echo "************************"
 cd iproute2-6.7.0
+
+# Fix basename function issue in bpf_legacy.c
+sed -i '1i#include <libgen.h>' lib/bpf_legacy.c
+
 unset CFLAGS
 unset LDFLAGS
 ./configure
@@ -144,10 +148,10 @@ echo "* creating installer archive *"
 echo "******************************"
 cp "$PACKAGES_PATH/installer.sh" "$OUTPUT_PATH/installer.sh"
 cd $OUTPUT_PATH
-tar -czf runtime-dependencies.tar.gz net-tools-2.10 runit-2.1.2 installer.sh iptables-1.8.10 iproute2-6.7.0
+tar -czf runtime-dependencies.tar.gz net-tools-2.10 runit-2.2.0 installer.sh iptables-1.8.10 iproute2-6.7.0
 
 # Remove binaries outside of the archive 
 echo "*****************************"
 echo "* removing unused artifacts *"
 echo "*****************************"
-rm -rf net-tools-2.10 runit-2.1.2 installer.sh iptables-1.8.10 iproute2-6.7.0
+rm -rf net-tools-2.10 runit-2.2.0 installer.sh iptables-1.8.10 iproute2-6.7.0
