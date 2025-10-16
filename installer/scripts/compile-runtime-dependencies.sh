@@ -131,6 +131,10 @@ echo "************************"
 echo "* building iproute2 *"
 echo "************************"
 cd iproute2-6.11.0
+
+# Fix missing endian.h include in libnetlink.h - htobe64 is defined in musl's endian.h
+sed -i '1i#include <endian.h>' include/libnetlink.h
+
 unset CFLAGS
 unset LDFLAGS
 ./configure
