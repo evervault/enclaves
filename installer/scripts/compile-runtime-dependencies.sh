@@ -10,9 +10,9 @@ PACKAGES_PATH=/packages
 cd $PACKAGES_PATH
 
 ### Build runit
-gunzip runit-2.1.2.tar.gz
-tar -xpf runit-2.1.2.tar
-cd admin/runit-2.1.2 # runit contains a top level folder called admin
+gunzip runit-2.2.0.tar.gz
+tar -xpf runit-2.2.0.tar
+cd admin/runit-2.2.0 # runit contains a top level folder called admin
 
 # compile runit
 echo "****************************"
@@ -26,16 +26,16 @@ echo 'gcc -static -Os -pipe' >src/conf-ld
 ./package/check
 
 # Create expected directories for runit
-mkdir -p "$OUTPUT_PATH/runit-2.1.2/src"
+mkdir -p "$OUTPUT_PATH/runit-2.2.0/src"
 
-# Move compiled runit commands into output commands folder
+# Move compiled runit commands into output commands folder
 echo "************************************"
 echo "* copying runit binaries to output *"
 echo "************************************"
-cp -r command "$OUTPUT_PATH/runit-2.1.2"
+cp -r command "$OUTPUT_PATH/runit-2.2.0"
 
-# Move compiled runit scripts into output scripts folder
-cp -r ./package "$OUTPUT_PATH/runit-2.1.2"
+# Move compiled runit scripts into output scripts folder
+cp -r ./package "$OUTPUT_PATH/runit-2.2.0"
 
 # extract net-tools source
 cd $PACKAGES_PATH
