@@ -1,7 +1,7 @@
 FROM --platform=linux/amd64 alpine:3.21.0
 
 RUN mkdir -p /packages
-RUN apk update && apk upgrade && apk add xz make gcc build-base bash linux-headers curl pkgconfig bison flex
+RUN apk update ; apk add xz make gcc build-base bash linux-headers curl pkgconfig bison flex
 
 ADD http://smarden.org/runit/runit-2.2.0.tar.gz /packages/runit-2.2.0.tar.gz
 ADD https://downloads.sourceforge.net/project/net-tools/net-tools-2.10.tar.xz /packages/net-tools-2.10.tar.xz

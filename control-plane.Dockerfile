@@ -26,7 +26,7 @@ ENV EV_APP_UUID $EV_APP_UUID
 ARG EV_API_KEY
 ENV EV_API_KEY $EV_API_KEY
 
-RUN apk update && apk upgrade &&\
+RUN apk update &&\
     apk add runit && apk add curl && \
     rm -rf /var/cache/apk/*
 
