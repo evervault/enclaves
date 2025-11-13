@@ -111,12 +111,10 @@ impl From<RequestType> for String {
 
 impl RequestType {
     fn matches(&self, val: &str) -> bool {
-        match (self, val) {
-            (Self::HTTP, "HTTP") => true,
-            (Self::TCP, "TCP") => true,
-            (Self::Websocket, "Websocket") => true,
-            _ => false,
-        }
+        let tuple = (self, val);
+        matches!(tuple, (Self::HTTP, "HTTP"))
+            || matches!(tuple, (Self::TCP, "TCP"))
+            || matches!(tuple, (Self::Websocket, "Websocket"))
     }
 }
 
