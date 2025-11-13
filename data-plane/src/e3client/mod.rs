@@ -205,7 +205,7 @@ impl E3Api for E3Client {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct AuthRequest {
     pub team_uuid: String,
     pub app_uuid: String,

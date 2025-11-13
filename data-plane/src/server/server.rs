@@ -3,7 +3,7 @@ use super::http::parse::{try_parse_http_request_from_stream, Incoming};
 use super::http::{request_to_bytes, response_to_bytes};
 use super::tls::TlsServerBuilder;
 
-use crate::e3client::E3Client;
+use crate::e3client::{E3Api, E3Client};
 use crate::env::{EnvironmentLoader, NeedCert};
 use crate::server::http::{build_internal_error_response, parse};
 use crate::{EnclaveContext, FeatureContext};
@@ -24,7 +24,7 @@ use tower::Service;
 #[cfg(feature = "enclave")]
 use super::layers::attest::AttestLayer;
 use super::layers::{
-    auth::{auth_request, AuthError, AuthLayer},
+    auth::{auth_request as send_auth_request, AuthError, AuthLayer},
     context_log::{init_request_context, ContextLogLayer},
     decrypt::DecryptLayer,
     forward::ForwardService,
@@ -169,38 +169,45 @@ async fn handle_websocket_request<S: AsyncRead + AsyncWrite + Unpin>(
     e3_client: Arc<E3Client>,
     port: u16,
 ) {
-    let context_builder =
-        init_request_context(&request, enclave_context.clone(), feature_context.clone());
+    let context_builder = init_request_context(
+        &request,
+        enclave_context.clone(),
+        feature_context.clone(),
+        RequestType::Websocket,
+    );
 
-    if !feature_context.api_key_auth {
-        log_non_http_trx(tx_for_connection, true, remote_ip, Some(context_builder));
-        let serialized_request = request_to_bytes(request).await;
-        let _ = pipe_to_customer_process(stream, &serialized_request, port).await;
-        return;
-    }
-
-    let api_key = match request
-        .headers()
-        .get("api-key")
-        .ok_or(AuthError::NoApiKeyGiven)
+    if let Err(e) =
+        authenticate_websocket_request(&request, enclave_context, e3_client, &feature_context).await
     {
-        Ok(api_key) => api_key,
-        Err(e) => {
-            let response_bytes = response_to_bytes(e.into()).await;
-            log_non_http_trx(tx_for_connection, false, remote_ip, Some(context_builder));
-            let _ = stream.write_all(&response_bytes).await;
-            return;
-        }
-    };
-    if let Err(auth_err) = auth_request(api_key, enclave_context, e3_client).await {
-        let response_bytes = response_to_bytes(auth_err.into()).await;
+        let response_bytes = response_to_bytes(e.into()).await;
         log_non_http_trx(tx_for_connection, false, remote_ip, Some(context_builder));
         let _ = stream.write_all(&response_bytes).await;
         return;
     }
+
     log_non_http_trx(tx_for_connection, true, remote_ip, Some(context_builder));
     let serialized_request = request_to_bytes(request).await;
     let _ = pipe_to_customer_process(stream, &serialized_request, port).await;
+}
+
+async fn authenticate_websocket_request<T: E3Api + Send + Sync + 'static>(
+    request: &Request<Body>,
+    enclave_context: Arc<EnclaveContext>,
+    e3_client: Arc<T>,
+    feature_context: &Arc<FeatureContext>,
+) -> Result<(), AuthError> {
+    if !feature_context.api_key_auth {
+        return Ok(());
+    }
+
+    let api_key = request
+        .headers()
+        .get("api-key")
+        .ok_or(AuthError::NoApiKeyGiven)?;
+
+    send_auth_request(api_key, enclave_context, e3_client).await?;
+
+    Ok(())
 }
 
 async fn shutdown_conn<L>(stream: &mut TlsStream<L>)
@@ -248,4 +255,190 @@ fn log_non_http_trx(
     tx_sender
         .send(LogHandlerMessage::new_log_message(trx_context))
         .unwrap()
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::{
+        base_tls_client::ClientError,
+        e3client::{mock::MockE3TestClient, AuthRequest},
+        server::layers::auth::compute_base64_sha512,
+    };
+    use hyper::{header::HeaderValue, StatusCode};
+    #[cfg(feature = "network_egress")]
+    use shared::server::egress::{EgressConfig, EgressDestinations};
+    use std::sync::Arc;
+
+    fn create_default_feature_ctx(api_key_auth: bool) -> FeatureContext {
+        FeatureContext {
+            api_key_auth,
+            healthcheck: std::default::Default::default(),
+            healthcheck_port: std::default::Default::default(),
+            healthcheck_use_tls: std::default::Default::default(),
+            trx_logging_enabled: std::default::Default::default(),
+            forward_proxy_protocol: std::default::Default::default(),
+            trusted_headers: std::default::Default::default(),
+            attestation_cors: std::default::Default::default(),
+            #[cfg(feature = "network_egress")]
+            egress: EgressConfig {
+                allow_list: EgressDestinations {
+                    wildcard: std::default::Default::default(),
+                    exact: std::default::Default::default(),
+                    allow_all: std::default::Default::default(),
+                    ips: std::default::Default::default(),
+                },
+            },
+        }
+    }
+
+    #[tokio::test]
+    async fn test_websocket_authenticate_request_successfully() {
+        let mut request = Request::new(Body::empty());
+
+        let api_key = "api-key";
+        let mut headers = hyper::HeaderMap::new();
+        headers.append("api-key", HeaderValue::from_str(api_key).unwrap());
+        request.headers_mut().extend(headers);
+
+        let enclave_ctx = Arc::new(EnclaveContext {
+            team_uuid: "team_uuid".into(),
+            app_uuid: "app_uuid".into(),
+            uuid: "enclave_uuid".into(),
+            name: "my-enclave".into(),
+        });
+
+        let expected_auth_req = AuthRequest::from(enclave_ctx.clone());
+        let hashed_api_key = compute_base64_sha512(api_key.as_bytes());
+        let auth_challenge = HeaderValue::from_bytes(&hashed_api_key).unwrap();
+
+        let mut e3_test_client = MockE3TestClient::new();
+        e3_test_client
+            .expect_authenticate()
+            .return_once(move |val, context| {
+                assert_eq!(val, auth_challenge);
+                assert_eq!(context, expected_auth_req);
+                Ok(())
+            });
+
+        let feature_context = Arc::new(create_default_feature_ctx(true));
+
+        let result = authenticate_websocket_request(
+            &request,
+            enclave_ctx,
+            Arc::new(e3_test_client),
+            &feature_context,
+        )
+        .await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_websocket_authenticate_request_no_api_key() {
+        let request = Request::new(Body::empty());
+
+        let enclave_ctx = Arc::new(EnclaveContext {
+            team_uuid: "team_uuid".into(),
+            app_uuid: "app_uuid".into(),
+            uuid: "enclave_uuid".into(),
+            name: "my-enclave".into(),
+        });
+
+        let mut e3_test_client = MockE3TestClient::new();
+        e3_test_client.expect_authenticate().never();
+
+        let feature_context = Arc::new(create_default_feature_ctx(true));
+
+        let result = authenticate_websocket_request(
+            &request,
+            enclave_ctx,
+            Arc::new(e3_test_client),
+            &feature_context,
+        )
+        .await;
+
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), AuthError::NoApiKeyGiven));
+    }
+
+    #[tokio::test]
+    async fn test_websocket_authenticate_request_failure() {
+        let mut request = Request::new(Body::empty());
+
+        let api_key = "api-key";
+        let mut headers = hyper::HeaderMap::new();
+        headers.append("api-key", HeaderValue::from_str(api_key).unwrap());
+        request.headers_mut().extend(headers);
+
+        let enclave_ctx = Arc::new(EnclaveContext {
+            team_uuid: "team_uuid".into(),
+            app_uuid: "app_uuid".into(),
+            uuid: "enclave_uuid".into(),
+            name: "my-enclave".into(),
+        });
+
+        let expected_auth_req = AuthRequest::from(enclave_ctx.clone());
+        let hashed_api_key = compute_base64_sha512(api_key.as_bytes());
+        let auth_challenge = HeaderValue::from_bytes(&hashed_api_key).unwrap();
+
+        let enclave_ctx = Arc::new(EnclaveContext {
+            team_uuid: "team_uuid".into(),
+            app_uuid: "app_uuid".into(),
+            uuid: "enclave_uuid".into(),
+            name: "my-enclave".into(),
+        });
+
+        let mut e3_test_client = MockE3TestClient::new();
+        e3_test_client
+            .expect_authenticate()
+            .return_once(move |val, context| {
+                assert_eq!(val, auth_challenge);
+                assert_eq!(context, expected_auth_req);
+                Err(ClientError::FailedRequest(StatusCode::UNAUTHORIZED))
+            });
+
+        let feature_context = Arc::new(create_default_feature_ctx(true));
+
+        let result = authenticate_websocket_request(
+            &request,
+            enclave_ctx,
+            Arc::new(e3_test_client),
+            &feature_context,
+        )
+        .await;
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            AuthError::FailedToAuthenticateApiKey
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_websocket_auth_disabled() {
+        let request = Request::new(Body::empty());
+
+        let enclave_ctx = Arc::new(EnclaveContext {
+            team_uuid: "team_uuid".into(),
+            app_uuid: "app_uuid".into(),
+            uuid: "enclave_uuid".into(),
+            name: "my-enclave".into(),
+        });
+
+        let mut e3_test_client = MockE3TestClient::new();
+        e3_test_client.expect_authenticate().never();
+
+        let feature_context = Arc::new(create_default_feature_ctx(false));
+
+        let result = authenticate_websocket_request(
+            &request,
+            enclave_ctx,
+            Arc::new(e3_test_client),
+            &feature_context,
+        )
+        .await;
+
+        assert!(result.is_ok());
+    }
 }
