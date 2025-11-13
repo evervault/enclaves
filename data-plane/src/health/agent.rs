@@ -11,15 +11,11 @@ use tokio::sync::oneshot::{
     channel as oneshot_channel, Receiver as OneshotReceiver, Sender as OneshotSender,
 };
 
+#[derive(Default)]
 enum HealthcheckAgentState {
+    #[default]
     Initializing,
     Ready,
-}
-
-impl std::default::Default for HealthcheckAgentState {
-    fn default() -> Self {
-        Self::Initializing
-    }
 }
 
 pub struct HealthcheckStatusRequest {
