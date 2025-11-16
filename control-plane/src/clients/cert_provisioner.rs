@@ -79,7 +79,7 @@ impl CertProvisionerClient {
         root_certificate: Certificate,
     ) -> Self {
         let server_name: ServerName =
-            ServerName::try_from(configuration::get_cert_provisoner_host().as_str())
+            ServerName::try_from(configuration::get_cert_provisoner_sni().as_str())
                 .expect("Hardcoded hostnames");
 
         Self {
