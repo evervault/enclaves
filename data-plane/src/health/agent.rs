@@ -12,15 +12,11 @@ use tokio::sync::oneshot::{
     channel as oneshot_channel, Receiver as OneshotReceiver, Sender as OneshotSender,
 };
 
+#[derive(Default)]
 enum HealthcheckAgentState {
+    #[default]
     Initializing,
     Ready,
-}
-
-impl std::default::Default for HealthcheckAgentState {
-    fn default() -> Self {
-        Self::Initializing
-    }
 }
 
 pub struct HealthcheckStatusRequest {
@@ -52,6 +48,7 @@ pub struct HealthcheckAgent<C> {
 
 const DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT: usize = 10;
 
+#[allow(dead_code)]
 #[derive(Error, Debug)]
 enum UserProcessHealthCheckError {
     #[error("There was an error checking the initialization state of the user process - {0}")]

@@ -140,7 +140,7 @@ pub fn get_enclave_run_config() -> Result<EnclaveRunConfig, VarError> {
 }
 
 pub fn get_cert_provisoner_sni() -> String {
-    if let Some(hostname_override) = std::env::var("PROVISIONER_SNI").ok() {
+    if let Ok(hostname_override) = std::env::var("PROVISIONER_SNI") {
         log::debug!("Hostname override set for provisioner: {hostname_override}");
         return hostname_override;
     }
