@@ -140,6 +140,10 @@ pub fn get_enclave_run_config() -> Result<EnclaveRunConfig, VarError> {
 }
 
 pub fn get_cert_provisoner_host() -> String {
+    if let Some(hostname_override) = std::env::var("PROVISIONER_HOSTNAME").ok() {
+        log::debug!("Hostname override set for provisioner: {hostname_override}");
+        return hostname_override;
+    }
     match get_rust_env() {
         Environment::Staging | Environment::Production => "provisioner.cages.internal".to_string(),
         _ => "localhost".to_string(),
