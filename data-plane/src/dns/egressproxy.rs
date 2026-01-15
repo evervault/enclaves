@@ -46,12 +46,28 @@ impl EgressProxy {
         Ok(())
     }
 
+    async fn try_read_with_timeout(
+        external_stream: &mut TcpStream,
+        buf: &mut [u8],
+    ) -> Result<usize, DNSError> {
+        match tokio::time::timeout(
+            std::time::Duration::from_millis(5),
+            external_stream.read(buf),
+        )
+        .await
+        {
+            Ok(Ok(bytes_read)) => Ok(bytes_read),
+            Ok(Err(e)) => Err(e.into()),
+            Err(_) => Ok(0),
+        }
+    }
+
     async fn handle_egress_connection(
         mut external_stream: TcpStream,
         allowed_domains: EgressDestinations,
     ) -> Result<(), DNSError> {
-        let mut buf = vec![0u8; 4096];
-        let n = external_stream.read(&mut buf).await?;
+        let mut buf = [0u8; 4096];
+        let n = Self::try_read_with_timeout(&mut external_stream, &mut buf).await?;
         let customer_data = &mut buf[..n];
 
         let mut data_plane_stream =
@@ -167,10 +183,7 @@ mod tests {
             allow_all: true,
             ips: vec![],
         };
-        assert_eq!(
-            check_domain_allow_list("app.evervault.com".to_string(), &egress_domains).unwrap(),
-            ()
-        );
+        assert!(check_domain_allow_list("app.evervault.com".to_string(), &egress_domains).is_ok());
     }
     #[test]
     fn test_valid_exact_domain() {
@@ -180,10 +193,7 @@ mod tests {
             allow_all: false,
             ips: vec![],
         };
-        assert_eq!(
-            check_domain_allow_list("app.evervault.com".to_string(), &egress_domains).unwrap(),
-            ()
-        );
+        assert!(check_domain_allow_list("app.evervault.com".to_string(), &egress_domains).is_ok());
     }
     #[test]
     fn test_valid_wildcard_domain() {
@@ -193,10 +203,7 @@ mod tests {
             allow_all: false,
             ips: vec![],
         };
-        assert_eq!(
-            check_domain_allow_list("app.evervault.com".to_string(), &egress_domains).unwrap(),
-            ()
-        );
+        assert!(check_domain_allow_list("app.evervault.com".to_string(), &egress_domains).is_ok());
     }
     #[test]
     fn test_invalid_domain() {

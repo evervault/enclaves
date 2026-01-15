@@ -10,12 +10,13 @@ on:
         required: true
         type: string
     secrets:
-      aws-cloudfront-distribution-id:
+      AWS_CLOUDFRONT_DISTRIBUTION_ID:
         required: true
-      aws-access-key-id:
+      AWS_ENCLAVES_OIDC_ROLE_ARN:
         required: true
-      aws-secret-access-key:
-        required: true
+permissions:
+  id-token: write
+  contents: read
 jobs:
   build-runtime-bundle:
     runs-on: ubuntu-latest
@@ -42,11 +43,10 @@ jobs:
       - uses: actions/download-artifact@v4.1.7
         with:
           name: runtime-dependencies-${{github.sha}}.zip
-      - name: Configure Production AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.aws-access-key-id }}
-          aws-secret-access-key: ${{ secrets.aws-secret-access-key }}
+          role-to-assume: ${{ secrets.AWS_ENCLAVES_OIDC_ROLE_ARN }}
           aws-region: us-east-1
       - name: Upload installer bundle to S3
         env:
@@ -59,11 +59,10 @@ jobs:
     needs: [build-runtime-bundle, upload-runtime-bundle]
     steps:
       - uses: actions/checkout@v4
-      - name: Configure Production AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.aws-access-key-id }}
-          aws-secret-access-key: ${{ secrets.aws-secret-access-key }}
+          role-to-assume: ${{ secrets.AWS_ENCLAVES_OIDC_ROLE_ARN }}
           aws-region: us-east-1
       - name: Update latest record for installer
         env:
@@ -76,4 +75,4 @@ jobs:
       - name: Cloudfront Cache Invalidation
         run:
           aws cloudfront create-invalidation --distribution-id ${{
-          secrets.aws-cloudfront-distribution-id }} --paths "/runtime/versions"
+          secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID }} --paths "/runtime/versions"

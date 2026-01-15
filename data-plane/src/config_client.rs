@@ -158,7 +158,7 @@ impl ConfigClient {
         let payload =
             JwsRequest::new(signature_type, url, nonce, payload, account_id).into_body()?;
 
-        log::debug!("Sending JWS request to control plane: {:#?}", payload);
+        log::debug!("Sending JWS request to control plane: {payload:#?}");
 
         let response = self
             .send(ConfigServerPath::AcmeSign, "GET", payload)
@@ -171,11 +171,10 @@ impl ConfigClient {
         } else {
             let response_body = self.parse_response_body_to_string(response).await?;
             let err_msg = format!(
-                "Error sending jws request to control plane. Response Code: {}. Msg: {}",
-                response_status, response_body
+                "Error sending jws request to control plane. Response Code: {response_status}. Msg: {response_body}"
             );
 
-            log::error!("{}", err_msg);
+            log::error!("{err_msg}");
             Err(Error::ConfigServer(err_msg))
         }
     }
@@ -192,11 +191,10 @@ impl ConfigClient {
         } else {
             let response_body = self.parse_response_body_to_string(response).await?;
             let err_msg = format!(
-                "Error sending jwk request to control plane. Response Code: {}. Msg: {}",
-                response_status, response_body
+                "Error sending jwk request to control plane. Response Code: {response_status}. Msg: {response_body}"
             );
 
-            log::error!("{}", err_msg);
+            log::error!("{err_msg}");
             Err(Error::ConfigServer(err_msg))
         }
     }

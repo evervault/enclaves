@@ -34,9 +34,9 @@ pub struct IncomingStreamDecoder {
 pub type CiphertextCandidate<'a> = (&'a [u8], &'a [u8]);
 
 impl IncomingStreamDecoder {
-    pub fn find_next_ciphertext_candidate(
-        src: &[u8],
-    ) -> Result<Option<CiphertextCandidate>, IncomingStreamError> {
+    pub fn find_next_ciphertext_candidate<'a>(
+        src: &'a [u8],
+    ) -> Result<Option<CiphertextCandidate<'a>>, IncomingStreamError> {
         match parser::find_ciphertext_prefix(src) {
             Err(nom::Err::Incomplete(_)) => Ok(None),
             Err(nom::Err::Error(_)) => Err(IncomingStreamError::NomError),
@@ -250,7 +250,7 @@ mod tests {
         let frame2 = reader.next().await.transpose().unwrap(); // don't expect errors
         assert!(matches!(frame2, Some(IncomingFrame::Plaintext(_)))); // Frame 2 contains the remainder of the payload
         let frame3 = reader.next().await.transpose().unwrap(); // expect None
-        assert!(matches!(frame3, None));
+        assert!(frame3.is_none());
     }
 
     #[tokio::test]

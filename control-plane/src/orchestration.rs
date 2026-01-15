@@ -129,7 +129,7 @@ impl Orchestration {
                     tokio::spawn(async move {
                         let mut lines = BufReader::new(stdout).lines();
                         while let Ok(Some(line)) = lines.next_line().await {
-                            info!("[ENCLAVE]: {}", line);
+                            info!("[ENCLAVE]: {line}");
                         }
                     });
                 }

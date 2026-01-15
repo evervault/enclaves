@@ -187,10 +187,10 @@ where
                             req_info.headers.insert(key, value);
                         }
                         (Err(e), _) => {
-                            eprintln!("Failed to parse header key: {:?}", e);
+                            eprintln!("Failed to parse header key: {e:?}");
                         }
                         (_, Err(e)) => {
-                            eprintln!("Failed to parse header value: {:?}", e);
+                            eprintln!("Failed to parse header value: {e:?}");
                         }
                     }
                 });
@@ -278,7 +278,7 @@ mod tests {
 
         let mock_service = service_fn(|req: Request<Body>| async {
             let (parts, body) = req.into_parts();
-            let mut response = Response::new(Body::from(body));
+            let mut response = Response::new(body);
             parts.headers.iter().for_each(|(key, val)| {
                 response.headers_mut().insert(key, val.clone());
             });
@@ -338,7 +338,7 @@ mod tests {
 
         let mock_service = service_fn(|req: Request<Body>| async {
             let (parts, body) = req.into_parts();
-            let mut response = Response::new(Body::from(body));
+            let mut response = Response::new(body);
             parts.headers.iter().for_each(|(key, val)| {
                 response.headers_mut().insert(key, val.clone());
             });
@@ -381,7 +381,7 @@ mod tests {
 
         let mock_service = service_fn(|req: Request<Body>| async {
             let (parts, body) = req.into_parts();
-            let mut response = Response::new(Body::from(body));
+            let mut response = Response::new(body);
             parts.headers.iter().for_each(|(key, val)| {
                 response.headers_mut().insert(key, val.clone());
             });
