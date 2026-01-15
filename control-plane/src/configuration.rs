@@ -139,6 +139,15 @@ pub fn get_enclave_run_config() -> Result<EnclaveRunConfig, VarError> {
     Ok(EnclaveRunConfig::new(num_cpus, ram_size_mib, debug_mode))
 }
 
+pub fn get_cert_provisoner_sni() -> String {
+    if let Ok(hostname_override) = std::env::var("PROVISIONER_SNI") {
+        log::debug!("Hostname override set for provisioner: {hostname_override}");
+        return hostname_override;
+    }
+
+    get_cert_provisoner_host()
+}
+
 pub fn get_cert_provisoner_host() -> String {
     match get_rust_env() {
         Environment::Staging | Environment::Production => "provisioner.cages.internal".to_string(),

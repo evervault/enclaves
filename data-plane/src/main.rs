@@ -31,10 +31,6 @@ fn try_update_fd_limit(soft_limit: u64, hard_limit: u64) {
     }
 }
 
-#[cfg(feature = "enclave")]
-const ENCLAVE_NOFILE_SOFT_LIMIT: u64 = 4096;
-#[cfg(feature = "enclave")]
-const ENCLAVE_NOFILE_HARD_LIMIT: u64 = 16384;
 const ENCLAVE_CLOCK_SYNC_INTERVAL: Duration = Duration::from_secs(300);
 
 fn main() {
@@ -42,7 +38,7 @@ fn main() {
     print_version!("Data Plane");
 
     #[cfg(feature = "enclave")]
-    try_update_fd_limit(ENCLAVE_NOFILE_SOFT_LIMIT, ENCLAVE_NOFILE_HARD_LIMIT);
+    try_update_fd_limit(rlimit::INFINITY, rlimit::INFINITY);
 
     let mut args = std::env::args();
     let _ = args.next(); // ignore path to executable
