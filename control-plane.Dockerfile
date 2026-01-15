@@ -1,4 +1,4 @@
-FROM node:16-alpine3.18
+FROM node:18-alpine3.22
 
 ENV CONTROL_PLANE_EXECUTABLE_PATH=/control-plane
 ENV CONTROL_PLANE_SERVICE_PATH=/etc/service/control-plane

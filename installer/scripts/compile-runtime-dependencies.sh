@@ -10,9 +10,9 @@ PACKAGES_PATH=/packages
 cd $PACKAGES_PATH
 
 ### Build runit
-gunzip runit-2.1.2.tar.gz
-tar -xpf runit-2.1.2.tar
-cd admin/runit-2.1.2 # runit contains a top level folder called admin
+gunzip runit-2.2.0.tar.gz
+tar -xpf runit-2.2.0.tar
+cd admin/runit-2.2.0 # runit contains a top level folder called admin
 
 # compile runit
 echo "****************************"
@@ -26,16 +26,16 @@ echo 'gcc -static -Os -pipe' >src/conf-ld
 ./package/check
 
 # Create expected directories for runit
-mkdir -p "$OUTPUT_PATH/runit-2.1.2/src"
+mkdir -p "$OUTPUT_PATH/runit-2.2.0/src"
 
-# Move compiled runit commands into output commands folder
+# Move compiled runit commands into output commands folder
 echo "************************************"
 echo "* copying runit binaries to output *"
 echo "************************************"
-cp -r command "$OUTPUT_PATH/runit-2.1.2"
+cp -r command "$OUTPUT_PATH/runit-2.2.0"
 
-# Move compiled runit scripts into output scripts folder
-cp -r ./package "$OUTPUT_PATH/runit-2.1.2"
+# Move compiled runit scripts into output scripts folder
+cp -r ./package "$OUTPUT_PATH/runit-2.2.0"
 
 # extract net-tools source
 cd $PACKAGES_PATH
@@ -124,18 +124,22 @@ cd $PACKAGES_PATH
 echo "************************"
 echo "* extracting iproute2 *"
 echo "************************"
-tar -xvf iproute2-6.7.0.tar.gz
-mkdir -p "$OUTPUT_PATH/iproute2-6.7.0"
+tar -xvf iproute2-6.11.0.tar.gz
+mkdir -p "$OUTPUT_PATH/iproute2-6.11.0"
 
 echo "************************"
 echo "* building iproute2 *"
 echo "************************"
-cd iproute2-6.7.0
+cd iproute2-6.11.0
+
+# Fix missing endian.h include in libnetlink.h - htobe64 is defined in musl's endian.h
+sed -i '1i#include <endian.h>' include/libnetlink.h
+
 unset CFLAGS
 unset LDFLAGS
 ./configure
 make CCOPTS="-O2 -pipe -static" LDFLAGS="--static" SUBDIRS="lib ip" V=1 # Statically compile ip with verbose logging enabled
-cp ip/ip "$OUTPUT_PATH/iproute2-6.7.0"
+cp ip/ip "$OUTPUT_PATH/iproute2-6.11.0"
 
 
 # Create archive of static binaries and installer
@@ -144,10 +148,10 @@ echo "* creating installer archive *"
 echo "******************************"
 cp "$PACKAGES_PATH/installer.sh" "$OUTPUT_PATH/installer.sh"
 cd $OUTPUT_PATH
-tar -czf runtime-dependencies.tar.gz net-tools-2.10 runit-2.1.2 installer.sh iptables-1.8.10 iproute2-6.7.0
+tar -czf runtime-dependencies.tar.gz net-tools-2.10 runit-2.2.0 installer.sh iptables-1.8.10 iproute2-6.11.0
 
 # Remove binaries outside of the archive 
 echo "*****************************"
 echo "* removing unused artifacts *"
 echo "*****************************"
-rm -rf net-tools-2.10 runit-2.1.2 installer.sh iptables-1.8.10 iproute2-6.7.0
+rm -rf net-tools-2.10 runit-2.2.0 installer.sh iptables-1.8.10 iproute2-6.11.0
