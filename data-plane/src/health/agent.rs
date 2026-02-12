@@ -4,7 +4,6 @@ use hyper::{client::HttpConnector, header, Body, Client, Method, Request};
 use serde_json::Value;
 use shared::{notify_shutdown::Service, server::health::UserProcessHealth};
 use std::collections::VecDeque;
-use thiserror::Error;
 use tokio::sync::mpsc::{
     channel, unbounded_channel, Receiver, Sender, UnboundedReceiver, UnboundedSender,
 };
