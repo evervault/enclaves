@@ -47,6 +47,15 @@ pub struct HealthcheckAgent<C> {
 
 const DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT: usize = 10;
 
+#[allow(dead_code)]
+#[derive(Error, Debug)]
+enum UserProcessHealthCheckError {
+    #[error("There was an error checking the initialization state of the user process - {0}")]
+    InitializationCheck(#[from] ContextError),
+    #[error("There was an error sending the healthcheck request to the user process - {0}")]
+    HealthcheckRequest(#[from] hyper::Error),
+}
+
 impl HealthcheckAgent<hyper_rustls::HttpsConnector<HttpConnector>> {
     pub fn build_tls_agent(
         customer_process_port: u16,
