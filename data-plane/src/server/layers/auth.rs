@@ -130,7 +130,7 @@ where
     }
 }
 
-fn compute_base64_sha512(input: impl AsRef<[u8]>) -> Vec<u8> {
+pub(crate) fn compute_base64_sha512(input: impl AsRef<[u8]>) -> Vec<u8> {
     let mut hasher = sha2::Sha512::new();
     hasher.update(input.as_ref());
     let hash_digest = base64::encode(hasher.finalize().as_slice());

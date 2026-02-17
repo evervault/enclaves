@@ -57,7 +57,7 @@ pub struct TrxContext {
 
 impl TrxContext {
     pub fn record_trx(mut self) {
-        if self.response_code.is_none() {
+        if self.response_code.is_none() && !RequestType::Websocket.matches(&self.request_type) {
             self.response_code = Some("ERR".to_string());
         }
         let json_log = serde_json::to_string(&self);
@@ -106,6 +106,15 @@ impl From<RequestType> for String {
             RequestType::TCP => "TCP".to_string(),
             RequestType::Websocket => "Websocket".to_string(),
         }
+    }
+}
+
+impl RequestType {
+    fn matches(&self, val: &str) -> bool {
+        let tuple = (self, val);
+        matches!(tuple, (Self::HTTP, "HTTP"))
+            || matches!(tuple, (Self::TCP, "TCP"))
+            || matches!(tuple, (Self::Websocket, "Websocket"))
     }
 }
 
