@@ -13,7 +13,7 @@ fi
 RUNIT_PATH=`command -v runit`
 if [ -z "$RUNIT_PATH" ]; then
   echo "Installing prebuilt runit"
-  cd runit-2.1.2
+  cd runit-2.2.0
   sh ./package/upgrade
   RUNIT_PATH_POST_INSTALL=`command -v runit`
   if [ -z "$RUNIT_PATH_POST_INSTALL" ]; then
@@ -52,7 +52,7 @@ IP_PATH=`command -v ip`
 if [ -z "$IP_PATH" ]; then
   echo "Installing prebuilt ip"
   IP_TARGET_PATH=/usr/local/bin/ip 
-  install -m 0755 ./iproute2-6.7.0/ip "$IP_TARGET_PATH"
+  install -m 0755 ./iproute2-6.11.0/ip "$IP_TARGET_PATH"
   IP_PATH_POST_INSTALL=`command -v ip`
   echo "IP_PATH_POST_INSTALL: $IP_PATH_POST_INSTALL"
   test "$IP_PATH_POST_INSTALL" = "$IP_TARGET_PATH" || exit 1
