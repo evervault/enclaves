@@ -1,10 +1,7 @@
 on:
   push:
     paths:
-      - control-plane/**
-      - data-plane/**
-      - shared/**
-      - acme-server
+      - crates/**
       - .github/workflows/lint.yml
 name: Lint
 permissions:

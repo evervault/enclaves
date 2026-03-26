@@ -1,8 +1,8 @@
 on:
   push:
     paths:
-      - data-plane/**
-      - shared/**
+      - crates/data-plane/**
+      - crates/shared/**
       - .github/workflows/test-data-plane.yml
       - Cargo.lock
 permissions:

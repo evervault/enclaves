@@ -73,7 +73,7 @@ jobs:
           ECR_REPOSITORY: evervault/control-plane
           VERSION_TAG: ${{ needs.get-version.outputs.version }}
         run: |
-          docker build -f ./control-plane/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$VERSION_TAG --pull --no-cache .
+          docker build -f ./crates/control-plane/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$VERSION_TAG --pull --no-cache .
       - name: Push control plane image to Amazon ECR
         id: push-control-plane
         env:
@@ -116,7 +116,7 @@ jobs:
           ECR_REPOSITORY: evervault/control-plane
           VERSION_TAG: ${{ needs.get-version.outputs.version }}
         run: |
-          docker build -f ./control-plane/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$VERSION_TAG --pull --no-cache .
+          docker build -f ./crates/control-plane/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$VERSION_TAG --pull --no-cache .
       - name: Push control plane image to Amazon ECR
         id: push-control-plane
         env:

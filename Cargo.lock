@@ -994,7 +994,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shared",
- "storage-client-interface",
+ "storage-client-interface 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "thiserror",
  "tls-parser",
  "tokio",
@@ -3450,6 +3450,16 @@ name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
+
+[[package]]
+name = "storage-client-interface"
+version = "0.3.0"
+dependencies = [
+ "async-trait",
+ "aws-config",
+ "aws-sdk-s3",
+ "thiserror",
+]
 
 [[package]]
 name = "storage-client-interface"

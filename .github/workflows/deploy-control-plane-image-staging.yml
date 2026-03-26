@@ -95,7 +95,7 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
           SEMVER: ${{ needs.get-release-semver.outputs.semver }}
         run: |
-          docker build -f ./control-plane/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$SEMVER --pull --no-cache .
+          docker build -f ./crates/control-plane/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-enabled-$SEMVER --pull --no-cache .
       - name: Push control plane image to Amazon ECR
         id: push-control-plane
         env:
@@ -142,7 +142,7 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
           SEMVER: ${{ needs.get-release-semver.outputs.semver }}
         run: |
-          docker build -f ./control-plane/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$SEMVER --pull --no-cache .
+          docker build -f ./crates/control-plane/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:egress-disabled-$SEMVER --pull --no-cache .
       - name: Push control plane image to Amazon ECR
         id: push-control-plane
         env:

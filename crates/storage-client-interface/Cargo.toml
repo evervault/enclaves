@@ -1,0 +1,22 @@
+[package]
+name = "storage-client-interface"
+version = "0.3.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "A Rust library for exposing the StorageClientInterface trait for interacting with a storage backend. Used by Evervault Enclaves."
+homepage = "https://github.com/evervault/enclaves"
+documentation = "https://docs.rs/storage-client-interface"
+repository = "https://github.com/evervault/enclaves"
+readme = "README.md"
+keywords = ["storage", "acme", "s3", "enclaves", "evervault"]
+categories = ["development-tools"]
+
+[dependencies]
+thiserror = "1.0.25"
+async-trait = "0.1.56"
+aws-sdk-s3 = {version = "1.54.0", optional = true}
+aws-config = {version = "1.5.1", optional = true}
+
+[features]
+default = ["s3"]
+s3 = ["dep:aws-sdk-s3", "dep:aws-config"]

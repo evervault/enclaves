@@ -2,8 +2,7 @@ on:
   push:
     paths:
       - e2e-tests/**
-      - data-plane/**
-      - control-plane/**
+      - crates/**
       - .github/workflows/test-e2e.yml
       - Cargo.lock
 
