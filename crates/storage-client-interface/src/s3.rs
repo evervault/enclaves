@@ -45,7 +45,10 @@ impl StorageClient {
     #[allow(unused)]
     pub async fn new(bucket: String) -> Self {
         let region_provider = RegionProviderChain::default_provider().or_else("us-east-1");
-        let config = aws_config::from_env().region(region_provider).load().await;
+        let config = aws_config::defaults(aws_config::BehaviorVersion::v2026_01_12())
+            .region(region_provider)
+            .load()
+            .await;
         let client = Client::new(&config);
         Self { bucket, client }
     }
