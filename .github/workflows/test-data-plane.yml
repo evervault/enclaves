@@ -5,6 +5,8 @@ on:
       - shared/**
       - .github/workflows/test-data-plane.yml
       - Cargo.lock
+permissions:
+  contents: read
 name: Test Data Plane
 jobs:
   check_data_plane:
@@ -23,7 +25,7 @@ jobs:
           ]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v6
       - name: Install MUSL Tools
         run: |
           sudo apt-get update
@@ -50,7 +52,7 @@ jobs:
           ]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v6
       - name: Install MUSL Tools
         run: |
           sudo apt-get update

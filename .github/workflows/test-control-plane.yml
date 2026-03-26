@@ -5,12 +5,14 @@ on:
       - shared/**
       - .github/workflows/test-control-plane.yml
       - Cargo.lock
+permissions:
+  contents: read
 name: Test Control Plane
 jobs:
   test_control_plane:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v6
       - name: Install MUSL Tools
         run: |
           sudo apt-get update
