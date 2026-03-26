@@ -4,6 +4,10 @@ on:
       - src/**
       - .github/workflows/lint-and-test.yml
 name: Lint and Test
+
+permissions:
+  contents: read
+
 jobs:
   lint_and_test_rust:
     runs-on: ubuntu-latest

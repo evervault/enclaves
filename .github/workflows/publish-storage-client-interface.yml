@@ -5,6 +5,10 @@ on:
     tags:
       - "storage-client-interface/v*"
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   get-version:
     runs-on: ubuntu-latest
