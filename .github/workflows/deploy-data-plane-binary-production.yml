@@ -28,7 +28,7 @@ jobs:
     needs: get-version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v6
 
       - name: Inject Version
         run: |
@@ -127,7 +127,7 @@ jobs:
     environment:
       name: production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Configure Production AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:

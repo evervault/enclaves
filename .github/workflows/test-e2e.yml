@@ -6,12 +6,16 @@ on:
       - control-plane/**
       - .github/workflows/test-e2e.yml
       - Cargo.lock
+
+permissions:
+  contents: read
+
 name: Run end-to-end tests
 jobs:
   run_e2e_tests_full_features:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
       - name: Install MUSL Tools
         run: |
@@ -30,9 +34,9 @@ jobs:
       - uses: actions-hub/docker/cli@f5fdbfc3f9d2a9265ead8962c1314108a7b7ec5d
         env:
           SKIP_LOGIN: true
-      - uses: actions/setup-node@v1
+      - uses: actions/setup-node@v6
         with:
-          node-version: "16.x"
+          node-version: "24.x"
       - name: Run end-to-end test script
         env:
           CI: true
@@ -43,7 +47,7 @@ jobs:
   run_e2e_tests_no_tls_termination:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v6
       - name: Install MUSL Tools
         run: |
           sudo apt-get update
@@ -62,9 +66,9 @@ jobs:
       - uses: actions-hub/docker/cli@f5fdbfc3f9d2a9265ead8962c1314108a7b7ec5d
         env:
           SKIP_LOGIN: true
-      - uses: actions/setup-node@v1
+      - uses: actions/setup-node@v6
         with:
-          node-version: "16.x"
+          node-version: "24.x"
       - name: Run end-to-end test script
         env:
           CI: true

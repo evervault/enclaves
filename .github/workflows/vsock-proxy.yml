@@ -7,13 +7,15 @@ on:
       - shared/**
       - .github/workflows/vsock-proxy.yml
       - Cargo.lock
+permissions:
+  contents: read
 name: vsock-proxy
 jobs:
   check-proxy:
     runs-on: ubuntu-latest
     if: ${{ contains(github.event.release.tag_name, 'vsock-proxy') || github.event_name == 'push' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install MUSL Tools
         run: |
           sudo apt-get update
@@ -39,7 +41,7 @@ jobs:
     needs: [check-proxy]
     if: ${{ contains(github.event.release.tag_name, 'vsock-proxy') || github.event_name == 'push' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install MUSL Tools
         run: |
           sudo apt-get update
@@ -58,7 +60,7 @@ jobs:
     needs: [check-proxy,test-proxy]
     if: ${{ github.event_name == 'push' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install MUSL Tools
         run: |
           sudo apt-get update
@@ -79,7 +81,7 @@ jobs:
     needs: [check-proxy,test-proxy]
     if: ${{ contains(github.event.release.tag_name, 'vsock-proxy') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Install MUSL Tools
         run: |
           sudo apt-get update

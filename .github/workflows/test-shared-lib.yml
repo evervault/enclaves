@@ -4,12 +4,14 @@ on:
       - shared/**
       - .github/workflows/test-shared-lib.yml
       - Cargo.lock
+permissions:
+  contents: read
 name: Test Shared Library
 jobs:
   test_shared_lib:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v6
       - name: Install MUSL Tools
         run: |
           sudo apt-get update

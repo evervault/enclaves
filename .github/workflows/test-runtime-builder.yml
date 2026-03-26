@@ -6,12 +6,14 @@ on:
       - installer/**
       - .github/workflows/test-runtime-builder.yml
       - Cargo.lock
+permissions:
+  contents: read
 name: Build runtime installer
 jobs:
   run-build-on-runtime-installer:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - name: Build bundle using local action
         uses: ./installer
       - name: Upload bundle as artifact
@@ -29,7 +31,7 @@ jobs:
           - test-alpine.Dockerfile
           - test.Dockerfile
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - name: Download bundle artifact
         uses: actions/download-artifact@v4.1.7
         with:
