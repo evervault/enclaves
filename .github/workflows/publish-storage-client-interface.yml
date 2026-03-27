@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [get-version]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Ensure version of crate matches release
         id: get-cargo-version
         run: |
@@ -39,8 +39,8 @@ jobs:
     environment: crate-publish
     needs: [get-version, assert-matching-version]
     steps:
-      - uses: actions/checkout@v6
-      - uses: rust-lang/crates-io-auth-action@v1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
         id: auth
       - name: <Dry Run> Package and Publish Cargo to registry
         run: cargo publish -p storage-client-interface --dry-run
@@ -51,8 +51,8 @@ jobs:
     environment: crate-publish
     needs: [get-version, assert-matching-version, dry-run-publish]
     steps:
-      - uses: actions/checkout@v6
-      - uses: rust-lang/crates-io-auth-action@v1
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
         id: auth
       - name: Package and Publish Cargo to registry
         run: cargo publish -p storage-client-interface
