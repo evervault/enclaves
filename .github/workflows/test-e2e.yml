@@ -2,8 +2,7 @@ on:
   push:
     paths:
       - e2e-tests/**
-      - data-plane/**
-      - control-plane/**
+      - crates/**
       - .github/workflows/test-e2e.yml
       - Cargo.lock
 
@@ -15,13 +14,13 @@ jobs:
   run_e2e_tests_full_features:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: Install MUSL Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           targets: x86_64-unknown-linux-musl
       - name: Build Cages Project
@@ -34,7 +33,7 @@ jobs:
       - uses: actions-hub/docker/cli@f5fdbfc3f9d2a9265ead8962c1314108a7b7ec5d
         env:
           SKIP_LOGIN: true
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version: "24.x"
       - name: Run end-to-end test script
@@ -47,13 +46,13 @@ jobs:
   run_e2e_tests_no_tls_termination:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Install MUSL Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools
-      - uses: Swatinem/rust-cache@v2
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           targets: x86_64-unknown-linux-musl
       - name: Build Cages Project
@@ -66,7 +65,7 @@ jobs:
       - uses: actions-hub/docker/cli@f5fdbfc3f9d2a9265ead8962c1314108a7b7ec5d
         env:
           SKIP_LOGIN: true
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
           node-version: "24.x"
       - name: Run end-to-end test script

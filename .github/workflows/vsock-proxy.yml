@@ -15,16 +15,16 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ contains(github.event.release.tag_name, 'vsock-proxy') || github.event_name == 'push' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Install MUSL Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           components: clippy, rustfmt
           targets: x86_64-unknown-linux-musl
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           shared-key: "vsock-proxy"
       - name: Check project
@@ -32,7 +32,7 @@ jobs:
       - name: Check formatting
         run: cargo fmt --check
       - name: Clippy
-        uses: clechasseur/rs-clippy-check@v3
+        uses: clechasseur/rs-clippy-check@9190480d27706dc2fd75d122753936cafafa2154 # v6.0.1
         with:
           args: -p vsock-proxy -- -D warnings
 
@@ -41,15 +41,15 @@ jobs:
     needs: [check-proxy]
     if: ${{ contains(github.event.release.tag_name, 'vsock-proxy') || github.event_name == 'push' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Install MUSL Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           targets: x86_64-unknown-linux-musl
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           shared-key: "vsock-proxy"
       - name: Test vsock proxy
@@ -60,18 +60,18 @@ jobs:
     needs: [check-proxy,test-proxy]
     if: ${{ github.event_name == 'push' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Install MUSL Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           targets: x86_64-unknown-linux-musl
       - name: Compile proxy
         run: cargo build -p vsock-proxy --release
       - name: Upload proxy
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: vsock-proxy
           path: target/release/vsock-proxy
@@ -81,12 +81,12 @@ jobs:
     needs: [check-proxy,test-proxy]
     if: ${{ contains(github.event.release.tag_name, 'vsock-proxy') }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Install MUSL Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           targets: x86_64-unknown-linux-musl
       - name: Publish vsock-proxy

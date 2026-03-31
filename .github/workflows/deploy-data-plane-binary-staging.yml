@@ -4,8 +4,8 @@ on:
   push:
     paths:
       - .github/workflows/deploy-data-plane-binary-staging.yml
-      - data-plane/**
-      - shared/**
+      - crates/data-plane/**
+      - crates/shared/**
     branches:
       - main
 
@@ -24,12 +24,12 @@ jobs:
       semver: ${{ steps.get-version.outputs.semver }}
       semver-sha: ${{ steps.get-version.outputs.semver-sha }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Install MUSL Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           targets: x86_64-unknown-linux-musl
       - name: Parse semver from cargo.toml
@@ -45,24 +45,24 @@ jobs:
     runs-on: ubuntu-latest
     needs: [get-release-semver]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install MUSL Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
           targets: x86_64-unknown-linux-musl
 
       - name: Configure Staging AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # v6.0.0
         with:
           role-to-assume: ${{ secrets.AWS_ENCLAVES_STAGING_OIDC_ROLE_ARN }}
           aws-region: us-east-1
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           shared-key: "standard-cache"
 

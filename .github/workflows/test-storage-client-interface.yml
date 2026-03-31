@@ -1,0 +1,23 @@
+on:
+  push:
+    paths:
+      - src/**
+      - .github/workflows/lint-and-test.yml
+name: Lint and Test
+
+permissions:
+  contents: read
+
+jobs:
+  lint_and_test_rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install latest stable toolchain
+        uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+        with:
+          toolchain: stable
+          override: true
+      - run: cargo check -p storage-client-interface
+        env:
+          RUST_BACKTRACE: full

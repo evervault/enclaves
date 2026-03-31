@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["control-plane","data-plane","shared","crates/*"]
+members = ["crates/*"]
 exclude = ["./e2e-tests/mock-crypto"]
 
 [workspace.dependencies]
