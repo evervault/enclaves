@@ -30,9 +30,9 @@ jobs:
         id: get-cargo-version
         run: |
           CARGO_VERSION=$(cargo metadata --no-deps --format-version 1 | jq '.packages[] | select( .name == "storage-client-interface" ) | .version' | tr -d '"')
-          if [ "$CARGO_VERSION" != "${needs.get-version.outputs.version}" ]; then
+          if [ "$CARGO_VERSION" != "${{ needs.get-version.outputs.version }}" ]; then
             echo "Version in tag does not match cargo.toml"
-            echo "Expected $CARGO_VERSION, Found ${needs.get-version.outputs.version}"
+            echo "Expected $CARGO_VERSION, Found ${{ needs.get-version.outputs.version }}"
             exit 1
           fi
 
