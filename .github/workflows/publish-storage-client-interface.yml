@@ -18,7 +18,9 @@ jobs:
       - name: Get version from tag
         id: get-version
         run: |
-          echo "using version tag ${GITHUB_REF:36}"
+          TAG=${GITHUB_REF#refs/tags/}
+          echo "using version tag ${TAG#storage-client-interface/v}"
+          echo "version=${TAG#storage-client-interface/v}" >> $GITHUB_OUTPUT
   assert-matching-version:
     runs-on: ubuntu-latest
     needs: [get-version]
