@@ -34,7 +34,7 @@ tokio-vsock = { version = "0.3.2", optional = true }
 lazy_static = "1.4.0"
 derive_builder = "0.12.0"
 chrono = "0.4.23"
-rand = "^0.8"
+rand = "^0.9"
 tls-parser = { version = "0.12.2" }
 ppp = { version = "2.2.0" }
 tokio-rustls = { version = "0.24.1", features = ["dangerous_configuration"] }
