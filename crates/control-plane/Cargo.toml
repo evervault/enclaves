@@ -30,6 +30,9 @@ cadence-macros.workspace = true
 async-trait = "0.1.56"
 mockall = "0.11.4"
 axum = "0.6.19"
+launchdarkly-server-sdk = "2.6.3"
+hyper-proxy = { version = "0.9.1", default-features = false, features = ["rustls"] }
+http = "0.2"
 openssl = { version = "0.10.48", features = ["vendored"] }
 base64 = "0.13.0"
 storage-client-interface = "0.3.0"

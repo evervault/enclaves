@@ -1,11 +1,15 @@
 use control_plane::clients::{cert_provisioner, mtls_config};
 use control_plane::configuration::get_external_metrics_enabled;
 use control_plane::dns::{ExternalAsyncDnsResolver, InternalAsyncDnsResolver};
+use control_plane::feature_flag::{
+    self, FeatureFlagProvider, LaunchDarklyClient, NoopFeatureFlagProvider,
+};
 use control_plane::health::HealthCheckServer;
 use control_plane::orchestration::Orchestration;
 use control_plane::stats::{client::StatsClient, get_stats_target_ip, proxy::StatsProxy};
 use control_plane::stats::{EXTERNAL_METRIC_PORT, INTERNAL_METRIC_PORT};
 use control_plane::{config_server, tls_proxy};
+use std::sync::Arc;
 use shared::notify_shutdown::{NotifyShutdown, Service};
 use shared::{
     bridge::{Bridge, BridgeInterface, Direction},
@@ -39,7 +43,25 @@ async fn main() -> Result<()> {
     shared::logging::init_env_logger();
     print_version!("Control Plane");
     log::debug!("Starting control plane on {CONTROL_PLANE_PORT}");
-    let e3_proxy = e3proxy::E3Proxy::new();
+
+    let feature_flags: Arc<dyn FeatureFlagProvider> = match LaunchDarklyClient::try_new().await {
+        Ok(client) => {
+            log::info!("LaunchDarkly client initialized");
+            Arc::new(client)
+        }
+        Err(e) => {
+            log::warn!("LaunchDarkly init failed, using flag defaults: {e:?}");
+            Arc::new(NoopFeatureFlagProvider)
+        }
+    };
+
+    let enclave_context = configuration::EnclaveContext::from_env_vars();
+    let ld_context = Arc::new(
+        feature_flag::build_enclave_context(&enclave_context)
+            .expect("Failed to build LaunchDarkly context from enclave env"),
+    );
+
+    let e3_proxy = e3proxy::E3Proxy::new(feature_flags.clone(), ld_context.clone());
 
     let provisioner_proxy = tls_proxy::TlsProxy::new(
         vec![configuration::get_cert_provisoner_host()],

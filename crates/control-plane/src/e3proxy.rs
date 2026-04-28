@@ -1,30 +1,39 @@
 use crate::dns;
 use crate::dns::InternalAsyncDnsResolver;
 use crate::error::Result;
+use crate::feature_flag::{Context, FeatureFlagProvider};
 use shared::{
     bridge::{Bridge, BridgeInterface, Direction},
     server::Listener,
 };
 use std::net::SocketAddr;
+use std::sync::Arc;
 #[cfg(not(feature = "enclave"))]
 use tokio::io::AsyncWriteExt;
 use trust_dns_resolver::TokioAsyncResolver;
 
+#[allow(dead_code)]
+const E3_HOSTNAME_FLAG: &str = "cages-e3-hostname";
+#[allow(dead_code)]
+const E3_DEFAULT_HOSTNAME: &str = "e3.cages-e3.internal.";
+
 pub struct E3Proxy {
     #[allow(unused)]
     dns_resolver: TokioAsyncResolver,
-}
-
-impl std::default::Default for E3Proxy {
-    fn default() -> Self {
-        Self::new()
-    }
+    #[allow(unused)]
+    feature_flags: Arc<dyn FeatureFlagProvider>,
+    #[allow(unused)]
+    context: Arc<Context>,
 }
 
 impl E3Proxy {
-    pub fn new() -> Self {
+    pub fn new(feature_flags: Arc<dyn FeatureFlagProvider>, context: Arc<Context>) -> Self {
         let dns_resolver = InternalAsyncDnsResolver::new_resolver();
-        Self { dns_resolver }
+        Self {
+            dns_resolver,
+            feature_flags,
+            context,
+        }
     }
 
     #[cfg(feature = "enclave")]
@@ -88,15 +97,71 @@ impl E3Proxy {
         Ok(())
     }
 
+    #[allow(dead_code)]
+    fn resolve_e3_hostname(&self) -> String {
+        self.feature_flags
+            .string_feature_flag_with_context(
+                E3_HOSTNAME_FLAG,
+                &self.context,
+                E3_DEFAULT_HOSTNAME.to_string(),
+            )
+            .unwrap_or_else(|e| {
+                log::warn!("FF eval failed for {E3_HOSTNAME_FLAG}, using default: {e:?}");
+                E3_DEFAULT_HOSTNAME.to_string()
+            })
+    }
+
     #[cfg(feature = "enclave")]
     async fn get_ip_for_e3(&self) -> Result<Option<SocketAddr>> {
-        dns::get_ip_for_host_with_dns_resolver(&self.dns_resolver, "e3.cages-e3.internal.", 443)
-            .await
+        let host = self.resolve_e3_hostname();
+        log::debug!("Resolving E3 host: {host}");
+        dns::get_ip_for_host_with_dns_resolver(&self.dns_resolver, &host, 443).await
     }
 
     // supporting local env
     #[cfg(not(feature = "enclave"))]
     async fn get_ip_for_e3(&self) -> Result<Option<SocketAddr>> {
         dns::get_ip_for_localhost(7676)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::feature_flag::{ContextBuilder, MockFeatureFlagProvider};
+
+    fn make_proxy(mock: MockFeatureFlagProvider) -> E3Proxy {
+        let ctx = ContextBuilder::new("test-cage").build().unwrap();
+        E3Proxy::new(Arc::new(mock), Arc::new(ctx))
+    }
+
+    #[test]
+    fn resolve_returns_flag_value_when_set() {
+        let mut mock = MockFeatureFlagProvider::new();
+        mock.expect_string_feature_flag_with_context()
+            .times(1)
+            .returning(|_, _, _| Ok("cages-e3-us.ev.global".to_string()));
+        let proxy = make_proxy(mock);
+        assert_eq!(proxy.resolve_e3_hostname(), "cages-e3-us.ev.global");
+    }
+
+    #[test]
+    fn resolve_falls_back_to_default_when_flag_eval_errors() {
+        let mut mock = MockFeatureFlagProvider::new();
+        mock.expect_string_feature_flag_with_context()
+            .times(1)
+            .returning(|_, _, _| {
+                Err(crate::feature_flag::LdError::InitializationFailed)
+            });
+        let proxy = make_proxy(mock);
+        assert_eq!(proxy.resolve_e3_hostname(), E3_DEFAULT_HOSTNAME);
+    }
+
+    #[test]
+    fn resolve_uses_default_with_noop_provider() {
+        use crate::feature_flag::NoopFeatureFlagProvider;
+        let ctx = ContextBuilder::new("test-cage").build().unwrap();
+        let proxy = E3Proxy::new(Arc::new(NoopFeatureFlagProvider), Arc::new(ctx));
+        assert_eq!(proxy.resolve_e3_hostname(), E3_DEFAULT_HOSTNAME);
     }
 }

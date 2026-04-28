@@ -9,6 +9,7 @@ pub mod e3proxy;
 #[cfg(feature = "network_egress")]
 pub mod egressproxy;
 pub mod error;
+pub mod feature_flag;
 pub mod health;
 pub mod orchestration;
 pub mod stats;
