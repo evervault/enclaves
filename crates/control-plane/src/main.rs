@@ -9,7 +9,6 @@ use control_plane::orchestration::Orchestration;
 use control_plane::stats::{client::StatsClient, get_stats_target_ip, proxy::StatsProxy};
 use control_plane::stats::{EXTERNAL_METRIC_PORT, INTERNAL_METRIC_PORT};
 use control_plane::{config_server, tls_proxy};
-use std::sync::Arc;
 use shared::notify_shutdown::{NotifyShutdown, Service};
 use shared::{
     bridge::{Bridge, BridgeInterface, Direction},
@@ -18,6 +17,7 @@ use shared::{
     ENCLAVE_CONNECT_PORT,
 };
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::sync::Arc;
 use storage_client_interface::s3;
 use tokio::io::AsyncWriteExt;
 use tokio::time::{sleep, Duration};

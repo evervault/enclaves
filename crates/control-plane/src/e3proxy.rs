@@ -150,9 +150,7 @@ mod tests {
         let mut mock = MockFeatureFlagProvider::new();
         mock.expect_string_feature_flag_with_context()
             .times(1)
-            .returning(|_, _, _| {
-                Err(crate::feature_flag::LdError::InitializationFailed)
-            });
+            .returning(|_, _, _| Err(crate::feature_flag::LdError::InitializationFailed));
         let proxy = make_proxy(mock);
         assert_eq!(proxy.resolve_e3_hostname(), E3_DEFAULT_HOSTNAME);
     }
