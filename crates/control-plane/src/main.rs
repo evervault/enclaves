@@ -27,7 +27,7 @@ use tokio::sync::mpsc;
 use tokio::sync::mpsc::channel;
 
 use control_plane::{
-    configuration::{self, Environment},
+    configuration::{self, get_e3_config, Environment},
     e3proxy,
     error::Result,
     health,
@@ -61,7 +61,8 @@ async fn main() -> Result<()> {
             .expect("Failed to build LaunchDarkly context from enclave env"),
     );
 
-    let e3_proxy = e3proxy::E3Proxy::new(feature_flags.clone(), ld_context.clone());
+    let e3_proxy =
+        e3proxy::E3Proxy::new(feature_flags.clone(), ld_context.clone(), get_e3_config());
 
     let provisioner_proxy = tls_proxy::TlsProxy::new(
         vec![configuration::get_cert_provisoner_host()],

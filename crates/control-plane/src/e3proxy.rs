@@ -1,3 +1,4 @@
+use crate::configuration::E3Config;
 use crate::dns;
 use crate::dns::InternalAsyncDnsResolver;
 use crate::error::Result;
@@ -12,10 +13,7 @@ use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 use trust_dns_resolver::TokioAsyncResolver;
 
-#[allow(dead_code)]
-const E3_HOSTNAME_FLAG: &str = "cages-e3-hostname";
-#[allow(dead_code)]
-const E3_DEFAULT_HOSTNAME: &str = "e3.cages-e3.internal.";
+const E3_USE_LB_FLAG: &str = "cages-use-e3-lb";
 
 pub struct E3Proxy {
     #[allow(unused)]
@@ -24,15 +22,22 @@ pub struct E3Proxy {
     feature_flags: Arc<dyn FeatureFlagProvider>,
     #[allow(unused)]
     context: Arc<Context>,
+    #[allow(unused)]
+    e3_config: E3Config,
 }
 
 impl E3Proxy {
-    pub fn new(feature_flags: Arc<dyn FeatureFlagProvider>, context: Arc<Context>) -> Self {
+    pub fn new(
+        feature_flags: Arc<dyn FeatureFlagProvider>,
+        context: Arc<Context>,
+        e3_config: E3Config,
+    ) -> Self {
         let dns_resolver = InternalAsyncDnsResolver::new_resolver();
         Self {
             dns_resolver,
             feature_flags,
             context,
+            e3_config,
         }
     }
 
@@ -99,16 +104,24 @@ impl E3Proxy {
 
     #[allow(dead_code)]
     fn resolve_e3_hostname(&self) -> String {
-        self.feature_flags
-            .string_feature_flag_with_context(
-                E3_HOSTNAME_FLAG,
-                &self.context,
-                E3_DEFAULT_HOSTNAME.to_string(),
-            )
+        let use_lb = self
+            .feature_flags
+            .bool_feature_flag_with_context(E3_USE_LB_FLAG, &self.context, false)
             .unwrap_or_else(|e| {
-                log::warn!("FF eval failed for {E3_HOSTNAME_FLAG}, using default: {e:?}");
-                E3_DEFAULT_HOSTNAME.to_string()
-            })
+                log::warn!("FF eval failed for {E3_USE_LB_FLAG}, using default: {e:?}");
+                false
+            });
+
+        if use_lb {
+            return self.e3_config.lb_hostname.clone().unwrap_or_else(|| {
+                log::warn!(
+                    "{E3_USE_LB_FLAG} enabled but E3_LB_HOSTNAME not configured, using default"
+                );
+                self.e3_config.hostname.clone()
+            });
+        }
+
+        self.e3_config.hostname.clone()
     }
 
     #[cfg(feature = "enclave")]
@@ -130,36 +143,71 @@ mod tests {
     use super::*;
     use crate::feature_flag::{ContextBuilder, MockFeatureFlagProvider};
 
-    fn make_proxy(mock: MockFeatureFlagProvider) -> E3Proxy {
+    fn make_proxy(mock: MockFeatureFlagProvider, e3_config: E3Config) -> E3Proxy {
         let ctx = ContextBuilder::new("test-cage").build().unwrap();
-        E3Proxy::new(Arc::new(mock), Arc::new(ctx))
+        E3Proxy::new(Arc::new(mock), Arc::new(ctx), e3_config)
+    }
+
+    fn default_config() -> E3Config {
+        E3Config {
+            hostname: "e3.cages-e3.internal.".to_string(),
+            lb_hostname: Some("e3-us.ev.global".to_string()),
+        }
     }
 
     #[test]
-    fn resolve_returns_flag_value_when_set() {
+    fn resolve_returns_lb_hostname_when_flag_enabled() {
         let mut mock = MockFeatureFlagProvider::new();
-        mock.expect_string_feature_flag_with_context()
+        mock.expect_bool_feature_flag_with_context()
             .times(1)
-            .returning(|_, _, _| Ok("cages-e3-us.ev.global".to_string()));
-        let proxy = make_proxy(mock);
-        assert_eq!(proxy.resolve_e3_hostname(), "cages-e3-us.ev.global");
+            .returning(|_, _, _| Ok(true));
+        let proxy = make_proxy(mock, default_config());
+        assert_eq!(proxy.resolve_e3_hostname(), "e3-us.ev.global");
     }
 
     #[test]
-    fn resolve_falls_back_to_default_when_flag_eval_errors() {
+    fn resolve_returns_default_hostname_when_flag_disabled() {
         let mut mock = MockFeatureFlagProvider::new();
-        mock.expect_string_feature_flag_with_context()
+        mock.expect_bool_feature_flag_with_context()
+            .times(1)
+            .returning(|_, _, _| Ok(false));
+        let proxy = make_proxy(mock, default_config());
+        assert_eq!(proxy.resolve_e3_hostname(), "e3.cages-e3.internal.");
+    }
+
+    #[test]
+    fn resolve_falls_back_to_default_hostname_when_flag_eval_errors() {
+        let mut mock = MockFeatureFlagProvider::new();
+        mock.expect_bool_feature_flag_with_context()
             .times(1)
             .returning(|_, _, _| Err(crate::feature_flag::LdError::InitializationFailed));
-        let proxy = make_proxy(mock);
-        assert_eq!(proxy.resolve_e3_hostname(), E3_DEFAULT_HOSTNAME);
+        let proxy = make_proxy(mock, default_config());
+        assert_eq!(proxy.resolve_e3_hostname(), "e3.cages-e3.internal.");
+    }
+
+    #[test]
+    fn resolve_falls_back_to_hostname_when_lb_hostname_not_configured() {
+        let mut mock = MockFeatureFlagProvider::new();
+        mock.expect_bool_feature_flag_with_context()
+            .times(1)
+            .returning(|_, _, _| Ok(true));
+        let config = E3Config {
+            hostname: "e3.cages-e3.internal.".to_string(),
+            lb_hostname: None,
+        };
+        let proxy = make_proxy(mock, config);
+        assert_eq!(proxy.resolve_e3_hostname(), "e3.cages-e3.internal.");
     }
 
     #[test]
     fn resolve_uses_default_with_noop_provider() {
         use crate::feature_flag::NoopFeatureFlagProvider;
         let ctx = ContextBuilder::new("test-cage").build().unwrap();
-        let proxy = E3Proxy::new(Arc::new(NoopFeatureFlagProvider), Arc::new(ctx));
-        assert_eq!(proxy.resolve_e3_hostname(), E3_DEFAULT_HOSTNAME);
+        let proxy = E3Proxy::new(
+            Arc::new(NoopFeatureFlagProvider),
+            Arc::new(ctx),
+            default_config(),
+        );
+        assert_eq!(proxy.resolve_e3_hostname(), "e3.cages-e3.internal.");
     }
 }
