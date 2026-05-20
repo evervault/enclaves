@@ -232,6 +232,8 @@ pub fn get_e3_config() -> E3Config {
     E3Config {
         hostname: std::env::var("E3_HOSTNAME")
             .unwrap_or_else(|_| "e3.cages-e3.internal.".to_string()),
-        lb_hostname: std::env::var("E3_LB_HOSTNAME").ok(),
+        lb_hostname: std::env::var("E3_LB_HOSTNAME")
+            .ok()
+            .filter(|s| !s.is_empty()),
     }
 }
