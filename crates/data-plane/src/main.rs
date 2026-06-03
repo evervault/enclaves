@@ -22,10 +22,26 @@ use tokio::sync::mpsc::Sender;
 use tokio::time::Duration;
 
 #[cfg(feature = "enclave")]
-fn try_update_fd_limit(soft_limit: u64, hard_limit: u64) {
-    if let Err(e) = rlimit::setrlimit(rlimit::Resource::NOFILE, soft_limit, hard_limit) {
-        eprintln!("Failed to set enclave file descriptor limit on startup - {e:?}");
+fn try_update_fd_limit() {
+    match std::fs::read_to_string("/proc/sys/fs/nr_open")
+        .ok()
+        .and_then(|s| s.trim().parse::<u64>().ok())
+    {
+        Some(nr_open) => {
+            if let Err(e) = rlimit::setrlimit(rlimit::Resource::NOFILE, nr_open, nr_open) {
+                eprintln!(
+                    "Failed to set enclave file descriptor limit on startup (requested {nr_open}) - {e:?}"
+                );
+            }
+        }
+        None => {
+            eprintln!("Failed to read /proc/sys/fs/nr_open - clamping softlimit to proc hardlimit");
+            if let Err(e) = rlimit::increase_nofile_limit(rlimit::INFINITY) {
+                eprintln!("Failed to clamp softlimit to proc hardlimit - {e}")
+            }
+        }
     }
+
     if let Ok((soft_limit, hard_limit)) = rlimit::getrlimit(rlimit::Resource::NOFILE) {
         println!("RLIMIT_NOFILE: SoftLimit={soft_limit}, HardLimit={hard_limit}");
     }
@@ -38,7 +54,7 @@ fn main() {
     print_version!("Data Plane");
 
     #[cfg(feature = "enclave")]
-    try_update_fd_limit(rlimit::INFINITY, rlimit::INFINITY);
+    try_update_fd_limit();
 
     let mut args = std::env::args();
     let _ = args.next(); // ignore path to executable
