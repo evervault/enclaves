@@ -22,29 +22,36 @@ use tokio::sync::mpsc::Sender;
 use tokio::time::Duration;
 
 #[cfg(feature = "enclave")]
-fn try_update_fd_limit() {
-    match std::fs::read_to_string("/proc/sys/fs/nr_open")
-        .ok()
-        .and_then(|s| s.trim().parse::<u64>().ok())
-    {
-        Some(nr_open) => {
-            if let Err(e) = rlimit::setrlimit(rlimit::Resource::NOFILE, nr_open, nr_open) {
-                eprintln!(
-                    "Failed to set enclave file descriptor limit on startup (requested {nr_open}) - {e:?}"
-                );
-            }
-        }
-        None => {
-            eprintln!("Failed to read /proc/sys/fs/nr_open - clamping softlimit to proc hardlimit");
-            if let Err(e) = rlimit::increase_nofile_limit(rlimit::INFINITY) {
-                eprintln!("Failed to clamp softlimit to proc hardlimit - {e}")
-            }
-        }
-    }
-
+fn try_show_fd_limits() {
     if let Ok((soft_limit, hard_limit)) = rlimit::getrlimit(rlimit::Resource::NOFILE) {
         println!("RLIMIT_NOFILE: SoftLimit={soft_limit}, HardLimit={hard_limit}");
     }
+}
+
+#[cfg(feature = "enclave")]
+fn apply_clamped_limit() {
+    if let Err(e) = rlimit::increase_nofile_limit(rlimit::INFINITY) {
+        eprintln!("Failed to clamp softlimit to proc hardlimit - {e}")
+    }
+}
+
+#[cfg(feature = "enclave")]
+fn try_update_fd_limit() {
+    let sys_fd_lim = std::fs::read_to_string("/proc/sys/fs/nr_open")
+        .ok()
+        .and_then(|s| s.trim().parse::<u64>().ok());
+
+    let Some(nr_open) = sys_fd_lim else {
+        apply_clamped_limit();
+        return;
+    };
+
+    if let Err(e) = rlimit::setrlimit(rlimit::Resource::NOFILE, nr_open, nr_open) {
+        eprintln!(
+            "Failed to set enclave file descriptor limit on startup (requested {nr_open}) - {e:?}"
+        );
+        apply_clamped_limit();
+    };
 }
 
 const ENCLAVE_CLOCK_SYNC_INTERVAL: Duration = Duration::from_secs(300);
@@ -54,7 +61,10 @@ fn main() {
     print_version!("Data Plane");
 
     #[cfg(feature = "enclave")]
-    try_update_fd_limit();
+    {
+      try_update_fd_limit();
+      try_show_fd_limits();
+    }
 
     let mut args = std::env::args();
     let _ = args.next(); // ignore path to executable
