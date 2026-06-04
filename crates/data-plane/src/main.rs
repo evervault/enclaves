@@ -62,8 +62,8 @@ fn main() {
 
     #[cfg(feature = "enclave")]
     {
-      try_update_fd_limit();
-      try_show_fd_limits();
+        try_update_fd_limit();
+        try_show_fd_limits();
     }
 
     let mut args = std::env::args();
