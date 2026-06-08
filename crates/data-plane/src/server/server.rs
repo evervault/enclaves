@@ -18,6 +18,7 @@ use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::time::{timeout, Duration};
 use tokio_rustls::server::TlsStream;
 use tower::Service;
 
@@ -29,6 +30,11 @@ use super::layers::{
     decrypt::DecryptLayer,
     forward::ForwardService,
 };
+
+/// Maximum time allowed for a single TLS handshake. Bounds slow/stalled clients (slowloris): a
+/// connection that opens but never completes the handshake is dropped instead of holding a task and
+/// socket open indefinitely.
+const TLS_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub async fn run<L: Listener + Send + Sync>(
     tcp_server: L,
@@ -87,24 +93,42 @@ where
         )
         .layer(DecryptLayer::new(e3_client.clone()))
         .service(ForwardService);
+
     loop {
-        let mut stream = match server.accept().await {
-            Ok(stream) => stream,
-            Err(tls_err) => {
+        // Accept the connection here (fast — drains the bridge listen backlog) but defer the TLS
+        // handshake into the spawned task below, so handshakes run concurrently instead of
+        // serializing the accept loop. A serial inline handshake capped accepts and saturated the
+        // backlog, which in turn capped the number of concurrent connections.
+        let pending = match server.accept_pending().await {
+            Ok(pending) => pending,
+            Err(err) => {
                 log::error!(
-                    "An error occurred while accepting the incoming connection — {tls_err}"
+                    "An error occurred while accepting the incoming connection — {err}"
                 );
                 continue;
             }
         };
 
-        let remote_ip = stream.get_remote_addr().clone();
         let tx_for_connection = tx.clone();
         let mut data_plane_service = service.clone();
         let enclave_context_clone = enclave_context.clone();
         let feature_context_clone = feature_context.clone();
         let e3_client_clone = e3_client.clone();
         tokio::spawn(async move {
+            // Bound the handshake: a client that connects but stalls mid-TLS (slowloris) must not
+            // be able to hold the task and socket open indefinitely.
+            let mut stream = match timeout(TLS_HANDSHAKE_TIMEOUT, pending.finish()).await {
+                Ok(Ok(stream)) => stream,
+                Ok(Err(tls_err)) => {
+                    log::error!("An error occurred during the TLS handshake — {tls_err}");
+                    return;
+                }
+                Err(_) => {
+                    log::error!("TLS handshake timed out after {TLS_HANDSHAKE_TIMEOUT:?}");
+                    return;
+                }
+            };
+            let remote_ip = stream.get_remote_addr().clone();
             loop {
                 match try_parse_http_request_from_stream(&mut stream, port).await {
                     Ok(Incoming::HttpRequest(request)) if parse::is_websocket_request(&request) => {

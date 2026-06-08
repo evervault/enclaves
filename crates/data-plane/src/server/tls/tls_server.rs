@@ -1,11 +1,8 @@
-use async_trait::async_trait;
-
 #[cfg(feature = "enclave")]
 use once_cell::sync::OnceCell;
 #[cfg(feature = "enclave")]
 use tokio_rustls::rustls::sign::CertifiedKey;
 
-use shared::server::proxy_protocol::ProxiedConnection;
 use shared::server::Listener;
 use std::sync::Arc;
 use tokio_rustls::rustls::server::WantsServerCert;
@@ -116,17 +113,41 @@ async fn enclave_trusted_cert() -> Option<CertifiedKey> {
     }
 }
 
-#[async_trait]
-impl<S: Listener + Send + Sync> Listener for TlsServer<S>
+/// A connection that has been accepted but not yet TLS-terminated.
+///
+/// Accept and handshake are split (see [`TlsServer::accept_pending`]) so the accept loop can drain
+/// the bridge listen backlog quickly and run handshakes concurrently in spawned tasks, rather than
+/// serializing every handshake inside the accept loop. A [`TlsStream`] can only be obtained via
+/// [`PendingTls::finish`], so a not-yet-terminated connection cannot be mistaken for a ready,
+/// encrypted stream.
+pub struct PendingTls<C> {
+    conn: C,
+    acceptor: TlsAcceptor,
+}
+
+impl<C> PendingTls<C>
 where
-    TlsError: From<<S as Listener>::Error>,
-    <S as Listener>::Connection: ProxiedConnection,
+    C: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
-    type Connection = TlsStream<<S as Listener>::Connection>;
-    type Error = TlsError;
-    async fn accept(&mut self) -> Result<Self::Connection, Self::Error> {
+    /// Perform the TLS handshake, producing the terminated stream. Callers should wrap this in a
+    /// timeout (see `server::run`) so a client that stalls mid-handshake cannot hold the
+    /// connection open indefinitely.
+    pub async fn finish(self) -> Result<TlsStream<C>, TlsError> {
+        Ok(self.acceptor.accept(self.conn).await?)
+    }
+}
+
+impl<S: Listener + Send + Sync> TlsServer<S> {
+    /// Accept the next connection and return a handle whose [`PendingTls::finish`] performs the TLS
+    /// handshake. Splitting accept from handshake keeps the accept loop non-blocking; the caller
+    /// runs `finish()` in a spawned task. See `server::run`.
+    pub async fn accept_pending(
+        &mut self,
+    ) -> Result<PendingTls<<S as Listener>::Connection>, <S as Listener>::Error> {
         let conn = self.inner.accept().await?;
-        let accepted_tls_conn = self.tls_acceptor.accept(conn).await?;
-        Ok(accepted_tls_conn)
+        Ok(PendingTls {
+            conn,
+            acceptor: self.tls_acceptor.clone(),
+        })
     }
 }
