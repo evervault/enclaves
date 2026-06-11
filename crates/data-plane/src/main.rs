@@ -14,9 +14,7 @@ use shared::server::Listener;
 use shared::{
     bridge::{Bridge, BridgeInterface, Direction},
     notify_shutdown::{NotifyShutdown, Service},
-    print_version,
-    server::proxy_protocol::ProxyProtocolServer,
-    ENCLAVE_CONNECT_PORT,
+    print_version, ENCLAVE_CONNECT_PORT,
 };
 use tokio::sync::mpsc::Sender;
 use tokio::time::Duration;
@@ -175,7 +173,7 @@ async fn start_data_plane(
 ) {
     log::info!("Data plane starting up. Forwarding traffic to {data_plane_port}");
     let server = match Bridge::get_listener(ENCLAVE_CONNECT_PORT, Direction::EnclaveToHost).await {
-        Ok(server) => ProxyProtocolServer::from(server),
+        Ok(server) => server,
         Err(error) => return log::error!("Error creating server: {error}"),
     };
     log::debug!("Data plane TCP server created");
@@ -191,7 +189,10 @@ async fn start_data_plane(
 #[cfg(not(feature = "tls_termination"))]
 use data_plane::env::Finalize;
 #[cfg(not(feature = "tls_termination"))]
-use shared::{server::proxy_protocol::ProxiedConnection, utils::pipe_streams};
+use shared::{
+    server::proxy_protocol::{ProxiedConnection, ProxyProtocolServer},
+    utils::pipe_streams,
+};
 #[cfg(not(feature = "tls_termination"))]
 use tokio::io::AsyncWriteExt;
 #[cfg(not(feature = "tls_termination"))]
