@@ -38,7 +38,9 @@ impl AcceptorConfig {
     }
 
     pub fn is_serial(&self) -> bool {
-        self.max_concurrent_connections <= 1 && self.max_concurrent_handshakes <= 1
+        self.max_concurrent_connections <= 1
+            && self.max_concurrent_handshakes <= 1
+            && self.handshake_timeout.is_none()
     }
 }
 
@@ -99,6 +101,16 @@ mod test {
         assert_eq!(config.max_concurrent_connections, 1024);
         assert_eq!(config.max_concurrent_handshakes, 64);
         assert_eq!(config.handshake_timeout, Some(Duration::from_secs(10)));
+        assert!(!config.is_serial());
+    }
+
+    #[test]
+    fn handshake_timeout_alone_makes_config_non_serial() {
+        let config = AcceptorConfig {
+            max_concurrent_connections: 1,
+            max_concurrent_handshakes: 1,
+            handshake_timeout: Some(Duration::from_secs(10)),
+        };
         assert!(!config.is_serial());
     }
 

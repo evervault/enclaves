@@ -1,5 +1,5 @@
 use super::config::AcceptorConfig;
-use super::error::TlsError;
+use super::error::{LogError, TlsError};
 use super::handshake::{Handshaker, TlsHandshaker};
 use super::http::parse::{try_parse_http_request_from_stream, Incoming};
 use super::http::{request_to_bytes, response_to_bytes};
@@ -305,13 +305,17 @@ pub(crate) async fn serve_connection<S, T>(
             }
             Ok(Incoming::NonHttpRequest(_)) if feature_context.api_key_auth => {
                 log::info!("Non http request received with auth enabled, closing connection");
-                log_non_http_trx(&tx_for_connection, false, remote_ip, None);
+                if let Err(e) = log_non_http_trx(&tx_for_connection, false, remote_ip, None) {
+                    log::debug!("Skipping trx log for non-http transaction. {e}");
+                }
                 shutdown_conn(&mut stream).await;
                 return;
             }
             Ok(Incoming::NonHttpRequest(bytes)) => {
                 log::info!("Non http request received with auth enabled, closing connection");
-                log_non_http_trx(&tx_for_connection, true, remote_ip, None);
+                if let Err(e) = log_non_http_trx(&tx_for_connection, true, remote_ip, None) {
+                    log::debug!("Skipping trx log for non-http transaction. {e}");
+                }
                 let _ = pipe_to_customer_process(&mut stream, &bytes, port).await;
                 return;
             }
@@ -346,12 +350,17 @@ async fn handle_websocket_request<S: AsyncRead + AsyncWrite + Unpin>(
         authenticate_websocket_request(&request, enclave_context, e3_client, &feature_context).await
     {
         let response_bytes = response_to_bytes(e.into()).await;
-        log_non_http_trx(tx_for_connection, false, remote_ip, Some(context_builder));
+        if let Err(e) = log_non_http_trx(tx_for_connection, false, remote_ip, Some(context_builder))
+        {
+            log::debug!("Skipping trx log for non-http transaction. {e}");
+        }
         let _ = stream.write_all(&response_bytes).await;
         return;
     }
 
-    log_non_http_trx(tx_for_connection, true, remote_ip, Some(context_builder));
+    if let Err(e) = log_non_http_trx(tx_for_connection, true, remote_ip, Some(context_builder)) {
+        log::debug!("Skipping trx log for non-http transaction. {e}");
+    }
     let serialized_request = request_to_bytes(request).await;
     let _ = pipe_to_customer_process(stream, &serialized_request, port).await;
 }
@@ -401,25 +410,24 @@ fn log_non_http_trx(
     authorized: bool,
     remote_ip: Option<String>,
     context_builder: Option<TrxContextBuilder>,
-) {
-    let enclave_context = EnclaveContext::get().unwrap();
+) -> Result<(), LogError> {
     let mut context_builder = match context_builder {
         Some(context_builder) => context_builder,
-        _ => TrxContextBuilder::init_trx_context_with_enclave_details(
-            &enclave_context.uuid,
-            &enclave_context.name,
-            &enclave_context.app_uuid,
-            &enclave_context.team_uuid,
-            RequestType::TCP,
-        ),
+        _ => {
+            let enclave_context = EnclaveContext::get()?;
+            TrxContextBuilder::init_trx_context_with_enclave_details(
+                &enclave_context.uuid,
+                &enclave_context.name,
+                &enclave_context.app_uuid,
+                &enclave_context.team_uuid,
+                RequestType::TCP,
+            )
+        }
     };
     context_builder.add_httparse_to_trx(authorized, None, remote_ip);
-    match context_builder.build() {
-        Ok(trx_context) => {
-            let _ = tx_sender.send(LogHandlerMessage::new_log_message(trx_context));
-        }
-        Err(e) => log::debug!("Skipping trx log for non-http transaction. {e}"),
-    }
+    let trx_context = context_builder.build()?;
+    let _ = tx_sender.send(LogHandlerMessage::new_log_message(trx_context));
+    Ok(())
 }
 
 #[cfg(test)]
