@@ -1,15 +1,25 @@
 use std::time::Duration;
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(default)]
 pub struct AcceptorConfig {
+    #[serde(deserialize_with = "deserialize_min_one")]
     pub max_concurrent_connections: usize,
     // Maximum connections allowed in the TLS handshake phase. Tracked separately from total
     // connections because the handshake is the expensive bit
+    #[serde(deserialize_with = "deserialize_min_one")]
     pub max_concurrent_handshakes: usize,
     pub handshake_timeout: Option<Duration>,
+}
+
+fn deserialize_min_one<'de, D>(deserializer: D) -> Result<usize, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = usize::deserialize(deserializer)?;
+    Ok(value.max(1))
 }
 
 impl Default for AcceptorConfig {
@@ -119,6 +129,18 @@ mod test {
         let raw = r#"{ "max_concurrent_connections": 512 }"#;
         let config: AcceptorConfig = serde_json::from_str(raw).unwrap();
         assert_eq!(config.max_concurrent_connections, 512);
+        assert_eq!(config.max_concurrent_handshakes, 1);
+        assert!(config.handshake_timeout.is_none());
+    }
+
+    #[test]
+    fn explicit_zero_for_max_connections_is_rejected() {
+        let raw = r#"{
+          "max_concurrent_connections": 0,
+          "max_concurrent_handshakes": 0
+        }"#;
+        let config: AcceptorConfig = serde_json::from_str(raw).unwrap();
+        assert_eq!(config.max_concurrent_connections, 1);
         assert_eq!(config.max_concurrent_handshakes, 1);
         assert!(config.handshake_timeout.is_none());
     }

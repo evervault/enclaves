@@ -39,7 +39,11 @@ async fn test1_happy_path_request_response() {
         let response = request_response(server.addr, b"GET / HTTP/1.1\r\nHost: x\r\n\r\n").await;
         let text = String::from_utf8_lossy(&response);
         assert!(text.contains("200"), "expected 200, got {text:?}");
-        assert!(text.contains("OK"), "expected body, got {text:?}");
+        let body = text
+            .split_once("\r\n\r\n")
+            .map(|(_, body)| body)
+            .unwrap_or_default();
+        assert_eq!(body, "OK", "expected body, got {text:?}");
     }
 }
 

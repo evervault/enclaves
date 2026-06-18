@@ -194,16 +194,10 @@ where
                 continue;
             }
         };
-        let handshake_permit = match handshake_sem.clone().try_acquire_owned() {
-            Ok(permit) => permit,
-            Err(_) => {
-                metrics.record_shed();
-                continue;
-            }
-        };
         metrics.record_admitted();
 
         let in_flight_guard = metrics.enter_in_flight();
+        let task_handshake_sem = handshake_sem.clone();
         let task_handshaker = handshaker.clone();
         let task_service = service.clone();
         let task_tx = tx.clone();
@@ -215,9 +209,15 @@ where
         tokio::spawn(async move {
             let _conn_permit = conn_permit;
             let _in_flight_guard = in_flight_guard;
+            let handshake_permit = match task_handshake_sem.acquire().await {
+                Ok(permit) => permit,
+                Err(_) => {
+                    task_metrics.record_shed();
+                    return;
+                }
+            };
 
             let handshake_result = {
-                let _handshake_permit = handshake_permit;
                 let _handshake_guard = task_metrics.enter_handshake();
                 match handshake_timeout {
                     Some(timeout) => {
@@ -243,6 +243,8 @@ where
                     return;
                 }
             };
+
+            drop(handshake_permit);
 
             let remote_ip = conn.get_remote_addr();
             serve_connection(

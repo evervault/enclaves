@@ -410,10 +410,9 @@ async fn test17_connection_overflow_is_shed() {
     handle.abort();
 }
 
-// Test 18 — handshake-slot overflow is shed even when connection slots are free,
-// confirming either limit alone can trigger a reject.
+// Test 18 — handshake-slot overflow waits for another connection to become free and doesn't shed
 #[tokio::test(start_paused = true)]
-async fn test18_handshake_slot_overflow_is_shed() {
+async fn test18_handshake_slot_overflow_awaits_tasks() {
     let offered = 20usize;
     let metrics = AcceptMetrics::new();
     let handshaker = FakeHandshaker::new();
@@ -434,9 +433,10 @@ async fn test18_handshake_slot_overflow_is_shed() {
     assert!(settle_until(|| metrics.accepted() as usize == offered).await);
     assert!(settle_until(|| metrics.in_handshake() == 2).await);
     assert!(
-        metrics.shed() > 0,
-        "connections shed on handshake-slot exhaustion despite free connection slots"
+        metrics.shed() == 0,
+        "avoid shedding on handshake-slot exhaustion"
     );
+    assert!(metrics.peak_in_flight() == offered);
     assert!(metrics.peak_in_handshake() <= 2);
 
     handle.abort();

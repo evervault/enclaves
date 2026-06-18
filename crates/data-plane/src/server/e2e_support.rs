@@ -122,7 +122,7 @@ pub async fn request_response(addr: SocketAddr, request: &[u8]) -> Vec<u8> {
 // Fake customer process
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CustomerMode {
     /// Echo every byte back (for non-HTTP / websocket pipe tests).
     Echo,
@@ -151,7 +151,7 @@ impl FakeCustomer {
             .expect("bind customer");
         let addr = listener.local_addr().expect("customer addr");
 
-        if let CustomerMode::Refuse = mode {
+        if mode == CustomerMode::Refuse {
             // Drop the listener so connections to `addr` are refused.
             drop(listener);
             return Self {
