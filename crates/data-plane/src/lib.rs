@@ -27,6 +27,8 @@ pub mod utils;
 use shared::server::egress::EgressConfig;
 #[cfg(feature = "tls_termination")]
 pub mod server;
+#[cfg(feature = "tls_termination")]
+use server::config::AcceptorConfig;
 
 use shared::server::config_server::requests::ProvisionerContext;
 use thiserror::Error;
@@ -164,6 +166,9 @@ pub struct FeatureContext {
     pub attestation_cors: Option<AttestationCors>,
     #[cfg(feature = "network_egress")]
     pub egress: EgressConfig,
+    #[cfg(feature = "tls_termination")]
+    #[serde(default)]
+    pub acceptor: AcceptorConfig,
 }
 
 impl FeatureContext {
@@ -230,6 +235,31 @@ mod test {
         assert!(feature_context.attestation_cors.is_none());
     }
 
+    #[cfg(all(feature = "tls_termination", not(feature = "network_egress")))]
+    #[test]
+    fn test_acceptor_absent_defaults_to_serial() {
+        let raw_feature_context = r#"{ "api_key_auth": false, "trx_logging_enabled": false, "forward_proxy_protocol": false, "trusted_headers": [] }"#;
+        let feature_context: FeatureContext = serde_json::from_str(raw_feature_context).unwrap();
+        assert!(feature_context.acceptor.is_serial());
+        assert_eq!(feature_context.acceptor.max_concurrent_connections, 1);
+        assert_eq!(feature_context.acceptor.max_concurrent_handshakes, 1);
+        assert!(feature_context.acceptor.handshake_timeout.is_none());
+    }
+
+    #[cfg(all(feature = "tls_termination", not(feature = "network_egress")))]
+    #[test]
+    fn test_acceptor_block_parses_all_three_fields() {
+        let raw_feature_context = r#"{ "api_key_auth": false, "trx_logging_enabled": false, "forward_proxy_protocol": false, "trusted_headers": [], "acceptor": { "max_concurrent_connections": 1024, "max_concurrent_handshakes": 64, "handshake_timeout": { "secs": 10, "nanos": 0 } } }"#;
+        let feature_context: FeatureContext = serde_json::from_str(raw_feature_context).unwrap();
+        assert_eq!(feature_context.acceptor.max_concurrent_connections, 1024);
+        assert_eq!(feature_context.acceptor.max_concurrent_handshakes, 64);
+        assert_eq!(
+            feature_context.acceptor.handshake_timeout,
+            Some(std::time::Duration::from_secs(10))
+        );
+        assert!(!feature_context.acceptor.is_serial());
+    }
+
     #[cfg(feature = "network_egress")]
     #[test]
     fn test_config_deserialization_with_egress() {
@@ -268,5 +298,24 @@ mod test {
             vec![".stripe.com".to_string()]
         );
         assert_eq!(feature_context.healthcheck, Some("/health".into()));
+    }
+
+    #[cfg(all(feature = "tls_termination", feature = "network_egress"))]
+    #[test]
+    fn test_acceptor_block_parses_alongside_egress() {
+        let raw_feature_context = r#"{ "api_key_auth": false, "egress": { "allow_list": "jsonplaceholder.typicode.com" }, "trx_logging_enabled": true, "forward_proxy_protocol": false, "trusted_headers": [], "acceptor": { "max_concurrent_connections": 1024, "max_concurrent_handshakes": 64, "handshake_timeout": { "secs": 10, "nanos": 0 } } }"#;
+        let feature_context: FeatureContext =
+            serde_json::from_str(raw_feature_context).expect("e2e config shape must parse");
+        assert_eq!(feature_context.acceptor.max_concurrent_connections, 1024);
+        assert_eq!(feature_context.acceptor.max_concurrent_handshakes, 64);
+        assert_eq!(
+            feature_context.acceptor.handshake_timeout,
+            Some(std::time::Duration::from_secs(10))
+        );
+        assert!(!feature_context.acceptor.is_serial());
+        assert_eq!(
+            feature_context.egress.allow_list.exact,
+            vec!["jsonplaceholder.typicode.com".to_string()]
+        );
     }
 }

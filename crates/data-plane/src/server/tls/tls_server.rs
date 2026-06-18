@@ -65,36 +65,42 @@ pub struct WantsCert<S: Listener> {
 #[cfg(feature = "enclave")]
 pub static TRUSTED_PUB_CERT: OnceCell<Vec<u8>> = OnceCell::new();
 
-impl<S: Listener + Send + Sync> WantsCert<S> {
-    /// Get sane defaults for TLS Server config
-    fn get_base_config() -> ConfigBuilder<ServerConfig, WantsServerCert> {
-        ServerConfig::builder()
-            .with_safe_defaults()
-            .with_no_client_auth()
-    }
+/// Get sane defaults for TLS Server config
+fn get_base_config() -> ConfigBuilder<ServerConfig, WantsServerCert> {
+    ServerConfig::builder()
+        .with_safe_defaults()
+        .with_no_client_auth()
+}
 
+pub async fn build_attestable_server_config(
+    env_loader: EnvironmentLoader<NeedCert>,
+) -> ServerResult<ServerConfig> {
+    log::info!("Building attestable TLS server config");
+
+    let (env_loader, inter_ca_cert, inter_ca_key_pair) = env_loader
+        .load_cert()
+        .await
+        .map_err(|err| TlsError::CertProvisionerError(err.to_string()))?;
+
+    #[cfg(feature = "enclave")]
+    let _: Option<CertifiedKey> = enclave_trusted_cert().await;
+
+    // Once intermediate cert and trusted cert retrieved, write cage initialised vars
+    env_loader.finalize_env().unwrap();
+
+    let inter_ca_resolver = AttestableCertResolver::new(inter_ca_cert, inter_ca_key_pair)?;
+    let mut tls_config = get_base_config().with_cert_resolver(Arc::new(inter_ca_resolver));
+    tls_config.alpn_protocols.push(b"http/1.1".to_vec());
+    tls_config.alpn_protocols.push(b"h2".to_vec());
+    Ok(tls_config)
+}
+
+impl<S: Listener + Send + Sync> WantsCert<S> {
     pub async fn with_attestable_cert(
         self,
         env_loader: EnvironmentLoader<NeedCert>,
     ) -> ServerResult<TlsServer<S>> {
-        log::info!("Creating TLSServer with attestable cert");
-
-        let (env_loader, inter_ca_cert, inter_ca_key_pair) = env_loader
-            .load_cert()
-            .await
-            .map_err(|err| TlsError::CertProvisionerError(err.to_string()))?;
-
-        #[cfg(feature = "enclave")]
-        let _: Option<CertifiedKey> = enclave_trusted_cert().await;
-
-        // Once intermediate cert and trusted cert retrieved, write cage initialised vars
-        env_loader.finalize_env().unwrap();
-
-        let inter_ca_resolver = AttestableCertResolver::new(inter_ca_cert, inter_ca_key_pair)?;
-        let mut tls_config =
-            Self::get_base_config().with_cert_resolver(Arc::new(inter_ca_resolver));
-        tls_config.alpn_protocols.push(b"http/1.1".to_vec());
-        tls_config.alpn_protocols.push(b"h2".to_vec());
+        let tls_config = build_attestable_server_config(env_loader).await?;
         Ok(TlsServer::new(tls_config, self.tcp_server))
     }
 }
