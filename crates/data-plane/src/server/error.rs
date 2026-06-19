@@ -41,3 +41,11 @@ pub enum TlsError {
 }
 
 pub type ServerResult<T> = Result<T, TlsError>;
+
+#[derive(Error, Debug)]
+pub enum LogError {
+    #[error("ContextError - Failed to access Enclave context: {0}")]
+    Context(#[from] ContextError),
+    #[error("Failed to build transaction context: {0}")]
+    TrxContextBuild(#[from] shared::logging::TrxContextBuilderError),
+}

@@ -1,7 +1,10 @@
-use super::error::TlsError;
+use super::config::AcceptorConfig;
+use super::error::{LogError, TlsError};
+use super::handshake::{Handshaker, TlsHandshaker};
 use super::http::parse::{try_parse_http_request_from_stream, Incoming};
 use super::http::{request_to_bytes, response_to_bytes};
-use super::tls::TlsServerBuilder;
+use super::metrics::AcceptMetrics;
+use super::tls::build_attestable_server_config;
 
 use crate::e3client::{E3Api, E3Client};
 use crate::env::{EnvironmentLoader, NeedCert};
@@ -18,7 +21,8 @@ use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
-use tokio_rustls::server::TlsStream;
+use tokio::sync::Semaphore;
+use tokio_rustls::TlsAcceptor;
 use tower::Service;
 
 #[cfg(feature = "enclave")]
@@ -38,12 +42,14 @@ pub async fn run<L: Listener + Send + Sync>(
 ) -> Result<(), TlsError>
 where
     TlsError: From<<L as Listener>::Error>,
-    <L as Listener>::Connection: ProxiedConnection + 'static,
+    <L as Listener>::Connection: 'static,
 {
-    let mut server = TlsServerBuilder::new()
-        .with_server(tcp_server)
-        .with_attestable_cert(env_loader)
-        .await?;
+    let tls_acceptor =
+        TlsAcceptor::from(Arc::new(build_attestable_server_config(env_loader).await?));
+    let handshaker = TlsHandshaker::new(tls_acceptor);
+
+    let acceptor_config = context.acceptor.clone();
+
     let e3_client = Arc::new(E3Client::new());
 
     let (tx, rx): (
@@ -87,71 +93,172 @@ where
         )
         .layer(DecryptLayer::new(e3_client.clone()))
         .service(ForwardService);
+
+    run_with(
+        tcp_server,
+        handshaker,
+        acceptor_config,
+        service,
+        port,
+        enclave_context,
+        feature_context,
+        e3_client,
+        tx,
+        AcceptMetrics::new(),
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn run_with<L, H, Svc>(
+    mut listener: L,
+    handshaker: H,
+    config: AcceptorConfig,
+    service: Svc,
+    port: u16,
+    enclave_context: Arc<EnclaveContext>,
+    feature_context: Arc<FeatureContext>,
+    e3_client: Arc<E3Client>,
+    tx: UnboundedSender<LogHandlerMessage>,
+    metrics: Arc<AcceptMetrics>,
+) -> Result<(), TlsError>
+where
+    L: Listener + Send + Sync,
+    TlsError: From<<L as Listener>::Error>,
+    <L as Listener>::Connection: 'static,
+    H: Handshaker<<L as Listener>::Connection> + 'static,
+    Svc: Service<Request<Body>, Response = hyper::Response<Body>> + Clone + Send + 'static,
+    Svc::Error: std::fmt::Debug,
+    Svc::Future: Send,
+{
+    log::info!("Accept loop starting with acceptor policy: {config:?}");
+    let handshaker = Arc::new(handshaker);
+
+    let conn_sem = Arc::new(Semaphore::new(config.max_concurrent_connections));
+    let handshake_sem = Arc::new(Semaphore::new(config.max_concurrent_handshakes));
+    let handshake_timeout = config.handshake_timeout;
+    let serial = config.is_serial();
+
     loop {
-        let mut stream = match server.accept().await {
-            Ok(stream) => stream,
-            Err(tls_err) => {
-                log::error!(
-                    "An error occurred while accepting the incoming connection — {tls_err}"
-                );
+        let raw_conn = match listener.accept().await {
+            Ok(conn) => conn,
+            Err(e) => {
+                log::error!("An error occurred while accepting the incoming connection — {e}");
                 continue;
             }
         };
+        metrics.record_accepted();
 
-        let remote_ip = stream.get_remote_addr().clone();
-        let tx_for_connection = tx.clone();
-        let mut data_plane_service = service.clone();
-        let enclave_context_clone = enclave_context.clone();
-        let feature_context_clone = feature_context.clone();
-        let e3_client_clone = e3_client.clone();
-        tokio::spawn(async move {
-            loop {
-                match try_parse_http_request_from_stream(&mut stream, port).await {
-                    Ok(Incoming::HttpRequest(request)) if parse::is_websocket_request(&request) => {
-                        return handle_websocket_request(
-                            &mut stream,
-                            request,
-                            &tx_for_connection,
-                            remote_ip,
-                            enclave_context_clone.clone(),
-                            feature_context_clone.clone(),
-                            e3_client_clone.clone(),
-                            port,
-                        )
-                        .await;
-                    }
-                    Ok(Incoming::HttpRequest(request)) => {
-                        let response = data_plane_service.call(request).await.unwrap_or_else(|e| {
-                            log::error!("Failed to handle incoming request in data plane - {e:?}");
-                            build_internal_error_response(None)
-                        });
-                        let response_bytes = response_to_bytes(response).await;
-                        let _ = stream.write_all(&response_bytes).await;
-                        continue;
-                    }
-                    Ok(Incoming::NonHttpRequest(_)) if feature_context_clone.api_key_auth => {
-                        log::info!(
-                            "Non http request received with auth enabled, closing connection"
-                        );
-                        log_non_http_trx(&tx_for_connection, false, remote_ip, None);
-                        shutdown_conn(&mut stream).await;
-                        return;
-                    }
-                    Ok(Incoming::NonHttpRequest(bytes)) => {
-                        log::info!(
-                            "Non http request received with auth enabled, closing connection"
-                        );
-                        log_non_http_trx(&tx_for_connection, true, remote_ip, None);
-                        let _ = pipe_to_customer_process(&mut stream, &bytes, port).await;
-                        return;
+        if serial {
+            metrics.record_admitted();
+            let conn = {
+                let _handshake_guard = metrics.enter_handshake();
+                match handshaker.handshake(raw_conn).await {
+                    Ok(conn) => {
+                        metrics.record_handshake_ok();
+                        conn
                     }
                     Err(e) => {
-                        log::error!("Connection read error - {e:?}");
-                        shutdown_conn(&mut stream).await;
-                        return;
+                        metrics.record_handshake_err();
+                        log::error!("An error occurred during the connection handshake — {e}");
+                        continue;
                     }
-                };
+                }
+            };
+
+            let remote_ip = conn.get_remote_addr();
+            let in_flight_guard = metrics.enter_in_flight();
+            let task_metrics = metrics.clone();
+            let serve = serve_connection(
+                conn,
+                service.clone(),
+                port,
+                remote_ip,
+                tx.clone(),
+                enclave_context.clone(),
+                feature_context.clone(),
+                e3_client.clone(),
+            );
+            tokio::spawn(async move {
+                let _in_flight_guard = in_flight_guard;
+                serve.await;
+                task_metrics.record_served();
+            });
+            continue;
+        }
+
+        let conn_permit = match conn_sem.clone().try_acquire_owned() {
+            Ok(permit) => permit,
+            Err(_) => {
+                metrics.record_shed();
+                continue;
             }
+        };
+        metrics.record_admitted();
+
+        let in_flight_guard = metrics.enter_in_flight();
+        let task_handshake_sem = handshake_sem.clone();
+        let task_handshaker = handshaker.clone();
+        let task_service = service.clone();
+        let task_tx = tx.clone();
+        let task_enclave_context = enclave_context.clone();
+        let task_feature_context = feature_context.clone();
+        let task_e3_client = e3_client.clone();
+        let task_metrics = metrics.clone();
+
+        tokio::spawn(async move {
+            let _conn_permit = conn_permit;
+            let _in_flight_guard = in_flight_guard;
+            let handshake_permit = match task_handshake_sem.acquire().await {
+                Ok(permit) => permit,
+                Err(_) => {
+                    task_metrics.record_shed();
+                    return;
+                }
+            };
+
+            let handshake_result = {
+                let _handshake_guard = task_metrics.enter_handshake();
+                match handshake_timeout {
+                    Some(timeout) => {
+                        tokio::time::timeout(timeout, task_handshaker.handshake(raw_conn)).await
+                    }
+                    None => Ok(task_handshaker.handshake(raw_conn).await),
+                }
+            };
+
+            let conn = match handshake_result {
+                Ok(Ok(conn)) => {
+                    task_metrics.record_handshake_ok();
+                    conn
+                }
+                Ok(Err(e)) => {
+                    task_metrics.record_handshake_err();
+                    log::error!("An error occurred during the connection handshake - {e}");
+                    return;
+                }
+                Err(_elapsed) => {
+                    task_metrics.record_handshake_timed_out();
+                    log::warn!("Connection handshake exceeded the handshake timeout");
+                    return;
+                }
+            };
+
+            drop(handshake_permit);
+
+            let remote_ip = conn.get_remote_addr();
+            serve_connection(
+                conn,
+                task_service,
+                port,
+                remote_ip,
+                task_tx,
+                task_enclave_context,
+                task_feature_context,
+                task_e3_client,
+            )
+            .await;
+            task_metrics.record_served();
         });
     }
     #[allow(unreachable_code)]
@@ -159,8 +266,73 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
+pub(crate) async fn serve_connection<S, T>(
+    mut stream: S,
+    mut data_plane_service: T,
+    port: u16,
+    remote_ip: Option<String>,
+    tx_for_connection: UnboundedSender<LogHandlerMessage>,
+    enclave_context: Arc<EnclaveContext>,
+    feature_context: Arc<FeatureContext>,
+    e3_client: Arc<E3Client>,
+) where
+    S: AsyncRead + AsyncWrite + ProxiedConnection + Unpin + Send,
+    T: Service<Request<Body>, Response = hyper::Response<Body>>,
+    T::Error: std::fmt::Debug,
+    T::Future: Send,
+{
+    loop {
+        match try_parse_http_request_from_stream(&mut stream, port).await {
+            Ok(Incoming::HttpRequest(request)) if parse::is_websocket_request(&request) => {
+                return handle_websocket_request(
+                    &mut stream,
+                    request,
+                    &tx_for_connection,
+                    remote_ip,
+                    enclave_context.clone(),
+                    feature_context.clone(),
+                    e3_client.clone(),
+                    port,
+                )
+                .await;
+            }
+            Ok(Incoming::HttpRequest(request)) => {
+                let response = data_plane_service.call(request).await.unwrap_or_else(|e| {
+                    log::error!("Failed to handle incoming request in data plane - {e:?}");
+                    build_internal_error_response(None)
+                });
+                let response_bytes = response_to_bytes(response).await;
+                let _ = stream.write_all(&response_bytes).await;
+                continue;
+            }
+            Ok(Incoming::NonHttpRequest(_)) if feature_context.api_key_auth => {
+                log::info!("Non http request received with auth enabled, closing connection");
+                if let Err(e) = log_non_http_trx(&tx_for_connection, false, remote_ip, None) {
+                    log::debug!("Skipping trx log for non-http transaction. {e}");
+                }
+                shutdown_conn(&mut stream).await;
+                return;
+            }
+            Ok(Incoming::NonHttpRequest(bytes)) => {
+                log::info!("Non http request received with auth enabled, closing connection");
+                if let Err(e) = log_non_http_trx(&tx_for_connection, true, remote_ip, None) {
+                    log::debug!("Skipping trx log for non-http transaction. {e}");
+                }
+                let _ = pipe_to_customer_process(&mut stream, &bytes, port).await;
+                return;
+            }
+            Err(e) => {
+                log::error!("Connection read error - {e:?}");
+                shutdown_conn(&mut stream).await;
+                return;
+            }
+        };
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn handle_websocket_request<S: AsyncRead + AsyncWrite + Unpin>(
-    stream: &mut TlsStream<S>,
+    stream: &mut S,
     request: Request<Body>,
     tx_for_connection: &UnboundedSender<LogHandlerMessage>,
     remote_ip: Option<String>,
@@ -180,12 +352,17 @@ async fn handle_websocket_request<S: AsyncRead + AsyncWrite + Unpin>(
         authenticate_websocket_request(&request, enclave_context, e3_client, &feature_context).await
     {
         let response_bytes = response_to_bytes(e.into()).await;
-        log_non_http_trx(tx_for_connection, false, remote_ip, Some(context_builder));
+        if let Err(e) = log_non_http_trx(tx_for_connection, false, remote_ip, Some(context_builder))
+        {
+            log::debug!("Skipping trx log for non-http transaction. {e}");
+        }
         let _ = stream.write_all(&response_bytes).await;
         return;
     }
 
-    log_non_http_trx(tx_for_connection, true, remote_ip, Some(context_builder));
+    if let Err(e) = log_non_http_trx(tx_for_connection, true, remote_ip, Some(context_builder)) {
+        log::debug!("Skipping trx log for non-http transaction. {e}");
+    }
     let serialized_request = request_to_bytes(request).await;
     let _ = pipe_to_customer_process(stream, &serialized_request, port).await;
 }
@@ -210,22 +387,19 @@ async fn authenticate_websocket_request<T: E3Api + Send + Sync + 'static>(
     Ok(())
 }
 
-async fn shutdown_conn<L>(stream: &mut TlsStream<L>)
-where
-    TlsStream<L>: AsyncWriteExt + Unpin,
-{
+async fn shutdown_conn<S: AsyncWrite + Unpin>(stream: &mut S) {
     if let Err(e) = stream.shutdown().await {
         log::error!("Failed to shutdown data plane connection — {e:?}");
     }
 }
 
-async fn pipe_to_customer_process<L>(
-    stream: &mut TlsStream<L>,
+async fn pipe_to_customer_process<S>(
+    stream: &mut S,
     buffer: &[u8],
     port: u16,
 ) -> Result<(), tokio::io::Error>
 where
-    TlsStream<L>: AsyncRead + Unpin + AsyncWrite,
+    S: AsyncRead + Unpin + AsyncWrite,
 {
     let mut customer_stream = TcpStream::connect(("127.0.0.1", port)).await?;
     customer_stream.write_all(buffer).await?;
@@ -238,23 +412,24 @@ fn log_non_http_trx(
     authorized: bool,
     remote_ip: Option<String>,
     context_builder: Option<TrxContextBuilder>,
-) {
-    let enclave_context = EnclaveContext::get().unwrap();
+) -> Result<(), LogError> {
     let mut context_builder = match context_builder {
         Some(context_builder) => context_builder,
-        _ => TrxContextBuilder::init_trx_context_with_enclave_details(
-            &enclave_context.uuid,
-            &enclave_context.name,
-            &enclave_context.app_uuid,
-            &enclave_context.team_uuid,
-            RequestType::TCP,
-        ),
+        _ => {
+            let enclave_context = EnclaveContext::get()?;
+            TrxContextBuilder::init_trx_context_with_enclave_details(
+                &enclave_context.uuid,
+                &enclave_context.name,
+                &enclave_context.app_uuid,
+                &enclave_context.team_uuid,
+                RequestType::TCP,
+            )
+        }
     };
     context_builder.add_httparse_to_trx(authorized, None, remote_ip);
-    let trx_context = context_builder.build().unwrap();
-    tx_sender
-        .send(LogHandlerMessage::new_log_message(trx_context))
-        .unwrap()
+    let trx_context = context_builder.build()?;
+    let _ = tx_sender.send(LogHandlerMessage::new_log_message(trx_context));
+    Ok(())
 }
 
 #[cfg(test)]
@@ -289,6 +464,7 @@ mod test {
                     ips: std::default::Default::default(),
                 },
             },
+            acceptor: AcceptorConfig::serial_compat(),
         }
     }
 
