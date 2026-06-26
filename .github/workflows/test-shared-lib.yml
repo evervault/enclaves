@@ -1,7 +1,7 @@
 on:
   push:
     paths:
-      - shared/**
+      - crates/shared/**
       - .github/workflows/test-shared-lib.yml
       - Cargo.lock
 permissions:
