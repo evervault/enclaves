@@ -3,6 +3,8 @@ on:
     paths:
       - crates/**
       - .github/workflows/lint.yml
+      - Cargo.lock
+      - Cargo.toml
 name: Lint
 permissions:
   contents: read

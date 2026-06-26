@@ -4,6 +4,7 @@ on:
       - crates/storage-client-interface/**
       - .github/workflows/test-storage-client-interface.yml
       - Cargo.lock
+      - Cargo.toml
 name: Test Storage Client Interface
 
 permissions:
