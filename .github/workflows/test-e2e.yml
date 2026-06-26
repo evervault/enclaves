@@ -5,6 +5,7 @@ on:
       - crates/**
       - .github/workflows/test-e2e.yml
       - Cargo.lock
+      - Cargo.toml
 
 permissions:
   contents: read

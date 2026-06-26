@@ -1,10 +1,11 @@
 on:
   push:
     paths:
-      - control-plane/**
-      - shared/**
+      - crates/control-plane/**
+      - crates/shared/**
       - .github/workflows/test-control-plane.yml
       - Cargo.lock
+      - Cargo.toml
 permissions:
   contents: read
 name: Test Control Plane

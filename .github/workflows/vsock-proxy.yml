@@ -4,9 +4,10 @@ on:
   push:
     paths:
       - crates/vsock-proxy/**
-      - shared/**
+      - crates/shared/**
       - .github/workflows/vsock-proxy.yml
       - Cargo.lock
+      - Cargo.toml
 permissions:
   contents: read
 name: vsock-proxy

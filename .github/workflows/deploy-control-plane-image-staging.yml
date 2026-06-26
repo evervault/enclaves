@@ -1,9 +1,11 @@
 on:
   push:
     paths:
-      - control-plane/**
-      - shared/**
+      - crates/control-plane/**
+      - crates/shared/**
       - .github/workflows/deploy-control-plane-image-staging.yml
+      - Cargo.lock
+      - Cargo.toml
       - scripts/start-cage.sh
       - scripts/health-check.sh
     branches:

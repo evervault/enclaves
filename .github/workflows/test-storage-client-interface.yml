@@ -1,9 +1,11 @@
 on:
   push:
     paths:
-      - src/**
-      - .github/workflows/lint-and-test.yml
-name: Lint and Test
+      - crates/storage-client-interface/**
+      - .github/workflows/test-storage-client-interface.yml
+      - Cargo.lock
+      - Cargo.toml
+name: Test Storage Client Interface
 
 permissions:
   contents: read
@@ -13,10 +15,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install MUSL Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
       - name: Install latest stable toolchain
         uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
         with:
           toolchain: stable
+          target: x86_64-unknown-linux-musl
           override: true
       - run: cargo check -p storage-client-interface
         env:
