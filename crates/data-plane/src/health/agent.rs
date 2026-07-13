@@ -31,6 +31,18 @@ enum BootPhase {
     SourcingTlsCerts,
 }
 
+impl std::fmt::Display for BootPhase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let phase = match self {
+            BootPhase::Provisioning => "Provisioning",
+            BootPhase::Attesting => "Attesting",
+            #[cfg(feature = "tls_termination")]
+            BootPhase::SourcingTlsCerts => "Sourcing TLS certificates",
+        };
+        write!(f, "{phase}")
+    }
+}
+
 pub trait BootPhaseMarker {}
 
 /// The data plane has started but not yet begun fetching its environment.
@@ -289,6 +301,14 @@ impl<C: Connect + Clone + Send + Sync + 'static> HealthcheckAgent<C> {
         self.record_result(hc_result);
     }
 
+    fn record_boot_phase(&mut self, boot_phase: BootPhase) {
+        log::debug!(
+            "{}",
+            json!({"msg": "Data plane boot phase transitioned", "to": boot_phase})
+        );
+        self.boot_phase = boot_phase;
+    }
+
     fn serve_healthcheck_request(&mut self, request: HealthcheckStatusRequest) {
         let state = match self.state {
             HealthcheckAgentState::Initializing => match self.boot_phase {
@@ -319,7 +339,7 @@ impl<C: Connect + Clone + Send + Sync + 'static> HealthcheckAgent<C> {
               },
               maybe_boot_phase = self.boot_phase_receiver.recv(), if self.awaiting_boot_phases => {
                 match maybe_boot_phase {
-                  Some(boot_phase) => self.boot_phase = boot_phase,
+                  Some(boot_phase) => self.record_boot_phase(boot_phase),
                   None => self.awaiting_boot_phases = false,
                 }
               },
@@ -453,6 +473,28 @@ mod test {
             receiver.try_recv().unwrap(),
             DataPlaneState::SourcingTlsCerts
         ));
+    }
+
+    #[test]
+    fn validate_boot_phase_transitions_are_recorded_and_reported() {
+        let (mut agent, _sender, _, boot_progress) =
+            HealthcheckAgent::build_agent(3000, std::time::Duration::from_secs(1), None);
+
+        assert_eq!(agent.boot_phase, BootPhase::default());
+
+        let boot_progress = boot_progress.attesting();
+        let phase = agent.boot_phase_receiver.try_recv().unwrap();
+        agent.record_boot_phase(phase);
+        assert_eq!(agent.boot_phase, BootPhase::Attesting);
+
+        let (req, mut receiver) = HealthcheckStatusRequest::new();
+        agent.serve_healthcheck_request(req);
+        assert!(matches!(
+            receiver.try_recv().unwrap(),
+            DataPlaneState::Attesting
+        ));
+
+        drop(boot_progress);
     }
 
     #[test]
