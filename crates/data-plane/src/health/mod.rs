@@ -6,7 +6,7 @@ use hyper::header;
 use hyper::{service::service_fn, Body, Response};
 use shared::bridge::{Bridge, BridgeInterface, BridgeServer, Direction};
 use shared::notify_shutdown::Service;
-use shared::server::health::{DataPlaneDiagnostic, DataPlaneState, UserProcessHealth};
+use shared::server::health::DataPlaneState;
 use shared::{server::Listener, ENCLAVE_HEALTH_CHECK_PORT};
 use tokio::sync::mpsc::{Sender, UnboundedSender};
 
@@ -74,12 +74,7 @@ impl HealthcheckServer {
             let service = service_fn(move |_| {
                 let user_process_channel = user_process_channel.clone();
                 async move {
-                    let user_process_health =
-                        check_user_process_health(&user_process_channel).await;
-
-                    let result = DataPlaneState::Initialized(DataPlaneDiagnostic {
-                        user_process: user_process_health,
-                    });
+                    let result = get_data_plane_state(&user_process_channel).await;
 
                     Response::builder()
                         .status(200)
@@ -99,18 +94,18 @@ impl HealthcheckServer {
     }
 }
 
-async fn check_user_process_health(channel: &UserProcessHealthcheckSender) -> UserProcessHealth {
+async fn get_data_plane_state(channel: &UserProcessHealthcheckSender) -> DataPlaneState {
     let (request, receiver) = HealthcheckStatusRequest::new();
     if let Err(e) = channel.send(request) {
-        return UserProcessHealth::Error(format!(
-            "Failed to send healthcheck to user process on channel {e:?}"
+        return DataPlaneState::Error(format!(
+            "Failed to send healthcheck request to agent on channel {e:?}"
         ));
     }
 
     match receiver.await {
-        Ok(health) => health,
-        Err(e) => UserProcessHealth::Error(format!(
-            "Failed to receive healthcheck from on channel {e:?}"
+        Ok(state) => state,
+        Err(e) => DataPlaneState::Error(format!(
+            "Failed to receive healthcheck from agent on channel {e:?}"
         )),
     }
 }

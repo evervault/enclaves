@@ -97,6 +97,9 @@ impl HealthCheck for DataPlaneState {
     fn status_code(&self) -> u16 {
         match self {
             DataPlaneState::Initialized(diagnostic) if diagnostic.is_healthy() => 200,
+            DataPlaneState::Provisioning
+            | DataPlaneState::Attesting
+            | DataPlaneState::SourcingTlsCerts => 200,
             _ => 500,
         }
     }
@@ -121,6 +124,14 @@ pub enum DataPlaneState {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DataPlaneDiagnostic {
     pub user_process: UserProcessHealth,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct EnclaveIdentity {
+    pub app_uuid: String,
+    pub team_uuid: String,
+    pub enclave_uuid: String,
+    pub name: String,
 }
 
 impl DataPlaneDiagnostic {
@@ -178,6 +189,61 @@ impl PartialOrd for UserProcessHealth {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn booting_states_report_healthy_status_code() {
+        assert_eq!(DataPlaneState::Provisioning.status_code(), 200);
+        assert_eq!(DataPlaneState::Attesting.status_code(), 200);
+        assert_eq!(DataPlaneState::SourcingTlsCerts.status_code(), 200);
+    }
+
+    #[test]
+    fn error_and_unknown_states_report_unhealthy_status_code() {
+        assert_eq!(DataPlaneState::Error("boom".into()).status_code(), 500);
+        assert_eq!(DataPlaneState::Unknown("unknown".into()).status_code(), 500);
+    }
+
+    #[test]
+    fn provisioning_state_serializes_to_stable_wire_format() {
+        // The control plane parses this JSON off the DP<->CP boundary, so the shape matters.
+        let provisioning = serde_json::to_string(&DataPlaneState::Provisioning).unwrap();
+        assert_eq!(provisioning, "\"Provisioning\"");
+
+        let initialized =
+            serde_json::to_string(&DataPlaneState::Initialized(DataPlaneDiagnostic {
+                user_process: UserProcessHealth::Response {
+                    status_code: 200,
+                    body: None,
+                },
+            }))
+            .unwrap();
+        // The data plane reports only user-process health here; enclave identity is added
+        // by the control plane on its own envelope, not carried in this payload.
+        assert_eq!(
+            initialized,
+            r#"{"Initialized":{"user_process":{"Response":{"status_code":200,"body":null}}}}"#
+        );
+
+        // And it round-trips back through the same deserializer the control plane uses.
+        let decoded: DataPlaneState = serde_json::from_str("\"Provisioning\"").unwrap();
+        assert!(matches!(decoded, DataPlaneState::Provisioning));
+    }
+
+    #[test]
+    fn enclave_identity_serializes_to_stable_wire_format() {
+        // The control plane emits this on its healthcheck envelope, so the shape matters.
+        let identity = serde_json::to_string(&EnclaveIdentity {
+            app_uuid: "app_123".into(),
+            team_uuid: "team_456".into(),
+            enclave_uuid: "enclave_789".into(),
+            name: "my-enclave".into(),
+        })
+        .unwrap();
+        assert_eq!(
+            identity,
+            r#"{"app_uuid":"app_123","team_uuid":"team_456","enclave_uuid":"enclave_789","name":"my-enclave"}"#
+        );
+    }
 
     #[tokio::test]
     async fn it_returns_errors_over_healthy_up_responses() {

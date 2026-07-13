@@ -2,7 +2,10 @@ use crate::{ContextError, EnclaveContext};
 use hyper::client::connect::Connect;
 use hyper::{client::HttpConnector, header, Body, Client, Method, Request};
 use serde_json::Value;
-use shared::{notify_shutdown::Service, server::health::UserProcessHealth};
+use shared::{
+    notify_shutdown::Service,
+    server::health::{DataPlaneDiagnostic, DataPlaneState, UserProcessHealth},
+};
 use std::collections::VecDeque;
 use tokio::sync::mpsc::{
     channel, unbounded_channel, Receiver, Sender, UnboundedReceiver, UnboundedSender,
@@ -19,11 +22,11 @@ enum HealthcheckAgentState {
 }
 
 pub struct HealthcheckStatusRequest {
-    sender: OneshotSender<UserProcessHealth>,
+    sender: OneshotSender<DataPlaneState>,
 }
 
 impl HealthcheckStatusRequest {
-    pub fn new() -> (Self, OneshotReceiver<UserProcessHealth>) {
+    pub fn new() -> (Self, OneshotReceiver<DataPlaneState>) {
         let (sender, receiver) = oneshot_channel();
         (Self { sender }, receiver)
     }
@@ -215,16 +218,16 @@ impl<C: Connect + Clone + Send + Sync + 'static> HealthcheckAgent<C> {
     }
 
     fn serve_healthcheck_request(&mut self, request: HealthcheckStatusRequest) {
-        if self.buffer.is_empty() {
-            let _ = request.sender.send(UserProcessHealth::Unknown(
-                "Enclave is not initialized yet".to_string(),
-            ));
-            return;
-        }
-
-        // Safety: Iterator checked to be non-empty at start of func
-        let max_result = self.buffer.iter().max().unwrap();
-        let _ = request.sender.send(max_result.to_owned());
+        let state = match self.state {
+            HealthcheckAgentState::Initializing => DataPlaneState::Provisioning,
+            HealthcheckAgentState::Ready => {
+                let user_process = self.buffer.iter().max().cloned().unwrap_or_else(|| {
+                    UserProcessHealth::Unknown("No healthcheck results recorded yet".to_string())
+                });
+                DataPlaneState::Initialized(DataPlaneDiagnostic { user_process })
+            }
+        };
+        let _ = request.sender.send(state);
     }
 
     pub async fn run(mut self) {
@@ -289,8 +292,8 @@ impl<C: Connect + Clone + Send + Sync + 'static> HealthcheckAgent<C> {
 
 #[cfg(test)]
 mod test {
-    use super::{HealthcheckAgent, HealthcheckStatusRequest};
-    use shared::server::health::UserProcessHealth;
+    use super::{HealthcheckAgent, HealthcheckAgentState, HealthcheckStatusRequest};
+    use shared::server::health::{DataPlaneDiagnostic, DataPlaneState, UserProcessHealth};
     use yup_hyper_mock::mock_connector;
 
     mock_connector!(MockHttpHealthyEmptyEndpoint {
@@ -326,9 +329,25 @@ mod test {
     });
 
     #[test]
+    fn validate_uninitialized_agent_reports_provisioning() {
+        let (mut agent, _sender, _) =
+            HealthcheckAgent::build_agent(3000, std::time::Duration::from_secs(1), None);
+        agent.buffer.push_back(UserProcessHealth::Response {
+            status_code: 200,
+            body: None,
+        });
+        let (req, mut receiver) = HealthcheckStatusRequest::new();
+        agent.serve_healthcheck_request(req);
+
+        let result = receiver.try_recv().unwrap();
+        assert!(matches!(result, DataPlaneState::Provisioning));
+    }
+
+    #[test]
     fn validate_response_returned_from_healthy_buffer() {
         let (mut agent, _sender, _) =
             HealthcheckAgent::build_agent(3000, std::time::Duration::from_secs(1), None);
+        agent.state = HealthcheckAgentState::Ready;
         for _ in 0..5 {
             agent.buffer.push_back(UserProcessHealth::Response {
                 status_code: 200,
@@ -341,10 +360,13 @@ mod test {
         let result = receiver.try_recv().unwrap();
         assert!(matches!(
             result,
-            UserProcessHealth::Response {
-                status_code: 200,
-                body: None
-            },
+            DataPlaneState::Initialized(DataPlaneDiagnostic {
+                user_process: UserProcessHealth::Response {
+                    status_code: 200,
+                    body: None
+                },
+                ..
+            }),
         ));
     }
 
@@ -352,6 +374,7 @@ mod test {
     fn validate_response_returned_from_buffer_with_unknown() {
         let (mut agent, _sender, _) =
             HealthcheckAgent::build_agent(3000, std::time::Duration::from_secs(1), None);
+        agent.state = HealthcheckAgentState::Ready;
         for _ in 0..5 {
             agent.buffer.push_back(UserProcessHealth::Response {
                 status_code: 200,
@@ -367,10 +390,13 @@ mod test {
         let result = receiver.try_recv().unwrap();
         assert!(matches!(
             result,
-            UserProcessHealth::Response {
-                status_code: 200,
-                body: None
-            }
+            DataPlaneState::Initialized(DataPlaneDiagnostic {
+                user_process: UserProcessHealth::Response {
+                    status_code: 200,
+                    body: None
+                },
+                ..
+            })
         ));
     }
 
