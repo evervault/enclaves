@@ -3,7 +3,7 @@ use data_plane::dns::{egressproxy::EgressProxy, enclavedns::EnclaveDnsProxy};
 use data_plane::{
     crypto::api::CryptoApi,
     env::{init_environment_loader, EnvironmentLoader},
-    health::build_health_check_server,
+    health::{build_health_check_server, Attesting, BootProgress, Provisioning},
     stats::client::StatsClient,
     stats::proxy::StatsProxy,
     time::ClockSync,
@@ -88,25 +88,30 @@ fn main() {
     };
 
     runtime.block_on(async move {
-        let Ok((health_check_server, shutdown_notifier)) = build_health_check_server(
-            ctx.healthcheck_port.unwrap_or(data_plane_port),
-            ctx.healthcheck,
-            ctx.healthcheck_use_tls.unwrap_or(false),
-        )
-        .await
+        let Ok((health_check_server, shutdown_notifier, boot_progress)) =
+            build_health_check_server(
+                ctx.healthcheck_port.unwrap_or(data_plane_port),
+                ctx.healthcheck,
+                ctx.healthcheck_use_tls.unwrap_or(false),
+            )
+            .await
         else {
             log::error!("Failed to launch in-Enclave healthcheck service, exiting early.");
             return;
         };
 
         tokio::select! {
-          _ = start(data_plane_port, shutdown_notifier) => {},
+          _ = start(data_plane_port, shutdown_notifier, boot_progress) => {},
           _ = health_check_server.run() => {}
         };
     });
 }
 
-async fn start(data_plane_port: u16, shutdown_notifier: Sender<Service>) {
+async fn start(
+    data_plane_port: u16,
+    shutdown_notifier: Sender<Service>,
+    boot_progress: BootProgress<Provisioning>,
+) {
     if let Err(e) = StatsClient::init().await {
         log::error!("Failed to register in-Enclave stats client - {e}");
     }
@@ -125,6 +130,7 @@ async fn start(data_plane_port: u16, shutdown_notifier: Sender<Service>) {
     }
 
     let env_loader = init_environment_loader();
+    let boot_progress = boot_progress.attesting();
     let env_loader = match env_loader.load_env_vars().await {
         Ok(env_loader) => env_loader,
         Err(e) => {
@@ -160,7 +166,7 @@ async fn start(data_plane_port: u16, shutdown_notifier: Sender<Service>) {
         );
     }
 
-    start_data_plane(data_plane_port, context, env_loader)
+    start_data_plane(data_plane_port, context, env_loader, boot_progress)
         .notify_shutdown(Service::DataPlane, shutdown_notifier.clone())
         .await;
 }
@@ -172,6 +178,7 @@ async fn start_data_plane(
     data_plane_port: u16,
     context: FeatureContext,
     env_loader: EnvironmentLoader<NeedCert>,
+    boot_progress: BootProgress<Attesting>,
 ) {
     log::info!("Data plane starting up. Forwarding traffic to {data_plane_port}");
     let server = match Bridge::get_listener(ENCLAVE_CONNECT_PORT, Direction::EnclaveToHost).await {
@@ -181,6 +188,8 @@ async fn start_data_plane(
     log::debug!("Data plane TCP server created");
 
     log::info!("TLS Termination enabled in dataplane. Running tls server.");
+    // Bringing up the TLS server sources the intermediate CA cert from the provisioner.
+    let _ = boot_progress.sourcing_tls_certs();
     if let Err(e) =
         data_plane::server::server::run(server, data_plane_port, context, env_loader).await
     {
@@ -199,6 +208,8 @@ async fn start_data_plane(
     data_plane_port: u16,
     context: FeatureContext,
     env_loader: EnvironmentLoader<Finalize>,
+    // No TLS termination in this build, so `Attesting` is the terminal boot phase.
+    _boot_progress: BootProgress<Attesting>,
 ) {
     log::info!("Data plane starting up. Forwarding traffic to {data_plane_port}");
     let mut server =

@@ -217,21 +217,17 @@ mod test {
                 },
             }))
             .unwrap();
-        // The data plane reports only user-process health here; enclave identity is added
-        // by the control plane on its own envelope, not carried in this payload.
         assert_eq!(
             initialized,
             r#"{"Initialized":{"user_process":{"Response":{"status_code":200,"body":null}}}}"#
         );
 
-        // And it round-trips back through the same deserializer the control plane uses.
         let decoded: DataPlaneState = serde_json::from_str("\"Provisioning\"").unwrap();
         assert!(matches!(decoded, DataPlaneState::Provisioning));
     }
 
     #[test]
     fn enclave_identity_serializes_to_stable_wire_format() {
-        // The control plane emits this on its healthcheck envelope, so the shape matters.
         let identity = serde_json::to_string(&EnclaveIdentity {
             app_uuid: "app_123".into(),
             team_uuid: "team_456".into(),

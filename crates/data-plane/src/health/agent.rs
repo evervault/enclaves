@@ -7,6 +7,7 @@ use shared::{
     server::health::{DataPlaneDiagnostic, DataPlaneState, UserProcessHealth},
 };
 use std::collections::VecDeque;
+use std::marker::PhantomData;
 use tokio::sync::mpsc::{
     channel, unbounded_channel, Receiver, Sender, UnboundedReceiver, UnboundedSender,
 };
@@ -19,6 +20,62 @@ enum HealthcheckAgentState {
     #[default]
     Initializing,
     Ready,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum BootPhase {
+    #[default]
+    Provisioning,
+    Attesting,
+    #[cfg(feature = "tls_termination")]
+    SourcingTlsCerts,
+}
+
+pub trait BootPhaseMarker {}
+
+/// The data plane has started but not yet begun fetching its environment.
+pub struct Provisioning;
+impl BootPhaseMarker for Provisioning {}
+
+/// The data plane is attesting to the provisioner to fetch and decrypt its environment.
+pub struct Attesting;
+impl BootPhaseMarker for Attesting {}
+
+/// The data plane is sourcing its TLS certificates from the provisioner.
+pub struct SourcingTlsCerts;
+impl BootPhaseMarker for SourcingTlsCerts {}
+
+pub struct BootProgress<P: BootPhaseMarker> {
+    sender: UnboundedSender<BootPhase>,
+    _phase: PhantomData<P>,
+}
+
+impl BootProgress<Provisioning> {
+    fn new(sender: UnboundedSender<BootPhase>) -> Self {
+        Self {
+            sender,
+            _phase: PhantomData,
+        }
+    }
+
+    pub fn attesting(self) -> BootProgress<Attesting> {
+        let _ = self.sender.send(BootPhase::Attesting);
+        BootProgress {
+            sender: self.sender,
+            _phase: PhantomData,
+        }
+    }
+}
+
+#[cfg(feature = "tls_termination")]
+impl BootProgress<Attesting> {
+    pub fn sourcing_tls_certs(self) -> BootProgress<SourcingTlsCerts> {
+        let _ = self.sender.send(BootPhase::SourcingTlsCerts);
+        BootProgress {
+            sender: self.sender,
+            _phase: PhantomData,
+        }
+    }
 }
 
 pub struct HealthcheckStatusRequest {
@@ -41,6 +98,9 @@ pub struct HealthcheckAgent<C> {
     buffer: VecDeque<UserProcessHealth>,
     interval: std::time::Duration,
     state: HealthcheckAgentState,
+    boot_phase: BootPhase,
+    boot_phase_receiver: UnboundedReceiver<BootPhase>,
+    awaiting_boot_phases: bool,
     recv: UnboundedReceiver<HealthcheckStatusRequest>,
     buffer_size_limit: usize,
     proto: String,
@@ -59,6 +119,7 @@ impl HealthcheckAgent<hyper_rustls::HttpsConnector<HttpConnector>> {
         Self,
         UnboundedSender<HealthcheckStatusRequest>,
         Sender<Service>,
+        BootProgress<Provisioning>,
     ) {
         let client = Self::build_tls_client();
         Self::new(
@@ -95,6 +156,7 @@ impl HealthcheckAgent<HttpConnector> {
         Self,
         UnboundedSender<HealthcheckStatusRequest>,
         Sender<Service>,
+        BootProgress<Provisioning>,
     ) {
         let client = Client::builder().build_http();
         Self::new(
@@ -118,9 +180,11 @@ impl<C: Connect + Clone + Send + Sync + 'static> HealthcheckAgent<C> {
         Self,
         UnboundedSender<HealthcheckStatusRequest>,
         Sender<Service>,
+        BootProgress<Provisioning>,
     ) {
         let (sender, recv) = unbounded_channel();
         let (shutdown_sender, shutdown_receiver) = channel(1);
+        let (boot_phase_sender, boot_phase_receiver) = unbounded_channel();
 
         let critical_service_vec = if cfg!(feature = "network_egress") {
             Vec::with_capacity(5)
@@ -133,6 +197,9 @@ impl<C: Connect + Clone + Send + Sync + 'static> HealthcheckAgent<C> {
             healthcheck_path,
             buffer: VecDeque::with_capacity(DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT),
             state: HealthcheckAgentState::default(),
+            boot_phase: BootPhase::default(),
+            boot_phase_receiver,
+            awaiting_boot_phases: true,
             interval,
             recv,
             buffer_size_limit: DEFAULT_HEALTHCHECK_BUFFER_SIZE_LIMIT,
@@ -141,7 +208,12 @@ impl<C: Connect + Clone + Send + Sync + 'static> HealthcheckAgent<C> {
             shutdown_receiver,
             exited_services: critical_service_vec,
         };
-        (healthcheck_agent, sender, shutdown_sender)
+        (
+            healthcheck_agent,
+            sender,
+            shutdown_sender,
+            BootProgress::new(boot_phase_sender),
+        )
     }
 
     fn record_result(&mut self, healthcheck_status: UserProcessHealth) {
@@ -219,7 +291,12 @@ impl<C: Connect + Clone + Send + Sync + 'static> HealthcheckAgent<C> {
 
     fn serve_healthcheck_request(&mut self, request: HealthcheckStatusRequest) {
         let state = match self.state {
-            HealthcheckAgentState::Initializing => DataPlaneState::Provisioning,
+            HealthcheckAgentState::Initializing => match self.boot_phase {
+                BootPhase::Provisioning => DataPlaneState::Provisioning,
+                BootPhase::Attesting => DataPlaneState::Attesting,
+                #[cfg(feature = "tls_termination")]
+                BootPhase::SourcingTlsCerts => DataPlaneState::SourcingTlsCerts,
+            },
             HealthcheckAgentState::Ready => {
                 let user_process = self.buffer.iter().max().cloned().unwrap_or_else(|| {
                     UserProcessHealth::Unknown("No healthcheck results recorded yet".to_string())
@@ -238,6 +315,12 @@ impl<C: Connect + Clone + Send + Sync + 'static> HealthcheckAgent<C> {
               healthcheck_req = self.recv.recv() => {
                 if let Some(req) = healthcheck_req {
                   self.serve_healthcheck_request(req);
+                }
+              },
+              maybe_boot_phase = self.boot_phase_receiver.recv(), if self.awaiting_boot_phases => {
+                match maybe_boot_phase {
+                  Some(boot_phase) => self.boot_phase = boot_phase,
+                  None => self.awaiting_boot_phases = false,
                 }
               },
               _ = interval.tick() => self.perform_healthcheck().await
@@ -292,7 +375,7 @@ impl<C: Connect + Clone + Send + Sync + 'static> HealthcheckAgent<C> {
 
 #[cfg(test)]
 mod test {
-    use super::{HealthcheckAgent, HealthcheckAgentState, HealthcheckStatusRequest};
+    use super::{BootPhase, HealthcheckAgent, HealthcheckAgentState, HealthcheckStatusRequest};
     use shared::server::health::{DataPlaneDiagnostic, DataPlaneState, UserProcessHealth};
     use yup_hyper_mock::mock_connector;
 
@@ -330,7 +413,7 @@ mod test {
 
     #[test]
     fn validate_uninitialized_agent_reports_provisioning() {
-        let (mut agent, _sender, _) =
+        let (mut agent, _sender, _, _) =
             HealthcheckAgent::build_agent(3000, std::time::Duration::from_secs(1), None);
         agent.buffer.push_back(UserProcessHealth::Response {
             status_code: 200,
@@ -344,8 +427,37 @@ mod test {
     }
 
     #[test]
+    fn validate_agent_reports_attesting_while_initializing() {
+        let (mut agent, _sender, _, _) =
+            HealthcheckAgent::build_agent(3000, std::time::Duration::from_secs(1), None);
+
+        agent.boot_phase = BootPhase::Attesting;
+        let (req, mut receiver) = HealthcheckStatusRequest::new();
+        agent.serve_healthcheck_request(req);
+        assert!(matches!(
+            receiver.try_recv().unwrap(),
+            DataPlaneState::Attesting
+        ));
+    }
+
+    #[cfg(feature = "tls_termination")]
+    #[test]
+    fn validate_agent_reports_sourcing_tls_certs_while_initializing() {
+        let (mut agent, _sender, _, _) =
+            HealthcheckAgent::build_agent(3000, std::time::Duration::from_secs(1), None);
+
+        agent.boot_phase = BootPhase::SourcingTlsCerts;
+        let (req, mut receiver) = HealthcheckStatusRequest::new();
+        agent.serve_healthcheck_request(req);
+        assert!(matches!(
+            receiver.try_recv().unwrap(),
+            DataPlaneState::SourcingTlsCerts
+        ));
+    }
+
+    #[test]
     fn validate_response_returned_from_healthy_buffer() {
-        let (mut agent, _sender, _) =
+        let (mut agent, _sender, _, _) =
             HealthcheckAgent::build_agent(3000, std::time::Duration::from_secs(1), None);
         agent.state = HealthcheckAgentState::Ready;
         for _ in 0..5 {
@@ -372,7 +484,7 @@ mod test {
 
     #[test]
     fn validate_response_returned_from_buffer_with_unknown() {
-        let (mut agent, _sender, _) =
+        let (mut agent, _sender, _, _) =
             HealthcheckAgent::build_agent(3000, std::time::Duration::from_secs(1), None);
         agent.state = HealthcheckAgentState::Ready;
         for _ in 0..5 {
@@ -403,7 +515,7 @@ mod test {
     #[tokio::test]
     async fn validate_uninitialized_user_process_doesnt_return_errors() {
         let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender, _) = HealthcheckAgent::build_agent(3000, duration, None);
+        let (mut agent, _sender, _, _) = HealthcheckAgent::build_agent(3000, duration, None);
 
         agent.perform_healthcheck().await;
 
@@ -417,7 +529,7 @@ mod test {
     #[tokio::test]
     async fn validate_initialized_agent_with_no_healthcheck_path_returns_unknown() {
         let duration = std::time::Duration::from_secs(1);
-        let (mut agent, _sender, _) = HealthcheckAgent::build_agent(3000, duration, None);
+        let (mut agent, _sender, _, _) = HealthcheckAgent::build_agent(3000, duration, None);
         agent.state = super::HealthcheckAgentState::Ready;
 
         agent.perform_healthcheck().await;
@@ -432,7 +544,7 @@ mod test {
     #[tokio::test]
     async fn validate_initialized_agent_with_healthy_response_returns_response() {
         let client = hyper::Client::builder().build(MockHttpHealthyEmptyEndpoint::default());
-        let (mut agent, _sender, _) = HealthcheckAgent::new(
+        let (mut agent, _sender, _, _) = HealthcheckAgent::new(
             3000,
             std::time::Duration::from_secs(1),
             Some("/healthz".into()),
@@ -456,7 +568,7 @@ mod test {
     #[tokio::test]
     async fn validate_initialized_agent_with_healthy_response_returns_response_over_tls() {
         let client = hyper::Client::builder().build(MockHttpsHealthyEmptyEndpoint::default());
-        let (mut agent, _sender, _) = HealthcheckAgent::new(
+        let (mut agent, _sender, _, _) = HealthcheckAgent::new(
             3000,
             std::time::Duration::from_secs(1),
             Some("/healthz".into()),
@@ -481,7 +593,7 @@ mod test {
     async fn validate_initialized_agent_with_unhealthy_response_returns_response_with_correct_status(
     ) {
         let client = hyper::Client::builder().build(MockHttpUnhealthyEmptyEndpoint::default());
-        let (mut agent, _sender, _) = HealthcheckAgent::new(
+        let (mut agent, _sender, _, _) = HealthcheckAgent::new(
             3000,
             std::time::Duration::from_secs(1),
             Some("/healthcheck".into()),
@@ -506,7 +618,7 @@ mod test {
     async fn validate_initialized_agent_with_unhealthy_response_returns_response_with_correct_status_over_tls(
     ) {
         let client = hyper::Client::builder().build(MockHttpsUnhealthyEmptyEndpoint::default());
-        let (mut agent, _sender, _) = HealthcheckAgent::new(
+        let (mut agent, _sender, _, _) = HealthcheckAgent::new(
             3001,
             std::time::Duration::from_secs(1),
             Some("/healthcheck".into()),
@@ -530,7 +642,7 @@ mod test {
     #[tokio::test]
     async fn it_can_parse_json_responses_from_user_process() {
         let client = hyper::Client::builder().build(MockHttpHealthyJsonEndpoint::default());
-        let (mut agent, _sender, _) = HealthcheckAgent::new(
+        let (mut agent, _sender, _, _) = HealthcheckAgent::new(
             3000,
             std::time::Duration::from_secs(1),
             Some("/healthcheck".into()),
@@ -554,7 +666,7 @@ mod test {
     #[tokio::test]
     async fn it_can_parse_json_responses_from_user_process_over_tls() {
         let client = hyper::Client::builder().build(MockHttpsHealthyJsonEndpoint::default());
-        let (mut agent, _sender, _) = HealthcheckAgent::new(
+        let (mut agent, _sender, _, _) = HealthcheckAgent::new(
             3000,
             std::time::Duration::from_secs(1),
             Some("/healthcheck".into()),
@@ -578,7 +690,7 @@ mod test {
     #[tokio::test]
     async fn it_can_parse_unhealthy_json_responses_from_user_process() {
         let client = hyper::Client::builder().build(MockHttpUnhealthyJsonEndpoint::default());
-        let (mut agent, _sender, _) = HealthcheckAgent::new(
+        let (mut agent, _sender, _, _) = HealthcheckAgent::new(
             3000,
             std::time::Duration::from_secs(1),
             Some("/healthcheck".into()),
@@ -602,7 +714,7 @@ mod test {
     #[tokio::test]
     async fn it_can_parse_unhealthy_json_responses_from_user_process_over_tls() {
         let client = hyper::Client::builder().build(MockHttpsUnhealthyJsonEndpoint::default());
-        let (mut agent, _sender, _) = HealthcheckAgent::new(
+        let (mut agent, _sender, _, _) = HealthcheckAgent::new(
             3000,
             std::time::Duration::from_secs(1),
             Some("/healthcheck".into()),
@@ -626,7 +738,7 @@ mod test {
     #[tokio::test]
     async fn it_fails_all_healthchecks_if_critical_service_has_exited() {
         let client = hyper::Client::builder().build(MockHttpHealthyEmptyEndpoint::default());
-        let (mut agent, _sender, shutdown_channel) = HealthcheckAgent::new(
+        let (mut agent, _sender, shutdown_channel, _) = HealthcheckAgent::new(
             3000,
             std::time::Duration::from_secs(1),
             Some("/healthcheck".into()),

@@ -1,6 +1,7 @@
 mod agent;
 
 use agent::UserProcessHealthcheckSender;
+pub use agent::{Attesting, BootProgress, Provisioning, SourcingTlsCerts};
 
 use hyper::header;
 use hyper::{service::service_fn, Body, Response};
@@ -16,18 +17,22 @@ fn spawn_customer_healthcheck_agent(
     customer_process_port: u16,
     healthcheck: Option<String>,
     use_tls: bool,
-) -> (UserProcessHealthcheckSender, Sender<Service>) {
+) -> (
+    UserProcessHealthcheckSender,
+    Sender<Service>,
+    BootProgress<Provisioning>,
+) {
     let default_interval = std::time::Duration::from_secs(1);
     if use_tls {
-        let (agent, channel, shutdown_channel) =
+        let (agent, channel, shutdown_channel, boot_progress) =
             HealthcheckAgent::build_tls_agent(customer_process_port, default_interval, healthcheck);
         tokio::spawn(async move { agent.run().await });
-        (channel, shutdown_channel)
+        (channel, shutdown_channel, boot_progress)
     } else {
-        let (agent, channel, shutdown_channel) =
+        let (agent, channel, shutdown_channel, boot_progress) =
             HealthcheckAgent::build_agent(customer_process_port, default_interval, healthcheck);
         tokio::spawn(async move { agent.run().await });
-        (channel, shutdown_channel)
+        (channel, shutdown_channel, boot_progress)
     }
 }
 
@@ -35,11 +40,15 @@ pub async fn build_health_check_server(
     customer_process_port: u16,
     healthcheck: Option<String>,
     use_tls: bool,
-) -> shared::server::error::ServerResult<(HealthcheckServer, Sender<Service>)> {
-    let (user_process_healthcheck_channel, shutdown_notifier) =
+) -> shared::server::error::ServerResult<(
+    HealthcheckServer,
+    Sender<Service>,
+    BootProgress<Provisioning>,
+)> {
+    let (user_process_healthcheck_channel, shutdown_notifier, boot_phase_notifier) =
         spawn_customer_healthcheck_agent(customer_process_port, healthcheck, use_tls);
     let health_check_server = HealthcheckServer::new(user_process_healthcheck_channel).await?;
-    Ok((health_check_server, shutdown_notifier))
+    Ok((health_check_server, shutdown_notifier, boot_phase_notifier))
 }
 
 pub struct HealthcheckServer {
