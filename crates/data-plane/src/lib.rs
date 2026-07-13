@@ -107,13 +107,13 @@ impl EnclaveContext {
 
     #[cfg(not(staging))]
     pub fn get_cert_name(&self) -> String {
-        format!("{}.{}.cages.evervault.com", &self.name, &self.app_uuid)
+        format!("{}.{}.cages.evervault.com", self.name, self.app_uuid)
     }
 
     #[cfg(not(staging))]
     pub fn get_hyphenated_cert_name(&self) -> String {
         let hyphenated_app_uuid = self.app_uuid.clone().replace('_', "-");
-        format!("{}.{}.cages.evervault.com", &self.name, hyphenated_app_uuid)
+        format!("{}.{}.cages.evervault.com", self.name, hyphenated_app_uuid)
     }
 
     pub fn get_trusted_cert_domains(&self) -> Vec<String> {
@@ -125,7 +125,7 @@ impl EnclaveContext {
 
         base_domains
             .iter()
-            .map(|domain| format!("{}.{}.{}", &self.name, &self.hyphenated_app_uuid(), domain))
+            .map(|domain| format!("{}.{}.{}", self.name, self.hyphenated_app_uuid(), domain))
             .collect()
     }
 

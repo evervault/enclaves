@@ -331,7 +331,7 @@ impl<C: Connect + Clone + Send + Sync + 'static> HealthcheckAgent<C> {
     fn build_healthcheck_uri(&self, healthcheck_path: &str) -> String {
         format!(
             "{}://127.0.0.1:{}{}",
-            &self.proto, self.customer_process_port, &healthcheck_path
+            self.proto, self.customer_process_port, healthcheck_path
         )
     }
 
