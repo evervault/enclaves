@@ -25,8 +25,10 @@ pub struct TrxContext {
     txid: String,
     ts: String,
     msg: String,
+    #[builder(default)]
     uri: Option<String>,
     r#type: String,
+    #[builder(default)]
     request_method: Option<String>,
     #[builder(default)]
     remote_ip: Option<String>,

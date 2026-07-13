@@ -9,7 +9,15 @@ cat <<EOF > /etc/dataplane-config.json
   "trx_logging_enabled": true,
   "forward_proxy_protocol": false,
   "trusted_headers": [],
-  "healthcheck": "/health"
+  "healthcheck": "/health",
+  "acceptor": {
+    "max_concurrent_connections": 1024,
+    "max_concurrent_handshakes": 64,
+    "handshake_timeout": {
+      "secs": 10,
+      "nanos": 0
+    }
+  }
 }
 EOF
 

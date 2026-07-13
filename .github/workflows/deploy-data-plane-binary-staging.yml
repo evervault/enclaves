@@ -6,6 +6,8 @@ on:
       - .github/workflows/deploy-data-plane-binary-staging.yml
       - crates/data-plane/**
       - crates/shared/**
+      - Cargo.lock
+      - Cargo.toml
     branches:
       - main
 

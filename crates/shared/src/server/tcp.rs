@@ -13,6 +13,11 @@ impl TcpServer {
         let listener = TcpListener::bind(addr).await?;
         Ok(Self { inner: listener })
     }
+
+    // Expose local address for testing
+    pub fn local_addr(&self) -> std::io::Result<std::net::SocketAddr> {
+        self.inner.local_addr()
+    }
 }
 
 #[async_trait]
