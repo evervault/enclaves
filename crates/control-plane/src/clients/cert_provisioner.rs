@@ -92,8 +92,8 @@ impl CertProvisionerClient {
         format!(
             "https://{}:{}{}",
             configuration::get_cert_provisoner_host(),
-            &port,
-            &path
+            port,
+            path
         )
     }
 
@@ -129,11 +129,11 @@ impl CertProvisionerClient {
             .header("Content-Type", "application/json")
             .header(
                 "User-Agent",
-                format!("Cage-Control-Plane/{}", &*CLIENT_VERSION),
+                format!("Cage-Control-Plane/{}", *CLIENT_VERSION),
             )
             .header(
                 "Accept",
-                format!("application/json;version={}", &*CLIENT_MAJOR_VERSION),
+                format!("application/json;version={}", *CLIENT_MAJOR_VERSION),
             )
             .method(method)
             .body(body)
