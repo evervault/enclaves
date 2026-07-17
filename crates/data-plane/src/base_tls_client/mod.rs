@@ -76,10 +76,7 @@ impl BaseClient {
         }
         let mut request = request
             .header("Content-Type", "application/json")
-            .header(
-                "User-Agent",
-                format!("Cage-Data-Plane/{}", *CLIENT_VERSION),
-            )
+            .header("User-Agent", format!("Cage-Data-Plane/{}", *CLIENT_VERSION))
             .header(
                 "Accept",
                 format!("application/json;version={}", *CLIENT_MAJOR_VERSION),
