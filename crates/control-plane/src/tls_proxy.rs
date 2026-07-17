@@ -73,8 +73,8 @@ impl TlsProxy {
 
         log::info!(
             "Running TLS proxy to {:?} on {}",
-            &self.targets,
-            &self.vsock_port
+            self.targets,
+            self.vsock_port
         );
         loop {
             let (connection, target, initial_bytes) = match enclave_conn.accept().await {

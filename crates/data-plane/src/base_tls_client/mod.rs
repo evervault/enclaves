@@ -78,11 +78,11 @@ impl BaseClient {
             .header("Content-Type", "application/json")
             .header(
                 "User-Agent",
-                format!("Cage-Data-Plane/{}", &*CLIENT_VERSION),
+                format!("Cage-Data-Plane/{}", *CLIENT_VERSION),
             )
             .header(
                 "Accept",
-                format!("application/json;version={}", &*CLIENT_MAJOR_VERSION),
+                format!("application/json;version={}", *CLIENT_MAJOR_VERSION),
             )
             .method(method)
             .body(payload)

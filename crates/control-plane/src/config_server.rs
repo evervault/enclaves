@@ -460,8 +460,8 @@ fn valid_order_identifiers(
         .map(|base_domain| {
             format!(
                 "{}.{}.{}",
-                &enclave_context.name,
-                &enclave_context.hyphenated_app_uuid(),
+                enclave_context.name,
+                enclave_context.hyphenated_app_uuid(),
                 base_domain
             )
         })
