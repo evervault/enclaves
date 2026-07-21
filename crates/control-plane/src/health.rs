@@ -1,11 +1,15 @@
 use crate::error::ServerError;
 use axum::http::HeaderValue;
 use hyper::{Body, Request, Response};
+use log::Level;
 use serde::{Deserialize, Serialize};
 use shared::notify_shutdown::Service;
 use shared::server::{
     error::ServerResult,
-    health::{ControlPlaneState, DataPlaneState, HealthCheck, HealthCheckLog, HealthCheckVersion},
+    health::{
+        ControlPlaneState, DataPlaneState, EnclaveIdentity, HealthCheck, HealthCheckLog,
+        HealthCheckVersion,
+    },
     tcp::TcpServer,
     Listener,
 };
@@ -14,7 +18,7 @@ use shared::{
     ENCLAVE_HEALTH_CHECK_PORT,
 };
 use std::net::SocketAddr;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use tokio::sync::mpsc::Receiver;
 
 pub static IS_DRAINING: OnceLock<bool> = OnceLock::new();
@@ -30,11 +34,13 @@ pub const CONTROL_PLANE_HEALTH_CHECK_PORT: u16 = 3032;
 struct CombinedHealthCheckLog {
     control_plane: ControlPlaneState,
     data_plane: HealthCheckVersion,
+    enclave: EnclaveIdentity,
 }
 
 pub async fn run_ecs_health_check_service(
     is_draining: bool,
     control_plane_state: ControlPlaneState,
+    enclave: &EnclaveIdentity,
 ) -> std::result::Result<Response<Body>, ServerError> {
     if is_draining {
         let combined_log = CombinedHealthCheckLog {
@@ -43,6 +49,7 @@ pub async fn run_ecs_health_check_service(
                 "Enclave is draining, data-plane health will not be checked".into(),
             )
             .into(),
+            enclave: enclave.clone(),
         };
 
         let combined_log_json = serde_json::to_string(&combined_log)?;
@@ -63,13 +70,28 @@ pub async fn run_ecs_health_check_service(
     let combined_log = CombinedHealthCheckLog {
         control_plane: control_plane_state,
         data_plane,
+        enclave: enclave.clone(),
     };
-    let combined_log_json = serde_json::to_string(&combined_log).unwrap();
+
+    let level = if status_to_return == 200 {
+        Level::Info
+    } else {
+        Level::Error
+    };
+    log::log!(
+        level,
+        "{}",
+        serde_json::json!({
+            "event": "health_check",
+            "status": status_to_return,
+            "result": combined_log,
+        })
+    );
 
     Response::builder()
         .status(status_to_return)
         .header("Content-Type", "application/json")
-        .body(Body::from(combined_log_json))
+        .body(Body::from(serde_json::to_string(&combined_log)?))
         .map_err(ServerError::from)
 }
 
@@ -110,13 +132,15 @@ async fn health_check_data_plane() -> Result<HealthCheckVersion, ServerError> {
 pub struct HealthCheckServer {
     shutdown_receiver: Receiver<Service>,
     exited_services: Vec<Service>,
+    enclave_identity: Arc<EnclaveIdentity>,
 }
 
 impl HealthCheckServer {
-    pub fn new(shutdown_receiver: Receiver<Service>) -> Self {
+    pub fn new(shutdown_receiver: Receiver<Service>, enclave_identity: EnclaveIdentity) -> Self {
         Self {
             shutdown_receiver,
             exited_services: Vec::new(),
+            enclave_identity: Arc::new(enclave_identity),
         }
     }
 
@@ -138,8 +162,10 @@ impl HealthCheckServer {
 
             let service = hyper::service::service_fn({
                 let cp_state = cp_state.clone();
+                let enclave_identity = Arc::clone(&self.enclave_identity);
                 move |request: Request<Body>| {
                     let cp_state = cp_state.clone();
+                    let enclave_identity = Arc::clone(&enclave_identity);
                     async move {
                         match request
                             .headers()
@@ -147,8 +173,12 @@ impl HealthCheckServer {
                             .map(|value| value.as_bytes())
                         {
                             Some(b"ECS-HealthCheck") => {
-                                let cp_state = cp_state.clone();
-                                run_ecs_health_check_service(is_draining(), cp_state).await
+                                run_ecs_health_check_service(
+                                    is_draining(),
+                                    cp_state,
+                                    &enclave_identity,
+                                )
+                                .await
                             }
                             _ => Response::builder()
                                 .status(400)
@@ -198,6 +228,15 @@ impl HealthCheckServer {
 mod health_check_tests {
     use super::*;
 
+    fn test_identity() -> EnclaveIdentity {
+        EnclaveIdentity {
+            app_uuid: "app_123".into(),
+            team_uuid: "team_456".into(),
+            enclave_uuid: "enclave_789".into(),
+            name: "my-enclave".into(),
+        }
+    }
+
     async fn response_to_health_check_log(response: Response<Body>) -> CombinedHealthCheckLog {
         let response_body = response.into_body();
         let response_body = hyper::body::to_bytes(response_body).await.unwrap();
@@ -207,12 +246,14 @@ mod health_check_tests {
     #[tokio::test]
     async fn test_enclave_health_check_service() {
         // the data-plane status should error, as its not running
-        let response = run_ecs_health_check_service(false, ControlPlaneState::Ok)
+        let response = run_ecs_health_check_service(false, ControlPlaneState::Ok, &test_identity())
             .await
             .unwrap();
         assert_eq!(response.status(), 500);
         println!("deep response: {response:?}");
         let health_check_log = response_to_health_check_log(response).await;
+
+        assert_eq!(health_check_log.enclave, test_identity());
 
         let dp_state = match health_check_log.data_plane {
             HealthCheckVersion::V0(_) => panic!("Expected V1 Version"),
@@ -226,12 +267,14 @@ mod health_check_tests {
     async fn test_enclave_health_check_service_with_draining_set_to_true() {
         // the data-plane status should error, as its not running
         IS_DRAINING.set(true).unwrap();
-        let response = run_ecs_health_check_service(true, ControlPlaneState::Ok)
+        let response = run_ecs_health_check_service(true, ControlPlaneState::Ok, &test_identity())
             .await
             .unwrap();
         assert_eq!(response.status(), 500);
         println!("deep response: {response:?}");
         let health_check_log = response_to_health_check_log(response).await;
+
+        assert_eq!(health_check_log.enclave, test_identity());
 
         let dp_state = match health_check_log.data_plane {
             HealthCheckVersion::V0(_) => panic!("Expected V1 Version"),

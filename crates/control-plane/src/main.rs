@@ -73,7 +73,8 @@ async fn main() -> Result<()> {
 
     let (shutdown_sender, shutdown_receiver) = channel(1);
 
-    let mut health_check_server = HealthCheckServer::new(shutdown_receiver);
+    let enclave_identity = configuration::EnclaveContext::from_env_vars().enclave_identity();
+    let mut health_check_server = HealthCheckServer::new(shutdown_receiver, enclave_identity);
 
     listen_for_shutdown_signal();
     schedule_statsd_proxies();
