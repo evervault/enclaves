@@ -5,7 +5,11 @@ const port = 8008
 app.use(express.json())
 
 
-app.all('/hello', async (req, res) => { 
+app.get('/health', async (req, res) => {
+  res.send({ status: "ok" })
+})
+
+app.all('/hello', async (req, res) => {
   res.send({response: "Hello from enclave", ...req.body})
 })
 

@@ -1,3 +1,4 @@
+use shared::server::health::EnclaveIdentity;
 use std::{env::VarError, str::FromStr};
 
 use openssl::{
@@ -101,6 +102,15 @@ impl EnclaveContext {
 
     pub fn get_namespace_string(&self) -> String {
         format!("{}/{}", self.hyphenated_app_uuid(), self.name)
+    }
+
+    pub fn enclave_identity(&self) -> EnclaveIdentity {
+        EnclaveIdentity {
+            app_uuid: self.app_uuid.clone(),
+            team_uuid: self.team_uuid.clone(),
+            enclave_uuid: self.uuid.clone(),
+            name: self.name.clone(),
+        }
     }
 }
 

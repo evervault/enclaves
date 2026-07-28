@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Always run relative to the repo root, regardless of where the script is invoked from
+cd "$(dirname "$0")/.."
+
 # If sample-ca directory doesn't exist, create it
 if [ ! -d "e2e-tests/sample-ca" ]; then
   mkdir -p e2e-tests/sample-ca
