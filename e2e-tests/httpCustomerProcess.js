@@ -11,7 +11,11 @@ app.all('/hello', async (req, res) => {
 
 app.get('/env', async (req, res) => {
   try {
-    res.send({ANOTHER_ENV_VAR: process.env.ANOTHER_ENV_VAR})
+    res.send({
+      ANOTHER_ENV_VAR: process.env.ANOTHER_ENV_VAR,
+      TRICKY_ENV_VAR: process.env.TRICKY_ENV_VAR,
+      BAD_NAME: process.env["BAD-NAME"] ?? null,
+    })
   } catch (e) {
     console.log("Failed", e)
     res.status(500).send(e)
