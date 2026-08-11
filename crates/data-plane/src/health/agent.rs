@@ -178,6 +178,20 @@ impl<C: Connect + Clone + Send + Sync + 'static> HealthcheckAgent<C> {
     }
 
     async fn perform_healthcheck(&mut self) {
+        // Checked regardless of init state — a critical service (including the boot sequence
+        // itself) can exit before the enclave ever reaches `Ready`, and that must still be
+        // reported as unhealthy rather than masked by the `Initializing` catch-all below.
+        if let Ok(exited_service) = self.shutdown_receiver.try_recv() {
+            self.exited_services.push(exited_service);
+        }
+        if !self.exited_services.is_empty() {
+            self.record_result(UserProcessHealth::Error(format!(
+                "Critical in-Enclave services have exited: {}",
+                self.serialize_exited_services()
+            )));
+            return;
+        }
+
         let hc_state = match self.state {
             HealthcheckAgentState::Initializing => self.check_user_process_initialized(),
             _ => Ok(HealthcheckAgentState::Ready),
@@ -185,18 +199,7 @@ impl<C: Connect + Clone + Send + Sync + 'static> HealthcheckAgent<C> {
 
         let hc_result = match hc_state {
             Ok(HealthcheckAgentState::Ready) => {
-                if let Ok(exited_service) = self.shutdown_receiver.try_recv() {
-                    self.exited_services.push(exited_service);
-                    UserProcessHealth::Error(format!(
-                        "Critical in-Enclave services have exited: {}",
-                        self.serialize_exited_services()
-                    ))
-                } else if !self.exited_services.is_empty() {
-                    UserProcessHealth::Error(format!(
-                        "Critical in-Enclave services have exited: {}",
-                        self.serialize_exited_services()
-                    ))
-                } else if self.healthcheck_path.is_some() {
+                if self.healthcheck_path.is_some() {
                     self.probe_user_process(self.healthcheck_path.as_deref().unwrap())
                         .await
                 } else {

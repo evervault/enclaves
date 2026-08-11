@@ -97,10 +97,19 @@ fn main() {
             return;
         };
 
-        tokio::select! {
-          _ = start(data_plane_port, shutdown_notifier) => {},
-          _ = health_check_server.run() => {}
-        };
+        // The health check server owns the process's lifetime — it must stay up and reachable
+        // even if the boot sequence below fails, so that the failure is reported as unhealthy
+        // rather than masked by a process exit + supervisor restart.
+        let panic_notifier = shutdown_notifier.clone();
+        let start_handle = tokio::spawn(start(data_plane_port, shutdown_notifier));
+        tokio::spawn(async move {
+            if let Err(e) = start_handle.await {
+                log::error!("Data-plane boot task exited abnormally - {e:?}");
+                let _ = panic_notifier.try_send(Service::EnvironmentLoader);
+            }
+        });
+
+        health_check_server.run().await;
     });
 }
 
@@ -127,6 +136,7 @@ async fn start(data_plane_port: u16, shutdown_notifier: Sender<Service>) {
         Ok(env_loader) => env_loader,
         Err(e) => {
             log::error!("An error occurred initializing the enclave environment - {e:?}");
+            let _ = shutdown_notifier.try_send(Service::EnvironmentLoader);
             return;
         }
     };

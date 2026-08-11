@@ -14,6 +14,7 @@ pub enum Service {
     ProvisionerProxy,
     AcmeProxy,
     ConfigServer,
+    EnvironmentLoader,
 }
 
 impl std::fmt::Display for Service {
@@ -28,6 +29,7 @@ impl std::fmt::Display for Service {
             Self::ProvisionerProxy => "provisioner-proxy",
             Self::AcmeProxy => "acme-proxy",
             Self::ConfigServer => "config-server",
+            Self::EnvironmentLoader => "environment-loader",
         };
         f.write_str(service_label)
     }
