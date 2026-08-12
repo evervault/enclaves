@@ -626,4 +626,25 @@ mod test {
         let next_result = agent.buffer.iter().max().unwrap();
         assert!(next_result.is_error());
     }
+
+    #[tokio::test]
+    async fn it_fails_healthchecks_if_critical_service_has_exited_while_initializing() {
+        let client = hyper::Client::builder().build(MockHttpHealthyEmptyEndpoint::default());
+        let (mut agent, _sender, shutdown_channel) = HealthcheckAgent::new(
+            3000,
+            std::time::Duration::from_secs(1),
+            Some("/healthcheck".into()),
+            client,
+            "https".into(),
+        );
+        // agent.state defaults to HealthcheckAgentState::Initializing
+        shutdown_channel
+            .try_send(shared::notify_shutdown::Service::DataPlane)
+            .unwrap();
+
+        agent.perform_healthcheck().await;
+
+        let healthcheck_result = agent.buffer.iter().max().unwrap();
+        assert!(healthcheck_result.is_error());
+    }
 }
