@@ -1,15 +1,16 @@
+use std::future::Future;
+
 #[cfg(feature = "network_egress")]
 use data_plane::dns::{egressproxy::EgressProxy, enclavedns::EnclaveDnsProxy};
 use data_plane::{
     crypto::api::CryptoApi,
     env::{init_environment_loader, EnvironmentLoader},
-    health::build_health_check_server,
+    health::{build_health_check_server, HealthcheckServer},
     stats::client::StatsClient,
     stats::proxy::StatsProxy,
     time::ClockSync,
     FeatureContext,
 };
-#[cfg(not(feature = "tls_termination"))]
 use shared::server::Listener;
 use shared::{
     bridge::{Bridge, BridgeInterface, Direction},
@@ -86,7 +87,7 @@ fn main() {
     };
 
     runtime.block_on(async move {
-        let Ok((health_check_server, shutdown_notifier)) = build_health_check_server(
+        let Ok((health_check_server, healthcheck_agent_handle)) = build_health_check_server(
             ctx.healthcheck_port.unwrap_or(data_plane_port),
             ctx.healthcheck,
             ctx.healthcheck_use_tls.unwrap_or(false),
@@ -97,20 +98,44 @@ fn main() {
             return;
         };
 
-        // The health check server owns the process's lifetime — it must stay up and reachable
-        // even if the boot sequence below fails, so that the failure is reported as unhealthy
-        // rather than masked by a process exit + supervisor restart.
-        let panic_notifier = shutdown_notifier.clone();
-        let start_handle = tokio::spawn(start(data_plane_port, shutdown_notifier));
-        tokio::spawn(async move {
-            if let Err(e) = start_handle.await {
-                log::error!("Data-plane boot task exited abnormally - {e:?}");
-                let _ = panic_notifier.try_send(Service::EnvironmentLoader);
-            }
-        });
-
-        health_check_server.run().await;
+        launch_service_with_healthcheck(
+            health_check_server,
+            healthcheck_agent_handle.shutdown_notifier(),
+            |shutdown_notifier: Sender<Service>| start(data_plane_port, shutdown_notifier),
+        )
+        .await;
     });
+}
+
+/// Run the Enclave's boot sequence alongside the in-Enclave healthcheck server.
+///
+/// The health check server owns the process's lifetime. It must stay up and reachable even if the
+/// boot sequence fails, so that the failure is reported as unhealthy rather than masked by a
+/// process exit + supervisor restart. `svc` is expected to run for the lifetime of the Enclave, so
+/// any exit of the boot task (clean, panicking, or cancelled) is reported to the healthcheck
+/// agent through the shutdown_notifier.
+async fn launch_service_with_healthcheck<L, Fut, F>(
+    health_check_server: HealthcheckServer<L>,
+    shutdown_notifier: Sender<Service>,
+    svc: F,
+) where
+    L: Listener,
+    Fut: Future<Output = ()> + Send + 'static,
+    F: FnOnce(Sender<Service>) -> Fut,
+{
+    let boot_notifier = shutdown_notifier.clone();
+    let start_handle = tokio::spawn(svc(shutdown_notifier));
+    tokio::spawn(async move {
+        match start_handle.await {
+            Ok(()) => log::error!("Data-plane boot task exited unexpectedly"),
+            Err(e) => log::error!("Data-plane boot task exited abnormally - {e:?}"),
+        }
+        // The boot task exiting at all leaves the Enclave without its critical services, so notify
+        // the agent regardless of how it exited.
+        let _ = boot_notifier.try_send(Service::EnvironmentLoader);
+    });
+
+    health_check_server.run().await;
 }
 
 async fn start(data_plane_port: u16, shutdown_notifier: Sender<Service>) {
@@ -267,5 +292,190 @@ async fn start_data_plane(
                 return;
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::launch_service_with_healthcheck;
+    use data_plane::health::{HealthcheckAgentHandle, HealthcheckServer};
+    use shared::notify_shutdown::{NotifyShutdown, Service};
+    use shared::server::health::{DataPlaneDiagnostic, UserProcessHealth};
+    use shared::server::TcpServer;
+    use std::future::{pending, Future};
+    use tokio::sync::mpsc::Sender;
+    use tokio::sync::oneshot;
+    use tokio::task::JoinHandle;
+    use tokio::time::Duration;
+
+    /// Matches the interval that `HealthcheckAgentHandle::spawn` gives the agent.
+    const AGENT_INTERVAL: Duration = Duration::from_secs(1);
+    /// Number of agent intervals a test will drive the paused clock through before giving up.
+    const MAX_AGENT_TICKS: usize = 5;
+
+    /// Spawn an agent with no healthcheck path so that its verdict is driven purely by the shutdown
+    /// notifications it receives, rather than by probing a user process which isn't running here.
+    fn spawn_healthcheck_agent() -> HealthcheckAgentHandle {
+        HealthcheckAgentHandle::spawn(3000, None, false)
+    }
+
+    /// A running `launch_service_with_healthcheck` backed by a live healthcheck server on loopback.
+    /// `Drop` aborts the launcher, which never returns of its own accord.
+    struct TestLaunch {
+        agent: HealthcheckAgentHandle,
+        handle: JoinHandle<()>,
+    }
+
+    impl Drop for TestLaunch {
+        fn drop(&mut self) {
+            self.handle.abort();
+        }
+    }
+
+    /// Launch `svc` behind the real healthcheck server, bound to an ephemeral loopback port. The
+    /// launcher has to be spawned rather than awaited, because a real healthcheck server loops on
+    /// `accept` forever. This is the property that we are testing.
+    async fn spawn_launch<Fut, F>(svc: F) -> TestLaunch
+    where
+        Fut: Future<Output = ()> + Send + 'static,
+        F: FnOnce(Sender<Service>) -> Fut + Send + 'static,
+    {
+        let agent = spawn_healthcheck_agent();
+        let listener = TcpServer::bind("127.0.0.1:0")
+            .await
+            .expect("Failed to bind healthcheck test listener");
+        let handle = tokio::spawn(launch_service_with_healthcheck(
+            HealthcheckServer::new(agent.clone(), listener),
+            agent.shutdown_notifier(),
+            svc,
+        ));
+        TestLaunch { agent, handle }
+    }
+
+    /// The launcher must outlive the boot sequence. If this assertions fails, it indicates that
+    /// the process exits on a boot sequence failure. This would be masked in production through
+    /// a supervisor restart instead of being reported.
+    fn assert_still_serving_healthchecks(launch: &TestLaunch) {
+        assert!(
+            !launch.handle.is_finished(),
+            "Healthcheck server stopped serving — the failure would be masked by a process exit"
+        );
+    }
+
+    /// Drive the paused clock forward an interval at a time, giving the agent a chance to perform a
+    /// healthcheck and drain any pending shutdown notifications. Returns the health reported by the
+    /// agent as soon as it goes unhealthy, or `None` if it stayed healthy for every tick.
+    async fn health_once_agent_reports_error(
+        agent: &HealthcheckAgentHandle,
+    ) -> Option<UserProcessHealth> {
+        for _ in 0..MAX_AGENT_TICKS {
+            tokio::task::yield_now().await;
+            tokio::time::advance(AGENT_INTERVAL).await;
+            let health = agent.check_user_process_health().await;
+            if health.is_error() {
+                return Some(health);
+            }
+        }
+        None
+    }
+
+    fn assert_error_names_service(health: Option<UserProcessHealth>, service: Service) {
+        let Some(UserProcessHealth::Error(message)) = health else {
+            panic!("Expected the healthcheck agent to report an error, got - {health:?}");
+        };
+        assert!(
+            message.contains(&service.to_string()),
+            "Expected the healthcheck error to name the {service} service, got - {message}"
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn it_remains_healthy_while_the_service_is_online() {
+        // A service which never returns, mirroring an Enclave whose critical services are all up.
+        let launch = spawn_launch(|_| pending()).await;
+
+        for _ in 0..MAX_AGENT_TICKS {
+            tokio::task::yield_now().await;
+            tokio::time::advance(AGENT_INTERVAL).await;
+            let health = launch.agent.check_user_process_health().await;
+            assert!(
+                !health.is_error(),
+                "Healthcheck agent reported an error while the service was online - {health:?}"
+            );
+            assert!(
+                DataPlaneDiagnostic {
+                    user_process: health
+                }
+                .is_healthy(),
+                "Enclave reported itself unhealthy while the service was online"
+            );
+        }
+
+        assert_still_serving_healthchecks(&launch);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn it_reports_unhealthy_when_the_service_exits_and_notifies_shutdown() {
+        // Mirrors how `start` wraps its critical services, so the exiting service is named.
+        let launch = spawn_launch(|shutdown_notifier: Sender<Service>| {
+            async {}.notify_shutdown(Service::DataPlane, shutdown_notifier)
+        })
+        .await;
+
+        let health = health_once_agent_reports_error(&launch.agent).await;
+        assert_error_names_service(health, Service::DataPlane);
+        assert_still_serving_healthchecks(&launch);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn it_reports_unhealthy_when_the_service_exits_without_notifying_shutdown() {
+        // A boot sequence which returns early without reporting the failure itself - the launcher
+        // is responsible for surfacing it, otherwise the Enclave reports healthy while running
+        // none of its critical services.
+        let launch = spawn_launch(|_| async {}).await;
+
+        let health = health_once_agent_reports_error(&launch.agent).await;
+        assert_error_names_service(health, Service::EnvironmentLoader);
+        assert_still_serving_healthchecks(&launch);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn it_reports_unhealthy_when_the_service_panics() {
+        let launch = spawn_launch(|_| async {
+            panic!("Intentional panic in the data plane boot sequence");
+        })
+        .await;
+
+        let health = health_once_agent_reports_error(&launch.agent).await;
+        assert_error_names_service(health, Service::EnvironmentLoader);
+        assert_still_serving_healthchecks(&launch);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn it_keeps_serving_healthchecks_after_the_service_panics() {
+        let (trigger_panic, panic_signal) = oneshot::channel::<()>();
+
+        let launch = spawn_launch(|_| async move {
+            let _ = panic_signal.await;
+            panic!("Intentional panic in the data plane after coming online");
+        })
+        .await;
+
+        // The Enclave is healthy while the service is online...
+        tokio::task::yield_now().await;
+        tokio::time::advance(AGENT_INTERVAL).await;
+        let health = launch.agent.check_user_process_health().await;
+        assert!(
+            !health.is_error(),
+            "Healthcheck agent reported an error before the service panicked - {health:?}"
+        );
+
+        // ...and reports unhealthy once it panics, rather than exiting the process.
+        trigger_panic
+            .send(())
+            .expect("Data plane service dropped its panic signal");
+        let health = health_once_agent_reports_error(&launch.agent).await;
+        assert_error_names_service(health, Service::EnvironmentLoader);
+        assert_still_serving_healthchecks(&launch);
     }
 }
