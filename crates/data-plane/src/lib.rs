@@ -172,10 +172,9 @@ pub struct FeatureContext {
 }
 
 impl FeatureContext {
-    pub fn set() -> Result<(), ContextError> {
-        Self::read_dataplane_context().map(|context| {
-            FEATURE_CONTEXT.get_or_init(|| context);
-        })
+    pub fn initialize() -> Result<FeatureContext, ContextError> {
+        Self::read_dataplane_context()
+            .map(|context| FEATURE_CONTEXT.get_or_init(|| context).clone())
     }
 
     pub fn get() -> Result<FeatureContext, ContextError> {
