@@ -20,6 +20,7 @@ pub mod e3client;
 pub mod env;
 pub mod error;
 pub mod health;
+pub mod launcher;
 pub mod stats;
 pub mod time;
 pub mod utils;

@@ -83,10 +83,12 @@ pub async fn build_attestable_server_config(
         .map_err(|err| TlsError::CertProvisionerError(err.to_string()))?;
 
     #[cfg(feature = "enclave")]
-    let _: Option<CertifiedKey> = enclave_trusted_cert().await;
+    let _: CertifiedKey = enclave_trusted_cert().await?;
 
     // Once intermediate cert and trusted cert retrieved, write cage initialised vars
-    env_loader.finalize_env().unwrap();
+    env_loader
+        .finalize_env()
+        .map_err(|err| TlsError::FinalizeEnvError(err.to_string()))?;
 
     let inter_ca_resolver = AttestableCertResolver::new(inter_ca_cert, inter_ca_key_pair)?;
     let mut tls_config = get_base_config().with_cert_resolver(Arc::new(inter_ca_resolver));
@@ -106,19 +108,43 @@ impl<S: Listener + Send + Sync> WantsCert<S> {
 }
 
 #[cfg(feature = "enclave")]
-async fn enclave_trusted_cert() -> Option<CertifiedKey> {
+async fn enclave_trusted_cert() -> ServerResult<CertifiedKey> {
     match acme::get_trusted_cert().await {
         Ok((pub_key, trusted_cert)) => {
             let _ = TRUSTED_PUB_CERT.set(pub_key);
-            Some(trusted_cert)
+            Ok(trusted_cert)
         }
         Err(e) => {
-            //Shutdown if we can't get a trusted cert as it's required.
-            log::error!(
-                "Failed to get trusted cert for enclave. Shutting down. Cause of error: {e}"
-            );
-            std::process::exit(1);
+            // The trusted cert is required, so surface the failure to the boot task. The
+            // healthcheck server owns the process lifetime and will report the Enclave as
+            // unhealthy — the process must not exit here.
+            log::error!("Failed to get trusted cert for enclave. Cause of error: {e}");
+            Err(TlsError::TrustedCertError(e.to_string()))
         }
+    }
+}
+
+#[cfg(all(test, feature = "enclave"))]
+mod tests {
+    use super::*;
+
+    /// Regression test for the process kill that used to live in `enclave_trusted_cert`.
+    ///
+    /// There is no config server or ACME provider reachable from a unit test, so
+    /// `acme::get_trusted_cert` cannot succeed here. The assertion that matters is that the
+    /// failure comes back as an `Err` — before this changed, this call site ran
+    /// `std::process::exit(1)` and would have taken the test runner down with it.
+    #[tokio::test]
+    async fn failing_trusted_cert_fetch_returns_an_error_instead_of_exiting() {
+        let result =
+            tokio::time::timeout(std::time::Duration::from_secs(30), enclave_trusted_cert())
+                .await
+                .expect("Timed out waiting for the trusted cert fetch to fail");
+
+        assert!(
+            result.is_err(),
+            "Expected the trusted cert fetch to fail in a unit test environment"
+        );
     }
 }
 
