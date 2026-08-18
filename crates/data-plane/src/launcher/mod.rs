@@ -13,7 +13,10 @@
 //! prove that the feature-gated chain shape typechecks in every CI feature combination.
 
 pub mod chain;
+pub mod diagnostic;
 pub mod error;
+pub mod journal;
+pub mod log_observer;
 pub mod observer;
 pub mod stage;
 
@@ -21,6 +24,9 @@ pub mod stage;
 pub mod stub;
 
 pub use chain::BootChain;
+pub use diagnostic::{Diagnostic, Severity};
 pub use error::BootError;
+pub use journal::BootJournal;
+pub use log_observer::LogObserver;
 pub use observer::{BootContext, BootObserver, Observers};
 pub use stage::Stage;
