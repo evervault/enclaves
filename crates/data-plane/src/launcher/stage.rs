@@ -13,7 +13,7 @@ use std::future::Future;
 /// `dyn`.
 ///
 /// `run` returns `impl Future<Output = _> + Send` rather than a boxed future. The `+ Send` is not
-/// decoration: the chain is driven from `start()`, which is `tokio::spawn`ed under
+/// decoration: the chain is driven from `run()`, which is `tokio::spawn`ed under
 /// `Fut: Future + Send + 'static`. Building the runtime with `new_current_thread` does **not**
 /// relax that bound — only a `LocalSet` would, and there is none in this repo. `async_trait` would
 /// erase the bound behind a `Pin<Box<dyn Future>>`, so it is not used here.

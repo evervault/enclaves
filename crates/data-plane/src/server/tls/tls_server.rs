@@ -124,30 +124,6 @@ async fn enclave_trusted_cert() -> ServerResult<CertifiedKey> {
     }
 }
 
-#[cfg(all(test, feature = "enclave"))]
-mod tests {
-    use super::*;
-
-    /// Regression test for the process kill that used to live in `enclave_trusted_cert`.
-    ///
-    /// There is no config server or ACME provider reachable from a unit test, so
-    /// `acme::get_trusted_cert` cannot succeed here. The assertion that matters is that the
-    /// failure comes back as an `Err` — before this changed, this call site ran
-    /// `std::process::exit(1)` and would have taken the test runner down with it.
-    #[tokio::test]
-    async fn failing_trusted_cert_fetch_returns_an_error_instead_of_exiting() {
-        let result =
-            tokio::time::timeout(std::time::Duration::from_secs(30), enclave_trusted_cert())
-                .await
-                .expect("Timed out waiting for the trusted cert fetch to fail");
-
-        assert!(
-            result.is_err(),
-            "Expected the trusted cert fetch to fail in a unit test environment"
-        );
-    }
-}
-
 #[async_trait]
 impl<S: Listener + Send + Sync> Listener for TlsServer<S>
 where

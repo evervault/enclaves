@@ -1,9 +1,9 @@
 //! Scaffolding for the Enclave's boot sequence.
 //!
 //! Boot runs **once**, left-to-right, with a different output type and a different failure mode at
-//! each step. That is a forward-composed chain, not a stack of middleware — see `launcher.md` for
-//! the argument against encoding it with `tower::Service`/`Layer`, which nests inside-out and so
-//! forces every step to agree on one response type and one error type.
+//! each step. This is distinct from the tower Layer structure, supporting our boot-time logic in
+//! acting as a forward-composed chain of critical operations. This saves on the additional reverse
+//! pass from the Layer abstraction.
 //!
 //! The in-repo idiom this follows is [`shared::notify_shutdown`]: a wrapper future that observes
 //! another future's completion. [`BootChain`] applies the same trick to a *sequence*, wiring the
@@ -16,6 +16,8 @@ pub mod chain;
 pub mod error;
 pub mod observer;
 pub mod stage;
+
+#[cfg(all(not(release), feature = "compiler_assertions"))]
 pub mod stub;
 
 pub use chain::BootChain;

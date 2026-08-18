@@ -282,7 +282,7 @@ mod test {
         let (_recorder, ctx, _receiver) = context();
         let ran = Arc::new(AtomicBool::new(false));
 
-        // `start()` is `tokio::spawn`ed under `Fut: Future + Send + 'static`, so the whole
+        // `run()` is `tokio::spawn`ed under `Fut: Future + Send + 'static`, so the whole
         // composition has to survive that bound.
         requires_send(
             BootChain::seed(ctx, 1u8)
