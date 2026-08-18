@@ -20,7 +20,7 @@
 //! whatever the rebinding landed on. See [`boot`] for the resolution.
 
 use crate::env::EnvError;
-use crate::launcher::{BootChain, BootContext, BootError, Stage};
+use crate::launcher::{BootChain, BootContext, BootError, Diagnostic, Stage};
 use crate::ContextError;
 use shared::notify_shutdown::Service;
 use std::convert::Infallible;
@@ -105,6 +105,8 @@ impl Stage for StartStatsClient {
     }
 }
 
+/// The one stage here that records diagnostics, so that the emit path is type-checked wherever the
+/// chain itself is — including the feature combinations that build no test code.
 pub struct LoadEnvironment;
 
 impl Stage for LoadEnvironment {
@@ -115,7 +117,15 @@ impl Stage for LoadEnvironment {
     const LABEL: &'static str = "load-environment";
     const BLAME: Service = Service::EnvironmentLoader;
 
-    async fn run(self, _ctx: &BootContext, input: Self::In) -> Result<Self::Out, Self::Error> {
+    async fn run(self, ctx: &BootContext, input: Self::In) -> Result<Self::Out, Self::Error> {
+        ctx.record(Diagnostic::info(
+            "stub.environment-not-loaded",
+            "the stub environment loader read no variables",
+        ));
+        ctx.record(Diagnostic::warn(
+            "stub.environment-not-validated",
+            "the stub environment loader validated no variables",
+        ));
         Ok(EnvironmentLoaded {
             target_port: input.target_port,
         })

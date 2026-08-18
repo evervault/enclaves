@@ -1,11 +1,14 @@
 use crate::error::ServerError;
 use axum::http::HeaderValue;
-use hyper::{Body, Request, Response};
+use hyper::{header, Body, Request, Response};
 use serde::{Deserialize, Serialize};
 use shared::notify_shutdown::Service;
 use shared::server::{
     error::ServerResult,
-    health::{ControlPlaneState, DataPlaneState, HealthCheck, HealthCheckLog, HealthCheckVersion},
+    health::{
+        ControlPlaneState, DataPlaneHealth, DataPlaneState, HealthCheck, HealthCheckFormat,
+        HealthCheckVersion,
+    },
     tcp::TcpServer,
     Listener,
 };
@@ -39,9 +42,9 @@ pub async fn run_ecs_health_check_service(
     if is_draining {
         let combined_log = CombinedHealthCheckLog {
             control_plane: ControlPlaneState::Draining,
-            data_plane: DataPlaneState::Unknown(
+            data_plane: DataPlaneHealth::new(DataPlaneState::Unknown(
                 "Enclave is draining, data-plane health will not be checked".into(),
-            )
+            ))
             .into(),
         };
 
@@ -53,8 +56,14 @@ pub async fn run_ecs_health_check_service(
             .body(Body::from(combined_log_json))?);
     };
 
+    // The string here is this control plane talking about an Enclave it could not reach, rather
+    // than anything the Enclave said. It reports in the newest format like every other state it
+    // synthesises; a data plane that never answered simply has no boot report to attach.
     let data_plane = health_check_data_plane().await.unwrap_or_else(|e| {
-        DataPlaneState::Error(format!("Failed to contact data-plane for healthcheck: {e}")).into()
+        DataPlaneHealth::new(DataPlaneState::Error(format!(
+            "Failed to contact data-plane for healthcheck: {e}"
+        )))
+        .into()
     });
 
     let status_to_return =
@@ -83,6 +92,11 @@ async fn health_check_data_plane() -> Result<HealthCheckVersion, ServerError> {
     let request = Request::builder()
         .method("GET")
         .header("User-Agent", "CageHealthChecker/0.0")
+        // Naming every format this control plane understands. The Enclave is almost always the
+        // older side — it can be pinned by the user, while the control plane is bumped at each deployment — so the
+        // common case is an Enclave that ignores this header and answers in whatever it has always
+        // served. To account for this `parse` is robust to arbitrary versions.
+        .header(header::ACCEPT, HealthCheckFormat::accept_header())
         .body(Body::empty())
         .expect("Cannot fail");
 
@@ -97,14 +111,7 @@ async fn health_check_data_plane() -> Result<HealthCheckVersion, ServerError> {
 
     let bytes = &hyper::body::to_bytes(response).await?;
 
-    let hc = match content_type {
-        Some("application/json;version=1") => {
-            HealthCheckVersion::V1(serde_json::from_slice::<DataPlaneState>(bytes)?)
-        }
-        _ => HealthCheckVersion::V0(serde_json::from_slice::<HealthCheckLog>(bytes)?),
-    };
-
-    Ok(hc)
+    HealthCheckVersion::parse(content_type, bytes).map_err(ServerError::from)
 }
 
 pub struct HealthCheckServer {
@@ -204,6 +211,16 @@ mod health_check_tests {
         serde_json::from_slice(&response_body).unwrap()
     }
 
+    /// States this control plane synthesises itself are reported in the newest format, so the
+    /// `dataPlane` field is v2-shaped whenever this control plane is the one answering. Reading them
+    /// back through the untagged enum is also what proves a v2 body is not misread as an older one.
+    fn expect_v2(data_plane: HealthCheckVersion) -> DataPlaneState {
+        match data_plane {
+            HealthCheckVersion::V2(health) => health.state,
+            other => panic!("Expected a v2 data plane health check, got - {other:?}"),
+        }
+    }
+
     #[tokio::test]
     async fn test_enclave_health_check_service() {
         // the data-plane status should error, as its not running
@@ -214,12 +231,10 @@ mod health_check_tests {
         println!("deep response: {response:?}");
         let health_check_log = response_to_health_check_log(response).await;
 
-        let dp_state = match health_check_log.data_plane {
-            HealthCheckVersion::V0(_) => panic!("Expected V1 Version"),
-            HealthCheckVersion::V1(state) => state,
+        let DataPlaneState::Error(message) = expect_v2(health_check_log.data_plane) else {
+            panic!("Expected the control plane to report the data plane as errored");
         };
-
-        assert!(matches!(dp_state, DataPlaneState::Error(_)));
+        assert!(message.contains("Failed to contact data-plane"));
     }
 
     #[tokio::test]
@@ -233,12 +248,10 @@ mod health_check_tests {
         println!("deep response: {response:?}");
         let health_check_log = response_to_health_check_log(response).await;
 
-        let dp_state = match health_check_log.data_plane {
-            HealthCheckVersion::V0(_) => panic!("Expected V1 Version"),
-            HealthCheckVersion::V1(state) => state,
-        };
-
-        assert!(matches!(dp_state, DataPlaneState::Unknown(_)));
+        assert!(matches!(
+            expect_v2(health_check_log.data_plane),
+            DataPlaneState::Unknown(_)
+        ));
         assert!(matches!(
             health_check_log.control_plane,
             ControlPlaneState::Draining

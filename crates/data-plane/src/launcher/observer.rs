@@ -1,3 +1,4 @@
+use crate::launcher::diagnostic::Diagnostic;
 use shared::notify_shutdown::Service;
 use std::sync::Arc;
 use std::time::Duration;
@@ -24,6 +25,18 @@ pub trait BootObserver: Send + Sync + 'static {
         blame: Service,
         error: &(dyn std::error::Error + 'static),
     );
+
+    /// Called each time a stage records a diagnostic, in the order the stage recorded them and
+    /// interleaved with the hooks above.
+    ///
+    /// `stage` is stamped by the chain, not passed by the stage — see
+    /// [`BootContext::record`]. The diagnostic is borrowed rather than moved because every
+    /// observer in the fan-out has to see it, mirroring the `&dyn Error` in
+    /// [`on_stage_failed`](Self::on_stage_failed).
+    ///
+    /// Defaulted to a no-op so that an observer which only cares about outcomes does not have to
+    /// opt out.
+    fn on_diagnostic(&self, _stage: &'static str, _diagnostic: &Diagnostic) {}
 }
 
 /// Fan-out to several observers, in registration order.
@@ -66,7 +79,20 @@ impl BootObserver for Observers {
             observer.on_stage_failed(stage, blame.clone(), error);
         }
     }
+
+    fn on_diagnostic(&self, stage: &'static str, diagnostic: &Diagnostic) {
+        for observer in &self.0 {
+            observer.on_diagnostic(stage, diagnostic);
+        }
+    }
 }
+
+/// Who a diagnostic is attributed to when it is recorded outside any stage.
+///
+/// [`BootContext::new`] seeds the field with this so that anything recorded before the chain starts
+/// — or from a clone outliving the stage that made it — is attributed honestly rather than to
+/// whichever stage happened to run last.
+pub const PRE_CHAIN_STAGE: &str = "pre-chain";
 
 /// Everything a stage needs that is not its own input.
 ///
@@ -77,6 +103,7 @@ impl BootObserver for Observers {
 pub struct BootContext {
     observer: Arc<dyn BootObserver>,
     shutdown_notifier: Sender<Service>,
+    stage: &'static str,
 }
 
 impl BootContext {
@@ -84,7 +111,27 @@ impl BootContext {
         Self {
             observer,
             shutdown_notifier,
+            stage: PRE_CHAIN_STAGE,
         }
+    }
+
+    /// Attribute everything recorded through the returned context to `stage`.
+    ///
+    /// Called by [`BootChain::then`](crate::launcher::BootChain::then) on the clone it hands to a
+    /// stage, which is why a stage cannot name itself and therefore cannot misattribute its own
+    /// diagnostics.
+    pub fn for_stage(mut self, stage: &'static str) -> Self {
+        self.stage = stage;
+        self
+    }
+
+    /// Record a diagnostic against this context's stage.
+    ///
+    /// This is the whole of the emit side: a stage builds a [`Diagnostic`] and hands it over. Note
+    /// that a context cloned out of a stage and kept alive by a spawned daemon keeps that stage's
+    /// attribution for the lifetime of the process, because the clone is what carries the label.
+    pub fn record(&self, diagnostic: Diagnostic) {
+        self.observer.on_diagnostic(self.stage, &diagnostic);
     }
 
     /// The channel the healthcheck agent watches for critical-service exits.

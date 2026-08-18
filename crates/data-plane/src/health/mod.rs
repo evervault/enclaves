@@ -3,14 +3,17 @@ mod agent;
 use agent::UserProcessHealthcheckSender;
 
 use hyper::header;
-use hyper::{service::service_fn, Body, Response};
+use hyper::{service::service_fn, Body, Request, Response};
 use shared::bridge::{Bridge, BridgeInterface, BridgeServer, Direction};
 use shared::notify_shutdown::Service;
-use shared::server::health::{DataPlaneDiagnostic, DataPlaneState, UserProcessHealth};
+use shared::server::health::{
+    DataPlaneDiagnostic, DataPlaneHealth, DataPlaneState, HealthCheckFormat, UserProcessHealth,
+};
 use shared::{server::Listener, ENCLAVE_HEALTH_CHECK_PORT};
 use tokio::sync::mpsc::Sender;
 
 use crate::health::agent::{HealthcheckAgent, HealthcheckStatusRequest};
+use crate::launcher::BootJournal;
 
 /// Handle to a running healthcheck agent. Pairs the channel used to read the user process' latest
 /// health with the channel that critical in-Enclave services use to report an unexpected exit, so
@@ -71,17 +74,25 @@ impl HealthcheckAgentHandle {
 
 /// Wire up the Enclave's healthcheck topology - an agent polling the user process, and a server
 /// exposing its verdict over the bridge back to the host.
+///
+/// `boot_journal` is the read handle the server consults on each request. Whoever drives the boot
+/// sequence registers a clone of the same journal as a boot observer, so a warning raised by a
+/// stage reaches the next healthcheck body with no further plumbing.
 pub async fn build_health_check_server(
     customer_process_port: u16,
     healthcheck: Option<String>,
     use_tls: bool,
+    boot_journal: BootJournal,
 ) -> shared::server::error::ServerResult<(HealthcheckServer<BridgeServer>, HealthcheckAgentHandle)>
 {
     let agent = HealthcheckAgentHandle::spawn(customer_process_port, healthcheck, use_tls);
     let listener =
         Bridge::get_listener(ENCLAVE_HEALTH_CHECK_PORT, Direction::EnclaveToHost).await?;
     log::info!("Data plane health check server bound to port {ENCLAVE_HEALTH_CHECK_PORT}");
-    Ok((HealthcheckServer::new(agent.clone(), listener), agent))
+    Ok((
+        HealthcheckServer::new(agent.clone(), listener, boot_journal),
+        agent,
+    ))
 }
 
 /// Serves the Enclave's healthcheck over any accepted transport. The listener is injected so that
@@ -89,11 +100,16 @@ pub async fn build_health_check_server(
 pub struct HealthcheckServer<L: Listener> {
     agent: HealthcheckAgentHandle,
     listener: L,
+    boot_journal: BootJournal,
 }
 
 impl<L: Listener> HealthcheckServer<L> {
-    pub fn new(agent: HealthcheckAgentHandle, listener: L) -> Self {
-        Self { agent, listener }
+    pub fn new(agent: HealthcheckAgentHandle, listener: L, boot_journal: BootJournal) -> Self {
+        Self {
+            agent,
+            listener,
+            boot_journal,
+        }
     }
 
     pub async fn run(mut self) {
@@ -108,19 +124,44 @@ impl<L: Listener> HealthcheckServer<L> {
             };
 
             let agent = self.agent.clone();
-            let service = service_fn(move |_| {
+            let boot_journal = self.boot_journal.clone();
+            let service = service_fn(move |request: Request<Body>| {
                 let agent = agent.clone();
+                let boot_journal = boot_journal.clone();
+                // Read before the request is dropped, and answered in the caller's format rather
+                // than the newest one this data plane knows. The caller names what it can read;
+                // a body it did not ask for it cannot parse, and an unparseable body reads to the
+                // host as an Enclave that cannot be reached at all.
+                let format = HealthCheckFormat::from_accept(
+                    request
+                        .headers()
+                        .get(header::ACCEPT)
+                        .and_then(|accept| accept.to_str().ok()),
+                );
+
                 async move {
                     let user_process_health = agent.check_user_process_health().await;
 
-                    let result = DataPlaneState::Initialized(DataPlaneDiagnostic {
-                        user_process: user_process_health,
-                    });
+                    // Built once, in the format that can hold everything, then downgraded if the
+                    // caller reads an older one. The boot report is context attached to the
+                    // verdict, never part of it: the status code below stays 200 whatever boot
+                    // recorded.
+                    let health = DataPlaneHealth::new(DataPlaneState::Initialized(
+                        DataPlaneDiagnostic::new(user_process_health),
+                    ))
+                    .with_boot(boot_journal.report());
+
+                    let body = match format {
+                        HealthCheckFormat::V1 => {
+                            serde_json::to_string(&DataPlaneState::from(health))
+                        }
+                        HealthCheckFormat::V2 => serde_json::to_string(&health),
+                    };
 
                     Response::builder()
                         .status(200)
-                        .header(header::CONTENT_TYPE, "application/json;version=1")
-                        .body(Body::from(serde_json::to_string(&result).unwrap()))
+                        .header(header::CONTENT_TYPE, format.content_type())
+                        .body(Body::from(body.unwrap()))
                 }
             });
 
