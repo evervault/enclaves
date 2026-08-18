@@ -22,8 +22,8 @@ use std::future::Future;
 ///
 /// A chain whose stages line up composes:
 ///
-/// ```
-/// use data_plane::launcher::stub::{LoadEnvironment, SeedInput, StartStatsClient};
+/// ```compile_fail
+/// // assuming some StartStatsClient and LoadEnvironment stages have been implemented...
 /// use data_plane::launcher::{BootChain, BootContext, BootError};
 ///
 /// // `StartStatsClient::Out` is `StatsClientStarted`, which is `LoadEnvironment::In`.

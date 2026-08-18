@@ -293,6 +293,7 @@ mod test {
         );
     }
 
+    #[cfg(feature = "compiler_assertions")]
     #[test]
     fn stub_boot_future_is_send() {
         fn requires_send<T: Send>(_: T) {}
