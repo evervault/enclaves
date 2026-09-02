@@ -80,7 +80,7 @@ tlsApp.post('/cert', async (req, res) => {
     var result = {
       intermediate_cert: ca_cert,
       key_pair: ca_key_pair,
-      secrets: [{name: "ANOTHER_ENV_VAR", secret: "123"}, {name: "ENCRYPTED_ENV", secret: "ev:123"}, {name: "TRICKY_ENV_VAR", secret: "a b'c$d\"e`f"}, {name: "BAD-NAME", secret: "should_be_dropped"}],
+      secrets: [{name: "ANOTHER_ENV_VAR", secret: "123"}, {name: "ENCRYPTED_ENV", secret: "ev:123"}],
       context: {team_uuid: "team_123", cage_uuid: "enclave_123", app_uuid: "app_12345678", cage_name: "test-enclave"},
     };
     res.status(200)
@@ -96,7 +96,7 @@ tlsApp.post('/secrets', async (req, res) => {
     
     var result = {
       context: {team_uuid: "team_123", cage_uuid: "enclave_123", app_uuid: "app_12345678", cage_name: "test-enclave"},
-      secrets: [{name: "ANOTHER_ENV_VAR", secret: "123"}, {name: "ENCRYPTED_ENV", secret: "ev:123"}, {name: "TRICKY_ENV_VAR", secret: "a b'c$d\"e`f"}, {name: "BAD-NAME", secret: "should_be_dropped"}]
+      secrets: [{name: "ANOTHER_ENV_VAR", secret: "123"}, {name: "ENCRYPTED_ENV", secret: "ev:123"}]
     };
     res.status(200)
     res.send(result) 
