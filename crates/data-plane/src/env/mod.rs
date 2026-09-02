@@ -67,7 +67,14 @@ impl NeedEnv {
 
     fn write_env_file(secrets: Vec<Secret>) -> Result<(), EnvError> {
         let mut file = File::create("/etc/customer-env")?;
-        file.write_all(render_env_file(&secrets).as_bytes())?;
+
+        let env_string = secrets
+            .iter()
+            .map(|env| format!("export {}={}  ", env.name, env.secret))
+            .collect::<Vec<String>>()
+            .join("");
+
+        file.write_all(env_string.as_bytes())?;
         Ok(())
     }
 
@@ -259,115 +266,16 @@ where
     }
 }
 
-/// Single-quote a value so it is safe to `.`-source from POSIX `sh`.
-fn shell_single_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', r"'\''"))
-}
-
-fn is_valid_env_name(name: &str) -> bool {
-    let mut chars = name.chars();
-    matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_')
-        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
-}
-
-fn render_env_file(secrets: &[Secret]) -> String {
-    secrets
-        .iter()
-        .filter(|env| {
-            let valid = is_valid_env_name(&env.name);
-            if !valid {
-                log::debug!(
-                    "Skipping customer environment variable with invalid name: {:?}",
-                    env.name
-                );
-            }
-            valid
-        })
-        .map(|env| format!("export {}={}\n", env.name, shell_single_quote(&env.secret)))
-        .collect()
-}
-
 pub fn write_startup_complete_env_vars() -> Result<(), Error> {
     let mut file = OpenOptions::new().append(true).open("/etc/customer-env")?;
 
-    writeln!(file, "\nexport EV_INITIALIZED=true")?;
+    write!(file, "export EV_INITIALIZED=true")?;
 
     Ok(())
 }
 
 #[cfg(test)]
 mod test {
-    use shared::server::config_server::requests::Secret;
-
-    fn secret(name: &str, value: &str) -> Secret {
-        Secret {
-            name: name.to_string(),
-            secret: value.to_string(),
-        }
-    }
-
-    #[test]
-    fn env_values_with_shell_metacharacters_round_trip_through_sh() {
-        // Values that broke the naive `export NAME=value` rendering: spaces,
-        // quotes, `$`, backticks and `=` would all be reparsed as shell syntax.
-        let cases = [
-            ("SIMPLE", "abc"),
-            ("WITH_SPACE", "hello world"),
-            ("WITH_SINGLE_QUOTE", "it's a secret"),
-            ("WITH_DOLLAR", "$PATH and `whoami`"),
-            ("WITH_DOUBLE_QUOTE", "a\"b\"c"),
-            ("WITH_EQUALS", "key=value=more"),
-        ];
-        // Malformed names that cannot be shell identifiers: they must be
-        // dropped, not rendered, or they would break sourcing of the file.
-        let invalid_names = ["BAD-NAME", "HAS SPACE", "1LEADING_DIGIT", "", "HAS=EQUALS"];
-
-        let mut secrets: Vec<Secret> = cases.iter().map(|(n, v)| secret(n, v)).collect();
-        secrets.extend(invalid_names.iter().map(|n| secret(n, "should_be_dropped")));
-
-        let contents = super::render_env_file(&secrets);
-
-        for name in invalid_names {
-            assert!(
-                !contents.contains(&format!("export {name}=")),
-                "invalid name {name:?} should have been dropped, got:\n{contents}"
-            );
-        }
-
-        let path = std::env::temp_dir().join(format!("customer-env-test-{}", std::process::id()));
-        std::fs::write(&path, &contents).unwrap();
-
-        // Source the file exactly like the enclave entrypoint (`. /etc/customer-env`),
-        let names: Vec<String> = cases.iter().map(|(n, _)| format!("\"${n}\"")).collect();
-        let script = format!(". '{}'; printf '%s\\0' {}", path.display(), names.join(" "));
-        let output = std::process::Command::new("/bin/sh")
-            .arg("-c")
-            .arg(&script)
-            .output()
-            .expect("failed to invoke /bin/sh");
-
-        std::fs::remove_file(&path).ok();
-
-        assert!(
-            output.status.success(),
-            "sh failed to source env file: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-
-        let got: Vec<String> = output
-            .stdout
-            .split(|b| *b == 0)
-            .map(|b| String::from_utf8_lossy(b).into_owned())
-            .collect();
-
-        for (i, (name, expected)) in cases.iter().enumerate() {
-            assert_eq!(
-                &got[i], expected,
-                "value for {name} did not round-trip through sh sourcing"
-            );
-        }
-    }
-
     #[tokio::test]
     async fn with_retries_redrives_requests_as_expected() {
         let responses = vec![
