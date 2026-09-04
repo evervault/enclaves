@@ -15,6 +15,10 @@ pub enum Service {
     AcmeProxy,
     ConfigServer,
     EnvironmentLoader,
+    StatsClient,
+    TlsCerts,
+    TrustedCert,
+    EnvFinalize,
 }
 
 impl std::fmt::Display for Service {
@@ -30,6 +34,10 @@ impl std::fmt::Display for Service {
             Self::AcmeProxy => "acme-proxy",
             Self::ConfigServer => "config-server",
             Self::EnvironmentLoader => "environment-loader",
+            Self::StatsClient => "stats-client",
+            Self::TlsCerts => "tls-certs",
+            Self::TrustedCert => "trusted-cert",
+            Self::EnvFinalize => "env-finalize",
         };
         f.write_str(service_label)
     }
@@ -87,7 +95,76 @@ impl<F: Future> Future for NotifyShutdownFuture<F> {
 #[cfg(test)]
 mod test {
     use super::{NotifyShutdown, Service};
+    use std::collections::BTreeSet;
     use tokio::sync::mpsc::channel;
+
+    /// Every variant of [`Service`], in declaration order.
+    ///
+    /// Hand-maintained: plain Rust cannot derive a value list from an enum. The compile-time gate
+    /// is [`expected_label`] below, whose wildcard-free `match` forces every new variant to be
+    /// named and given a pinned string before the crate will build.
+    const ALL_SERVICES: &[Service] = &[
+        Service::DataPlane,
+        Service::CryptoApi,
+        Service::ClockSync,
+        Service::DnsProxy,
+        Service::EgressProxy,
+        Service::E3Proxy,
+        Service::ProvisionerProxy,
+        Service::AcmeProxy,
+        Service::ConfigServer,
+        Service::EnvironmentLoader,
+        Service::StatsClient,
+        Service::TlsCerts,
+        Service::TrustedCert,
+        Service::EnvFinalize,
+    ];
+
+    /// The label each [`Service`] variant is contracted to render.
+    ///
+    /// This `match` is exhaustive with no wildcard arm, so a variant added to [`Service`] without
+    /// a label here fails to *compile* rather than silently rendering an unchecked string. The
+    /// [`std::fmt::Display`] impl is wildcard-free for the same reason; this is a second,
+    /// independent gate on the same property, and additionally pins the exact strings.
+    fn expected_label(service: &Service) -> &'static str {
+        match service {
+            Service::DataPlane => "data-plane",
+            Service::CryptoApi => "crypto-api",
+            Service::ClockSync => "clock-sync",
+            Service::DnsProxy => "dns-proxy",
+            Service::EgressProxy => "egress-proxy",
+            Service::E3Proxy => "e3-proxy",
+            Service::ProvisionerProxy => "provisioner-proxy",
+            Service::AcmeProxy => "acme-proxy",
+            Service::ConfigServer => "config-server",
+            Service::EnvironmentLoader => "environment-loader",
+            Service::StatsClient => "stats-client",
+            Service::TlsCerts => "tls-certs",
+            Service::TrustedCert => "trusted-cert",
+            Service::EnvFinalize => "env-finalize",
+        }
+    }
+
+    #[test]
+    fn test_every_service_variant_has_a_distinct_non_empty_display_label() {
+        let mut seen_labels = BTreeSet::new();
+        for service in ALL_SERVICES {
+            let label = service.to_string();
+            assert!(
+                !label.is_empty(),
+                "{service:?} renders an empty Display label"
+            );
+            assert_eq!(
+                label,
+                expected_label(service),
+                "{service:?} does not render its contracted Display label"
+            );
+            assert!(
+                seen_labels.insert(label.clone()),
+                "Display label {label:?} is used by more than one Service variant"
+            );
+        }
+    }
 
     #[tokio::test]
     async fn test_notify_shutdown_service_exits_tasks_as_expected() {
