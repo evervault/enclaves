@@ -20,6 +20,7 @@ pub mod e3client;
 pub mod env;
 pub mod error;
 pub mod health;
+pub mod launcher;
 pub mod stats;
 pub mod time;
 pub mod utils;
@@ -172,10 +173,9 @@ pub struct FeatureContext {
 }
 
 impl FeatureContext {
-    pub fn set() -> Result<(), ContextError> {
-        Self::read_dataplane_context().map(|context| {
-            FEATURE_CONTEXT.get_or_init(|| context);
-        })
+    pub fn initialize() -> Result<FeatureContext, ContextError> {
+        Self::read_dataplane_context()
+            .map(|context| FEATURE_CONTEXT.get_or_init(|| context).clone())
     }
 
     pub fn get() -> Result<FeatureContext, ContextError> {
