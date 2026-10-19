@@ -1,3 +1,6 @@
+// async-trait emits a bare #[must_use] on futures that are already must_use.
+#![allow(clippy::double_must_use)]
+
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -97,14 +100,14 @@ impl EnclaveContext {
 
     #[cfg(staging)]
     pub fn get_cert_name(&self) -> String {
-        format!("{}.{}.cages.evervault.dev", &self.name, &self.app_uuid)
+        format!("{}.{}.cages.evervault.dev", self.name, self.app_uuid)
     }
 
     #[cfg(staging)]
     pub fn get_hyphenated_cert_name(&self) -> String {
         let hyphenated_app_uuid = self.app_uuid.clone().replace('_', "-");
         log::debug!("hyphenated_app_uuid: {:?}", hyphenated_app_uuid);
-        format!("{}.{}.cages.evervault.dev", &self.name, hyphenated_app_uuid)
+        format!("{}.{}.cages.evervault.dev", self.name, hyphenated_app_uuid)
     }
 
     #[cfg(not(staging))]

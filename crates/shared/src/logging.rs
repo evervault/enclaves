@@ -55,6 +55,14 @@ pub struct TrxContext {
     #[builder(default)]
     elapsed: Option<f64>,
     request_type: String,
+    /// Service that produced the log. Absent on logs written before this field existed.
+    #[serde(default)]
+    #[builder(default)]
+    service_name: Option<String>,
+    /// Release tag of the runtime (see `RUNTIME_VERSION`). Absent on logs written before this field existed.
+    #[serde(default)]
+    #[builder(default)]
+    service_version: Option<String>,
 }
 
 impl TrxContext {
@@ -147,6 +155,8 @@ impl TrxContextBuilder {
             elapsed: None,
             remote_ip: None,
             request_type: Some(request_type.into()),
+            service_name: Some(Some("enclave".to_string())),
+            service_version: Some(crate::RUNTIME_VERSION.map(str::to_string)),
         }
     }
 
@@ -538,6 +548,8 @@ mod test {
             response_content_type: None,
             elapsed: None,
             request_type: super::RequestType::Websocket.into(),
+            service_name: Some("enclave".to_string()),
+            service_version: crate::RUNTIME_VERSION.map(str::to_string),
         };
         assert_eq!(log, expected_log);
     }
