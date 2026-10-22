@@ -1,3 +1,6 @@
+// async-trait emits a bare #[must_use] on futures that are already must_use.
+#![allow(clippy::double_must_use)]
+
 #[cfg(feature = "s3")]
 pub mod s3;
 

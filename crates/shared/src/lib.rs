@@ -1,3 +1,6 @@
+// async-trait emits a bare #[must_use] on futures that are already must_use.
+#![allow(clippy::double_must_use)]
+
 pub const ENCLAVE_CERT_PORT: u16 = 7775;
 pub const ENCLAVE_CONFIG_PORT: u16 = 7776;
 pub const ENCLAVE_CONNECT_PORT: u16 = 7777;
@@ -21,6 +24,10 @@ pub mod rpc;
 pub mod server;
 pub mod stats;
 pub mod utils;
+
+/// Release tag of the runtime, injected at compile time by the deploy workflows from `GITHUB_REF`.
+/// `None` for local builds, where no release tag exists.
+pub const RUNTIME_VERSION: Option<&str> = option_env!("EV_RUNTIME_VERSION");
 
 lazy_static::lazy_static! {
   pub static ref CLIENT_VERSION: String = option_env!("CARGO_PKG_VERSION").map(|version| version.to_string()).unwrap_or_else(|| "unknown".to_string());

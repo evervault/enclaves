@@ -27,6 +27,9 @@ jobs:
   build-data-plane-binary:
     needs: get-version
     runs-on: ubuntu-latest
+    env:
+      # Read at compile time by `shared::RUNTIME_VERSION` for the transaction logs.
+      EV_RUNTIME_VERSION: ${{ needs.get-version.outputs.version }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
