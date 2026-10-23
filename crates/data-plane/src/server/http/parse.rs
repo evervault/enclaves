@@ -2,7 +2,7 @@
 //! The data plane needs to support both HTTP and non-HTTP traffic.
 
 use httparse::Status;
-use hyper::Body;
+use hyper::{Body, Uri};
 use shared::server::proxy_protocol::ProxiedConnection;
 use std::str::FromStr;
 use thiserror::Error;
@@ -65,12 +65,8 @@ pub async fn try_parse_http_request_from_stream<T: AsyncRead + ProxiedConnection
                 let request_header_map =
                     build_header_map_for_request(req.headers, remote_ip.as_deref())?;
                 let content_length = get_content_length_from_headers(&request_header_map);
-                let req_uri = format!(
-                    "http://127.0.0.1:{}{}",
-                    target_port,
-                    req.path.unwrap_or("/")
-                );
 
+                let req_uri = build_uri_for_request(&req.path, target_port)?;
                 let complete_request = hyper::Request::builder()
                     .uri(req_uri)
                     .method(req.method.unwrap_or("GET"));
@@ -100,6 +96,14 @@ pub async fn try_parse_http_request_from_stream<T: AsyncRead + ProxiedConnection
             }
         }
     }
+}
+
+fn build_uri_for_request(path: &Option<&str>, target_port: u16) -> Result<Uri, hyper::http::Error> {
+    Uri::builder()
+        .authority(format!("127.0.0.1:{target_port}"))
+        .scheme("http")
+        .path_and_query(path.unwrap_or("/"))
+        .build()
 }
 
 fn build_header_map_for_request(
