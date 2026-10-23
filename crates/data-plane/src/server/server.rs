@@ -1,14 +1,14 @@
 use super::config::AcceptorConfig;
 use super::error::{LogError, TlsError};
 use super::handshake::{Handshaker, TlsHandshaker};
-use super::http::parse::{try_parse_http_request_from_stream, Incoming};
+use super::http::parse::{try_parse_http_request_from_stream, Incoming, ParseError};
 use super::http::{request_to_bytes, response_to_bytes};
 use super::metrics::AcceptMetrics;
 use super::tls::build_attestable_server_config;
 
 use crate::e3client::{E3Api, E3Client};
 use crate::env::{EnvironmentLoader, NeedCert};
-use crate::server::http::{build_internal_error_response, parse};
+use crate::server::http::{build_bad_request_response, build_internal_error_response, parse};
 use crate::{EnclaveContext, FeatureContext};
 
 use crate::utils::trx_handler::{start_log_handler, LogHandlerMessage};
@@ -92,7 +92,7 @@ where
                 .then(|| AuthLayer::new(e3_client.clone(), enclave_context.clone())),
         )
         .layer(DecryptLayer::new(e3_client.clone()))
-        .service(ForwardService);
+        .service(ForwardService::new(port));
 
     run_with(
         tcp_server,
@@ -319,6 +319,14 @@ pub(crate) async fn serve_connection<S, T>(
                     log::debug!("Skipping trx log for non-http transaction. {e}");
                 }
                 let _ = pipe_to_customer_process(&mut stream, &bytes, port).await;
+                return;
+            }
+            Err(e @ ParseError::InvalidRequestTarget) => {
+                log::warn!("Rejecting request with invalid request target - {e}");
+                let response_bytes =
+                    response_to_bytes(build_bad_request_response(e.to_string())).await;
+                let _ = stream.write_all(&response_bytes).await;
+                shutdown_conn(&mut stream).await;
                 return;
             }
             Err(e) => {

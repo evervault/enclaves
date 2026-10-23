@@ -398,3 +398,63 @@ async fn test25_concurrent_clients_multi_thread() {
         );
     }
 }
+
+// Test 26 — request targets reach the customer process in origin-form only. Absolute-form
+// targets are reduced to their path and query, `OPTIONS *` is passed through, and targets
+// that are neither are rejected with a 400 without reaching the customer process.
+#[tokio::test]
+#[serial]
+async fn test26_request_targets_normalised_to_origin_form() {
+    for config in configs() {
+        let customer = FakeCustomer::spawn(CustomerMode::ReflectRequest).await;
+        let server = TestServerHandle::spawn(
+            config,
+            customer.port(),
+            feature_context_with_auth(false),
+            AcceptMetrics::new(),
+        )
+        .await;
+
+        let forwarded: [(&[u8], &str); 3] = [
+            (
+                b"GET /ok HTTP/1.1\r\nHost: x\r\n\r\n",
+                "GET /ok HTTP/1.1\r\n",
+            ),
+            (
+                b"GET http://169.254.169.254/latest/meta-data?a=b HTTP/1.1\r\nHost: x\r\n\r\n",
+                "GET /latest/meta-data?a=b HTTP/1.1\r\n",
+            ),
+            (
+                b"OPTIONS * HTTP/1.1\r\nHost: x\r\n\r\n",
+                "OPTIONS * HTTP/1.1\r\n",
+            ),
+        ];
+        for (request, expected_request_line) in forwarded {
+            let response = request_response(server.addr, request).await;
+            let text = String::from_utf8_lossy(&response);
+            assert!(
+                text.contains(expected_request_line),
+                "expected customer to receive {expected_request_line:?}, got {text:?}"
+            );
+            assert!(
+                !text.contains("169.254.169.254"),
+                "absolute-form authority leaked to the customer: {text:?}"
+            );
+        }
+
+        let rejected: [&[u8]; 3] = [
+            b"GET @userinfo.com/x HTTP/1.1\r\nHost: x\r\n\r\n",
+            b"GET portauthority.com:80/x HTTP/1.1\r\nHost: x\r\n\r\n",
+            b"GET * HTTP/1.1\r\nHost: x\r\n\r\n",
+        ];
+        for request in rejected {
+            let response = request_response(server.addr, request).await;
+            let text = String::from_utf8_lossy(&response);
+            assert!(
+                text.starts_with("HTTP/1.1 400"),
+                "expected 400 for {:?}, got {text:?}",
+                String::from_utf8_lossy(request)
+            );
+        }
+    }
+}

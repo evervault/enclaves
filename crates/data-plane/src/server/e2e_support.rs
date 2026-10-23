@@ -287,7 +287,7 @@ impl TestServerHandle {
                     .then(|| AuthLayer::new(e3_client.clone(), enclave_context.clone())),
             )
             .layer(DecryptLayer::new(e3_client.clone()))
-            .service(ForwardService);
+            .service(ForwardService::new(customer_port));
 
         let handle = tokio::spawn(run_with(
             listener,
