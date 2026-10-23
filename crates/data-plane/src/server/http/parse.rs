@@ -2,6 +2,7 @@
 //! The data plane needs to support both HTTP and non-HTTP traffic.
 
 use httparse::Status;
+use hyper::http::uri::PathAndQuery;
 use hyper::{Body, Uri};
 use shared::server::proxy_protocol::ProxiedConnection;
 use std::str::FromStr;
@@ -20,6 +21,8 @@ pub enum ParseError {
     Timeout(#[from] tokio::time::error::Elapsed),
     #[error(transparent)]
     Hyper(#[from] hyper::http::Error),
+    #[error("Invalid request target")]
+    InvalidRequestTarget,
 }
 
 async fn read_from_stream<T: AsyncRead + Unpin>(
@@ -66,10 +69,9 @@ pub async fn try_parse_http_request_from_stream<T: AsyncRead + ProxiedConnection
                     build_header_map_for_request(req.headers, remote_ip.as_deref())?;
                 let content_length = get_content_length_from_headers(&request_header_map);
 
-                let req_uri = build_uri_for_request(&req.path, target_port)?;
-                let complete_request = hyper::Request::builder()
-                    .uri(req_uri)
-                    .method(req.method.unwrap_or("GET"));
+                let method = req.method.unwrap_or("GET");
+                let req_uri = build_uri_for_request(method, &req.path, target_port)?;
+                let complete_request = hyper::Request::builder().uri(req_uri).method(method);
 
                 let mut complete_request = if let Some(content_length) = content_length {
                     let mut body_buffer: Vec<u8> = buffer.drain(body_offset..).collect();
@@ -98,12 +100,52 @@ pub async fn try_parse_http_request_from_stream<T: AsyncRead + ProxiedConnection
     }
 }
 
-fn build_uri_for_request(path: &Option<&str>, target_port: u16) -> Result<Uri, hyper::http::Error> {
-    Uri::builder()
-        .authority(format!("127.0.0.1:{target_port}"))
+/// Builds the URI used to forward a request to the customer process.
+///
+/// The authority is always `127.0.0.1:<target_port>`; only the path and query are taken from
+/// the request target. Mirroring nginx and Envoy:
+/// - origin-form (`/path?query`) is forwarded as-is.
+/// - absolute-form (`http://host/path?query`) is accepted, as RFC 9112 requires of servers,
+///   but its scheme, authority and any userinfo are discarded so the customer process only
+///   ever receives origin-form. An empty path becomes `/`.
+/// - asterisk-form (`*`) is accepted for `OPTIONS` only.
+/// - everything else (authority-form, bare hosts, non-http(s) schemes) is rejected.
+fn build_uri_for_request(
+    method: &str,
+    target: &Option<&str>,
+    target_port: u16,
+) -> Result<Uri, ParseError> {
+    let target = target.unwrap_or("/");
+    let path_and_query = if target.starts_with('/') || (target == "*" && method == "OPTIONS") {
+        PathAndQuery::from_str(target).map_err(|_| ParseError::InvalidRequestTarget)?
+    } else {
+        origin_form_from_absolute_form(target)?
+    };
+    let uri = Uri::builder()
         .scheme("http")
-        .path_and_query(path.unwrap_or("/"))
-        .build()
+        .authority(format!("127.0.0.1:{target_port}"))
+        .path_and_query(path_and_query)
+        .build()?;
+    Ok(uri)
+}
+
+fn origin_form_from_absolute_form(target: &str) -> Result<PathAndQuery, ParseError> {
+    let uri = Uri::from_str(target).map_err(|_| ParseError::InvalidRequestTarget)?;
+    let is_http_scheme = uri.scheme_str().is_some_and(|scheme| {
+        scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https")
+    });
+    if !is_http_scheme || uri.authority().is_none() {
+        return Err(ParseError::InvalidRequestTarget);
+    }
+    let path = match uri.path() {
+        "" => "/",
+        path => path,
+    };
+    let path_and_query = match uri.query() {
+        Some(query) => format!("{path}?{query}"),
+        None => path.to_string(),
+    };
+    PathAndQuery::from_str(&path_and_query).map_err(|_| ParseError::InvalidRequestTarget)
 }
 
 fn build_header_map_for_request(

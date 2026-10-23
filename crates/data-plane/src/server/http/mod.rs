@@ -119,6 +119,17 @@ fn add_remote_ip_to_forwarded_for_header(header_map: &mut HeaderMap, remote_ip: 
     let _ = append_or_insert_header("Forwarded", header_map, &forwarded_header);
 }
 
+pub fn build_bad_request_response(msg: String) -> hyper::Response<hyper::Body> {
+    let response_body = serde_json::json!({ "message": msg }).to_string();
+    hyper::Response::builder()
+        .status(hyper::StatusCode::BAD_REQUEST)
+        .header(hyper::header::CONTENT_TYPE, "application/json")
+        .header(hyper::header::CONTENT_LENGTH, response_body.len())
+        .header(hyper::header::CONNECTION, "close")
+        .body(Body::from(response_body))
+        .expect("Infallible - hardcoded response")
+}
+
 pub fn build_internal_error_response(msg: Option<String>) -> hyper::Response<hyper::Body> {
     let response_body = serde_json::json!({
       "message": msg.unwrap_or_else(|| "An internal error occurred. Please contact support.".into())

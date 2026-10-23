@@ -1,6 +1,6 @@
 use crate::{ContextError, EnclaveContext};
 use hyper::client::connect::Connect;
-use hyper::{client::HttpConnector, header, Body, Client, Method, Request};
+use hyper::{client::HttpConnector, header, Body, Client, Method, Request, Uri};
 use serde_json::Value;
 use shared::{notify_shutdown::Service, server::health::UserProcessHealth};
 use std::collections::VecDeque;
@@ -245,15 +245,29 @@ impl<C: Connect + Clone + Send + Sync + 'static> HealthcheckAgent<C> {
         }
     }
 
-    fn build_healthcheck_uri(&self, healthcheck_path: &str) -> String {
-        format!(
-            "{}://127.0.0.1:{}{}",
-            self.proto, self.customer_process_port, healthcheck_path
-        )
+    /// The healthcheck path is required to be origin-form
+    fn build_healthcheck_uri(&self, healthcheck_path: &str) -> Result<Uri, String> {
+        if !healthcheck_path.starts_with('/') {
+            return Err(format!(
+                "Healthcheck path must start with '/', got {healthcheck_path:?}"
+            ));
+        }
+        Uri::builder()
+            .scheme(self.proto.as_str())
+            .authority(format!("127.0.0.1:{}", self.customer_process_port))
+            .path_and_query(healthcheck_path)
+            .build()
+            .map_err(|e| format!("Invalid healthcheck path {healthcheck_path:?} - {e}"))
     }
 
     async fn probe_user_process(&self, healthcheck_path: &str) -> UserProcessHealth {
-        let healthcheck_uri = self.build_healthcheck_uri(healthcheck_path);
+        let healthcheck_uri = match self.build_healthcheck_uri(healthcheck_path) {
+            Ok(uri) => uri,
+            Err(e) => {
+                log::error!("{e}");
+                return UserProcessHealth::Error(e);
+            }
+        };
         let req = Request::builder()
             .method(Method::GET)
             .uri(&healthcheck_uri)
