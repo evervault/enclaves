@@ -26,7 +26,6 @@ chrono = { version = "0.4.22", default-features = false, features = ["serde"] }
 aws-nitro-enclaves-nsm-api = "0.2.1"
 aws-nitro-enclaves-cose = "0.5.0"
 serde_cbor = "0.11"
-lazy_static = "1.4.0"
 async-trait = "0.1.92"
 thiserror = "1.0"
 bytes = "1"

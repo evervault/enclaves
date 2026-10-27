@@ -94,16 +94,10 @@ impl IncomingStreamDecoder {
                     ciphertext,
                 ))))
             }
-            Ok((input, None)) => {
-                let next_candidate = Self::find_next_ciphertext_candidate(&input[3..])?;
-                if let Some((_, prefix)) = next_candidate {
-                    let prefix_len = prefix.len();
-                    let plaintext_bytes = self.create_slice(src, prefix_len + 3);
-                    Ok(Some(IncomingFrame::Plaintext(plaintext_bytes.to_vec())))
-                } else {
-                    let entire_buffer = self.create_slice(src, src.len());
-                    Ok(Some(IncomingFrame::Plaintext(entire_buffer.to_vec())))
-                }
+            Ok((_, None)) => {
+                let skip_len = if quote_precedes_cipher { 4 } else { 3 };
+                let plaintext_bytes = self.create_slice(src, skip_len);
+                Ok(Some(IncomingFrame::Plaintext(plaintext_bytes)))
             }
             Err(nom::Err::Incomplete(nom::Needed::Size(known_size))) => {
                 Err(IncomingStreamError::Incomplete(Some(known_size.get())))
@@ -242,46 +236,43 @@ mod tests {
         mock_builder.read(content_bytes);
         let mock = mock_builder.build();
 
-        let mut reader = FramedRead::new(mock, IncomingStreamDecoder::default());
-        let frame1 = reader.next().await.transpose().unwrap(); // don't expect errors
-        let plaintext_bytes = plaintext.as_bytes();
-        let _expected_frame = IncomingFrame::Plaintext(plaintext_bytes.to_vec());
-        assert!(matches!(frame1, Some(_expected_frame)));
-        let frame2 = reader.next().await.transpose().unwrap(); // don't expect errors
-        assert!(matches!(frame2, Some(IncomingFrame::Plaintext(_)))); // Frame 2 contains the remainder of the payload
-        let frame3 = reader.next().await.transpose().unwrap(); // expect None
-        assert!(frame3.is_none());
+        let reader = FramedRead::new(mock, IncomingStreamDecoder::default());
+        let ranges = collect_ciphertext_ranges(reader).await;
+        assert!(ranges.is_empty());
     }
 
     #[tokio::test]
     async fn test_stream_decoder_with_invalid_and_valid_ciphertexts() {
-        let plaintext = "Lorem ipsum dolor sit amet, ";
-        let sections: Vec<&str> = vec![
-            plaintext,
-            // invalid ciphertext
-            "ev:Tk9D:number:YGJVktHhdj3ds3wC:A6rkaTU8lez7NSBT8nTqbhBIu3tX4/lyH3aJVBUcGmLh:8@!£hI5qEp32kWcVK367yaC09bDRbk:$",
-            // valid ciphertext - test that stream will still recognize this
-            "ev:Tk9D:boolean:YGJVktHhdj3ds3wC:A6rkaTU8lez7NSBT8nTqbhBIu3tX4/lyH3aJVBUcGmLh:8hI5qEp32kWcVK367yaC09bDRbk:$",
-            ". Praesent sit amet ultrices nibh, a egestas odio. ",
-            "ev:Tk9D:boolean:YGJVktHhdj3ds3wC:A6rkaTU8lez7NSBT8nTqbhBIu3tX4/lyH3aJVBUcGmLh:8hI5qEp32kWcVK367yaC09bDRbk:$",
-        ];
-        let content = sections.join("");
-        let content_bytes = content.as_bytes();
+        let invalid = "ev:Tk9D:number:YGJVktHhdj3ds3wC:A6rkaTU8lez7NSBT8nTqbhBIu3tX4/lyH3aJVBUcGmLh:8@!£hI5qEp32kWcVK367yaC09bDRbk:$";
+        let valid = "ev:Tk9D:boolean:YGJVktHhdj3ds3wC:A6rkaTU8lez7NSBT8nTqbhBIu3tX4/lyH3aJVBUcGmLh:8hI5qEp32kWcVK367yaC09bDRbk:$";
+        let content = format!(
+            "Lorem ipsum dolor sit amet, {invalid}{valid}. Praesent sit amet ultrices nibh, a egestas odio. {valid}"
+        );
         let mut mock_builder = Builder::new();
-        mock_builder.read(content_bytes);
-        let mock = mock_builder.build();
+        mock_builder.read(content.as_bytes());
+        let reader = FramedRead::new(mock_builder.build(), IncomingStreamDecoder::default());
 
-        let mut reader = FramedRead::new(mock, IncomingStreamDecoder::default());
-        let frame1 = reader.next().await.transpose().unwrap(); // don't expect errors
-        let plaintext_bytes = plaintext.as_bytes();
-        let _expected_frame = IncomingFrame::Plaintext(plaintext_bytes.to_vec());
-        assert!(matches!(frame1, Some(_expected_frame)));
-        let frame2 = reader.next().await.transpose().unwrap(); // don't expect errors
-        assert!(matches!(frame2, Some(IncomingFrame::Plaintext(_))));
-        let frame3 = reader.next().await.transpose().unwrap(); // don't expect errors
-        assert!(matches!(frame3, Some(IncomingFrame::Ciphertext(_))));
-        let frame4 = reader.next().await.transpose().unwrap(); // don't expect errors
-        assert!(matches!(frame4, Some(IncomingFrame::Plaintext(_))));
+        let ranges = collect_ciphertext_ranges(reader).await;
+
+        // Only the two valid ciphertexts are found, at their exact positions
+        let valid_ciphertexts: Vec<Range> = content
+            .match_indices(valid)
+            .map(|(start, _)| (start, start + valid.len()))
+            .collect();
+        assert_eq!(valid_ciphertexts.len(), 2);
+        assert_eq!(ranges, valid_ciphertexts);
+    }
+
+    async fn collect_ciphertext_ranges(
+        mut reader: FramedRead<tokio_test::io::Mock, IncomingStreamDecoder>,
+    ) -> Vec<Range> {
+        let mut ranges = vec![];
+        while let Some(frame) = reader.next().await {
+            if let IncomingFrame::Ciphertext((range, _)) = frame.expect("No decode error") {
+                ranges.push(range);
+            }
+        }
+        ranges
     }
 
     #[tokio::test]
