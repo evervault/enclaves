@@ -3,12 +3,11 @@ use hyper::header::HeaderName;
 use hyper::header::HeaderValue;
 use hyper::http::{Request, Response};
 use hyper::Body;
-use lazy_static::lazy_static;
 use regex::Regex;
 use serde_json::Value;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use thiserror::Error;
 use tower::{Layer, Service};
 
@@ -52,9 +51,10 @@ impl std::convert::From<DecryptError> for Response<Body> {
     }
 }
 
-lazy_static! {
-    static ref CIPHERTEXT_VERSION_REGEX: regex::Regex = get_ciphertext_regex();
-}
+static CIPHERTEXT_VERSION_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^ev\:(RFVC|T1JL|Tk9D|TENZ|QlJV|QkTC|S0lS|[a-zA-Z0-9]{16})\:.*")
+        .expect("Failed to create regex")
+});
 
 #[derive(Clone)]
 pub struct DecryptLayer<T: E3Api> {
@@ -241,11 +241,6 @@ async fn extract_ciphertexts_from_payload(
     Ok(decryption_payload)
 }
 
-fn get_ciphertext_regex() -> regex::Regex {
-    let pattern = r"^ev\:(RFVC|T1JL|Tk9D|TENZ|QlJV|QkTC|S0lS|[a-zA-Z0-9]{16})\:.*";
-    Regex::new(pattern).expect("Failed to create regex")
-}
-
 #[cfg(test)]
 mod tests {
     use crate::e3client::{mock::MockE3TestClient, EncryptedHeader};
@@ -421,7 +416,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ciphertext_regex() {
-        let regex = get_ciphertext_regex();
+        let regex = &CIPHERTEXT_VERSION_REGEX;
         assert!(regex.is_match("ev:RFVC:1234567890"));
         assert!(regex.is_match("ev:T1JL:1234567890"));
         assert!(regex.is_match("ev:QlJV:1234567890"));
