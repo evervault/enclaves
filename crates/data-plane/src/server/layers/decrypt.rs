@@ -428,6 +428,82 @@ mod tests {
         assert!(!regex.is_match("ev:INVALID:1234567890"));
     }
 
+    #[tokio::test]
+    async fn test_noop_with_ev_substring_in_body() {
+        let mut e3_test_client = MockE3TestClient::new();
+        e3_test_client
+            .expect_decrypt_with_retries::<AutoDecryptRequest, AutoDecryptRequest>()
+            .times(0);
+
+        let mock_service = service_fn(|req: Request<Body>| async {
+            Ok::<_, hyper::Error>(Response::new(req.into_body()))
+        });
+
+        let mut service = DecryptService {
+            e3_client: Arc::new(e3_test_client),
+            inner: mock_service,
+        };
+
+        let body = r#"{"context":{"domain":"https://myservice.dev:3001"},"other":"xev:y"}"#;
+        let mut request = Request::new(Body::from(body));
+        request.extensions_mut().insert(get_test_trx());
+
+        let response = service.call(request).await.unwrap();
+        let bytes = to_bytes(response.into_body()).await.unwrap();
+        assert_eq!(bytes, body.as_bytes());
+    }
+
+    #[tokio::test]
+    async fn test_decrypt_body_with_malformed_ev_prefix_before_ciphertext() {
+        let mut e3_test_client = MockE3TestClient::new();
+        // Echo back each body entry the data plane found, decrypted to a fixed plaintext
+        e3_test_client
+            .expect_decrypt_with_retries::<AutoDecryptRequest, AutoDecryptRequest>()
+            .times(6)
+            .returning(|_, request: AutoDecryptRequest| {
+                let decrypted = request
+                    .body_data()
+                    .iter()
+                    .map(|entry| {
+                        EncryptedDataEntry::new(entry.range(), Value::String("plaintext".into()))
+                    })
+                    .collect();
+                Ok(AutoDecryptRequest::new(decrypted, vec![]))
+            });
+
+        let mock_service = service_fn(|req: Request<Body>| async {
+            Ok::<_, hyper::Error>(Response::new(req.into_body()))
+        });
+
+        let mut service = DecryptService {
+            e3_client: Arc::new(e3_test_client),
+            inner: mock_service,
+        };
+
+        let ciphertext = "ev:Tk9D:string:YGJVktHhdj3ds3wC:A6rkaTU8lez7NSBT8nTqbhBIu3tX4/lyH3aJVBUcGmLh:8hI5qEp32kWcVK367yaC09bDRbk:$";
+        for prefix in [
+            r#""x":"https://a.dev:3001","#,
+            r#""x":"ev:3001","#,
+            r#""x":"ev:","#,
+            r#""x":"dev:1 dev:2 ev:3","#,
+            r#""x":["ev:a","ev:b"],"#,
+            r#""x":"café ✓ 日本 https://a.dev:3001","#,
+        ] {
+            let body = format!(r#"{{{prefix}"y":"{ciphertext}","z":"a.dev:3001"}}"#);
+            let mut expected: Value = serde_json::from_str(&body).unwrap();
+            expected["y"] = json!("plaintext");
+
+            let mut request = Request::new(Body::from(body));
+            request.extensions_mut().insert(get_test_trx());
+
+            let response = service.call(request).await.unwrap();
+            let bytes = to_bytes(response.into_body()).await.unwrap();
+            let json: Value = serde_json::from_slice(&bytes)
+                .unwrap_or_else(|e| panic!("{e}: {}", String::from_utf8_lossy(&bytes)));
+            assert_eq!(json, expected);
+        }
+    }
+
     fn get_test_trx() -> TrxContextBuilder {
         TrxContextBuilder::init_trx_context_with_enclave_details(
             "uuid",

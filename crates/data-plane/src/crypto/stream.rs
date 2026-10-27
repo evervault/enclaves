@@ -55,17 +55,36 @@ impl IncomingStreamDecoder {
         FramedRead::new(src, Self::default())
     }
 
+    /// Number of trailing bytes that could be the start of a quoted `ev:` prefix which
+    /// continues in the next read.
+    fn partial_candidate_len(src: &[u8]) -> usize {
+        [&b"\"ev"[..], b"\"e", b"ev", b"\"", b"e"]
+            .iter()
+            .find(|partial| src.ends_with(partial))
+            .map_or(0, |partial| partial.len())
+    }
+
     fn decode_ciphertexts(
         &mut self,
         src: &mut BytesMut,
+        at_eof: bool,
     ) -> Result<Option<IncomingFrame>, IncomingStreamError> {
         if src.is_empty() {
             return Ok(None);
         }
         let next_candidate = Self::find_next_ciphertext_candidate(src.as_ref())?;
         if next_candidate.is_none() {
-            // no ciphertext candidate
-            let plaintext_bytes = self.create_slice(src, src.len());
+            // no ciphertext candidate, but hold back bytes that could begin one in the next read
+            let held_back_len = if at_eof {
+                0
+            } else {
+                Self::partial_candidate_len(src.as_ref())
+            };
+            let plaintext_len = src.len() - held_back_len;
+            if plaintext_len == 0 {
+                return Ok(None);
+            }
+            let plaintext_bytes = self.create_slice(src, plaintext_len);
             return Ok(Some(IncomingFrame::Plaintext(plaintext_bytes)));
         }
 
@@ -114,10 +133,11 @@ impl Decoder for IncomingStreamDecoder {
     type Error = IncomingStreamError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        self.decode_ciphertexts(src).or_else(|err| match err {
-            IncomingStreamError::Incomplete(_) => Ok(None),
-            err => Err(err),
-        })
+        self.decode_ciphertexts(src, false)
+            .or_else(|err| match err {
+                IncomingStreamError::Incomplete(_) => Ok(None),
+                err => Err(err),
+            })
     }
 
     fn decode_eof(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
@@ -125,13 +145,13 @@ impl Decoder for IncomingStreamDecoder {
             return Ok(None);
         }
 
-        self.decode_ciphertexts(src).or_else(|err| {
+        self.decode_ciphertexts(src, true).or_else(|err| {
             match err {
                 // handle edge case of ciphertext terminating file by appending a
                 // single character to trigger force a result from the optional quote parser
                 IncomingStreamError::Incomplete(Some(1)) => {
                     src.put_bytes(0, 1);
-                    self.decode_ciphertexts(src)
+                    self.decode_ciphertexts(src, true)
                         .or_else(|second_err| match second_err {
                             IncomingStreamError::Incomplete(_) => {
                                 let remainder_less_injected_byte =
@@ -261,6 +281,25 @@ mod tests {
             .collect();
         assert_eq!(valid_ciphertexts.len(), 2);
         assert_eq!(ranges, valid_ciphertexts);
+    }
+
+    #[tokio::test]
+    async fn test_stream_decoder_finds_ciphertext_split_across_reads() {
+        let ciphertext = "ev:Tk9D:boolean:YGJVktHhdj3ds3wC:A6rkaTU8lez7NSBT8nTqbhBIu3tX4/lyH3aJVBUcGmLh:8hI5qEp32kWcVK367yaC09bDRbk:$";
+        let content = format!(r#"{{"x":"a.dev:3001","y":"{ciphertext}","z":"e"}}"#);
+        let quoted = format!("\"{ciphertext}\"");
+        let start = content.find(&quoted).unwrap();
+        let expected = vec![(start, start + quoted.len())];
+
+        for split in 1..content.len() {
+            let (first, second) = content.as_bytes().split_at(split);
+            let mut mock_builder = Builder::new();
+            mock_builder.read(first).read(second);
+            let reader = FramedRead::new(mock_builder.build(), IncomingStreamDecoder::default());
+
+            let ranges = collect_ciphertext_ranges(reader).await;
+            assert_eq!(ranges, expected, "reads split at byte {split}");
+        }
     }
 
     async fn collect_ciphertext_ranges(
