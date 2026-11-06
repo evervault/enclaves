@@ -49,14 +49,12 @@ pub struct Orchestration;
 
 impl Orchestration {
     pub async fn shutdown_all_enclaves() -> Result<String, OrchestrationError> {
-        let command = vec![
-            "sh",
-            "-c",
+        Self::run_command_capture_stdout(&[
             NITRO_CLI,
             NitroCommand::TerminateEnclave.as_str(),
             "--all",
-        ];
-        Self::run_command_capture_stdout(&command).await
+        ])
+        .await
     }
 
     pub async fn start_enclave() -> Result<(), OrchestrationError> {
