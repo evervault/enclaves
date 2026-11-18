@@ -30,6 +30,11 @@ pub enum TlsError {
     PemError(#[from] pem::PemError),
     #[error("CertProvisionerError - {0}")]
     CertProvisionerError(String),
+    #[cfg(feature = "enclave")]
+    #[error("TrustedCertError - Failed to get the trusted cert for the Enclave: {0}")]
+    TrustedCertError(String),
+    #[error("FinalizeEnvError - Failed to finalize the Enclave environment: {0}")]
+    FinalizeEnvError(String),
     #[error("ContextError - Failed to access Enclave context: {0}")]
     ContextError(#[from] ContextError),
     #[error("SystemTimeError - {0}")]

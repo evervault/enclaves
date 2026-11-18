@@ -34,3 +34,5 @@ jobs:
         uses: clechasseur/rs-clippy-check@9190480d27706dc2fd75d122753936cafafa2154 # v6.0.1
         with:
           args: --features not_enclave -- -D warnings
+      - name: Evaluate Compiler Assertions
+        run: cargo check --features compiler_assertions

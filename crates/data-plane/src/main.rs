@@ -3,11 +3,11 @@ use std::future::Future;
 #[cfg(feature = "network_egress")]
 use data_plane::dns::{egressproxy::EgressProxy, enclavedns::EnclaveDnsProxy};
 use data_plane::{
+    configuration,
     crypto::api::CryptoApi,
     env::{init_environment_loader, EnvironmentLoader},
     health::{build_health_check_server, HealthcheckServer},
-    stats::client::StatsClient,
-    stats::proxy::StatsProxy,
+    stats::{client::StatsClient, proxy::StatsProxy},
     time::ClockSync,
     FeatureContext,
 };
@@ -65,23 +65,18 @@ fn main() {
         try_show_fd_limits();
     }
 
-    let mut args = std::env::args();
-    let _ = args.next(); // ignore path to executable
-    let data_plane_port = args
-        .next()
-        .and_then(|port_str| port_str.as_str().parse::<u16>().ok())
-        .unwrap_or(8008);
+    let data_plane_port =
+        configuration::parse_target_port_from_args().unwrap_or(configuration::DEFAULT_TARGET_PORT);
 
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .expect("Failed to build tokio runtime in data plane");
 
-    let ctx = match FeatureContext::set() {
-        Ok(_) => FeatureContext::get()
-            .expect("Infallible - feature context read after context is set successfully"),
+    let ctx = match FeatureContext::initialize() {
+        Ok(ctx) => ctx,
         Err(e) => {
-            log::error!("Failed to set context in enclave, cannot proceed - {e:?}");
+            log::error!("Failed to initialize context in enclave, cannot proceed - {e:?}");
             return;
         }
     };
